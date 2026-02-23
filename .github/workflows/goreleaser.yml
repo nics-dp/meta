@@ -1,0 +1,85 @@
+name: goreleaser
+
+on:
+  workflow_call:
+    inputs:
+      go_version:
+        required: false
+        type: string
+        default: stable
+      goreleaser_version:
+        required: false
+        type: string
+        default: latest
+      upload_artifact:
+        required: false
+        type: boolean
+        default: true
+      lfs:
+        required: false
+        type: boolean
+        default: false
+        description: Whether to download Git-LFS files
+    secrets:
+      docker_username:
+        required: true
+      docker_token:
+        required: true
+      gh_pat:
+        required: true
+
+jobs:
+  release:
+    if: ${{ !contains(github.repository, '-internal') }}
+    runs-on:
+      # Use our own large runners with more CPU and RAM for faster builds
+      group: releasers
+    permissions:
+      contents: write
+      id-token: write
+      packages: write
+    env:
+      DOCKER_CLI_EXPERIMENTAL: enabled
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          lfs: ${{ inputs.lfs }}
+      - run: |
+          git config --global url."https://${{ secrets.gh_pat }}@github.com/nics-dp".insteadOf "https://github.com/nics-dp"
+      - uses: actions/setup-go@v6
+        with:
+          go-version: ${{ inputs.go_version }}
+          cache: true
+          check-latest: true
+      - uses: sigstore/cosign-installer@faadad0cce49287aee09b3a48701e75088a2c6ad # v4.0.0
+      - uses: anchore/sbom-action/download-syft@v0.22.2
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        name: ghcr.io login
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/login-action@v3
+        name: docker.io login
+        with:
+          username: ${{ secrets.docker_username }}
+          password: ${{ secrets.docker_token }}
+      - uses: goreleaser/goreleaser-action@v6
+        with:
+          version: ${{ inputs.goreleaser_version }}
+          distribution: goreleaser
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/upload-artifact@v6
+        if: ${{ inputs.upload_artifact == true && always() }}
+        with:
+          retention-days: 30
+          name: dist
+          path: |
+            dist
+
+# yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
