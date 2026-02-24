@@ -42,39 +42,24 @@ signs:
     artifacts: checksum
     output: true
 
-dockers:
-  - image_templates:
-      - "ghcr.io/nics-dp/{{ .ProjectName }}:v{{ .Version }}-amd64"
-    goarch: amd64
-    build_flag_templates:
-      - --platform=linux/amd64
-      - --label=org.opencontainers.image.title={{ .ProjectName }}
-      - --label=org.opencontainers.image.description={{ .ProjectName }}
-      - --label=org.opencontainers.image.source={{ .GitURL }}
-      - --label=org.opencontainers.image.version=v{{ .Version }}
-      - --label=org.opencontainers.image.created={{ .Date }}
-      - --label=org.opencontainers.image.revision={{ .FullCommit }}
-      - --label=org.opencontainers.image.licenses=MIT
-    dockerfile: Dockerfile
-    use: buildx
-
-docker_manifests:
-  - name_template: "ghcr.io/nics-dp/{{ .ProjectName }}:latest"
-    image_templates:
-      - "ghcr.io/nics-dp/{{ .ProjectName }}:v{{ .Version }}-amd64"
-  - name_template: "ghcr.io/nics-dp/{{ .ProjectName }}:v{{ .Major }}.{{ .Minor }}"
-    image_templates:
-      - "ghcr.io/nics-dp/{{ .ProjectName }}:v{{ .Version }}-amd64"
-  - name_template: "ghcr.io/nics-dp/{{ .ProjectName }}:v{{ .Version }}"
-    image_templates:
-      - "ghcr.io/nics-dp/{{ .ProjectName }}:v{{ .Version }}-amd64"
-  - name_template: "ghcr.io/nics-dp/{{ .ProjectName }}:{{ .Commit }}"
-    image_templates:
-      - "ghcr.io/nics-dp/{{ .ProjectName }}:v{{ .Version }}-amd64"
+dockers_v2:
+  - images:
+      - "docker.io/nicsdp/{{ .ProjectName }}"
+      - "ghcr.io/nics-dp/{{ .ProjectName }}"
+    tags:
+      - "v{{ .Version }}"
+      - "{{ if .IsNightly }}nightly{{ end }}"
+      - "{{ if not .IsNightly }}latest{{ end }}"
+    labels:
+      "org.opencontainers.image.description": "{{ .ProjectName }}"
+      "org.opencontainers.image.created": "{{.Date}}"
+      "org.opencontainers.image.name": "{{.ProjectName}}"
+      "org.opencontainers.image.revision": "{{.FullCommit}}"
+      "org.opencontainers.image.version": "{{.Version}}"
+      "org.opencontainers.image.source": "{{.GitURL}}"
 
 docker_signs:
   - cmd: cosign
-    artifacts: manifests
     output: true
     args:
       - "sign"
