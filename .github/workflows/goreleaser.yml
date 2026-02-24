@@ -46,9 +46,8 @@ jobs:
   release:
     if: ${{ !contains(github.repository, '-internal') }}
     runs-on:
-      ubuntu-latest
       # Use our own large runners with more CPU and RAM for faster builds
-      # group: releasers
+      group: releasers
     permissions:
       contents: write
       id-token: write
