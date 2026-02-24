@@ -18,8 +18,8 @@ Available profiles (GoReleaser OSS v2):
 
 | Config | Use Case |
 |---|---|
-| `goreleaser-full.yml` | CLI with Docker (docker.io + ghcr.io, amd64/arm64/armv7) |
-| `goreleaser-simple.yml` | Pure binary release, no Docker |
+| `goreleaser-full.yml` | CLI with Docker (docker.io + ghcr.io, amd64/arm64/armv7), macOS signing & notarization |
+| `goreleaser-simple.yml` | Pure binary release, no Docker, macOS signing & notarization |
 | `goreleaser-lab.yml` | Server-only (linux/amd64, ghcr.io only) |
 | `goreleaser-lib.yml` | Library-only (skip build, changelog + GitHub release) |
 
@@ -31,7 +31,7 @@ All reusable workflows are called via `uses:`. Optional inputs are shown as comm
 
 ### goreleaser.yml
 
-Full release pipeline: Go build, Docker multi-arch, cosign signing, SBOM, dual-registry push.
+Full release pipeline: Go build, Docker multi-arch, cosign signing, SBOM, dual-registry push. Optionally signs and notarizes macOS binaries.
 
 ```yaml
 # .github/workflows/goreleaser.yml
@@ -53,11 +53,18 @@ jobs:
       docker_username: ${{ secrets.DOCKERHUB_USERNAME }}
       docker_token: ${{ secrets.DOCKERHUB_TOKEN }}
       gh_pat: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+      # macOS signing & notarization (optional)
+      macos_sign_p12: ${{ secrets.MACOS_SIGN_P12 }}
+      macos_sign_password: ${{ secrets.MACOS_SIGN_PASSWORD }}
+      macos_notary_key: ${{ secrets.MACOS_NOTARY_KEY }}
+      macos_notary_key_id: ${{ secrets.MACOS_NOTARY_KEY_ID }}
+      macos_notary_issuer_id: ${{ secrets.MACOS_NOTARY_ISSUER_ID }}
     # with:
-    #   go_version: stable        # Go version (default: stable)
-    #   goreleaser_version: latest # GoReleaser version (default: latest)
-    #   upload_artifact: true      # Upload dist as artifact (default: true)
-    #   lfs: false                 # Download Git-LFS files (default: false)
+    #   go_version: stable                # Go version (default: stable)
+    #   goreleaser_version: latest         # GoReleaser version (default: latest)
+    #   upload_artifact: true              # Upload dist as artifact (default: true)
+    #   lfs: false                         # Download Git-LFS files (default: false)
+    #   macos_sign_entitlements: ""        # Path to entitlements file (optional)
 ```
 
 ### build.yml
@@ -239,6 +246,31 @@ jobs:
     secrets:
       gh_token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
 ```
+
+## macOS Signing & Notarization
+
+`goreleaser-full.yml` and `goreleaser-simple.yml` support macOS code signing and notarization via the cross-platform method ([anchore/quill](https://github.com/anchore/quill)). This runs on any CI runner (no macOS runner required) and works with GoReleaser OSS.
+
+Signing is conditionally enabled — it activates only when `MACOS_SIGN_P12` is set. Repos without the secrets configured will skip signing.
+
+### Required secrets
+
+| Secret | Description |
+|---|---|
+| `MACOS_SIGN_P12` | Base64-encoded `.p12` certificate (Developer ID Application) |
+| `MACOS_SIGN_PASSWORD` | Password for the `.p12` certificate |
+| `MACOS_NOTARY_KEY` | Base64-encoded `.p8` App Store Connect API key |
+| `MACOS_NOTARY_KEY_ID` | Key ID of the `.p8` key |
+| `MACOS_NOTARY_ISSUER_ID` | Issuer UUID from App Store Connect |
+
+To base64-encode your files:
+
+```bash
+base64 -w0 < Certificates.p12
+base64 -w0 < ApiKey_AAABBBCCC.p8
+```
+
+Optionally, pass `macos_sign_entitlements` as a workflow input to specify a path to an entitlements file.
 
 ## Standalone Workflows
 

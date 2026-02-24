@@ -20,6 +20,10 @@ on:
         type: boolean
         default: false
         description: Whether to download Git-LFS files
+      macos_sign_entitlements:
+        required: false
+        type: string
+        description: Path to entitlements file
     secrets:
       docker_username:
         required: true
@@ -27,6 +31,16 @@ on:
         required: true
       gh_pat:
         required: true
+      macos_sign_p12:
+        required: false
+      macos_sign_password:
+        required: false
+      macos_notary_key:
+        required: false
+      macos_notary_key_id:
+        required: false
+      macos_notary_issuer_id:
+        required: false
 
 jobs:
   release:
@@ -75,6 +89,12 @@ jobs:
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          MACOS_SIGN_P12: ${{ secrets.macos_sign_p12 }}
+          MACOS_SIGN_PASSWORD: ${{ secrets.macos_sign_password }}
+          MACOS_SIGN_ENTITLEMENTS: ${{ inputs.macos_sign_entitlements }}
+          MACOS_NOTARY_ISSUER_ID: ${{ secrets.macos_notary_issuer_id }}
+          MACOS_NOTARY_KEY_ID: ${{ secrets.macos_notary_key_id }}
+          MACOS_NOTARY_KEY: ${{ secrets.macos_notary_key }}
       - uses: actions/upload-artifact@v6
         if: ${{ inputs.upload_artifact == true && always() }}
         with:
