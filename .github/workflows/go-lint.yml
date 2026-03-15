@@ -1,0 +1,64 @@
+# yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
+
+name: golangci-lint
+
+on:
+  workflow_call:
+    inputs:
+      go_private_full:
+        required: false
+        type: boolean
+        default: true
+        description: "Set GOPRIVATE/GONOSUMDB for repos importing nics-dp private modules"
+    secrets:
+      gh_pat:
+        required: false
+
+permissions:
+  contents: read
+  checks: write
+  pull-requests: write
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    env:
+      GH_PAT: ${{ secrets.gh_pat }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Install mise
+        uses: jdx/mise-action@c1ecc8f748cd28cdeabf76dab3cccde4ce692fe4 # v4.0.0
+        with:
+          cache: true
+          experimental: true
+          log_level: "info"
+
+      - name: Prepare environment
+        run: mise run prepare
+
+      - name: Configure private git repository
+        if: env.GH_PAT != ''
+        env:
+          GO_PRIVATE_FULL: ${{ inputs.go_private_full }}
+        run: |
+          if [ "$GO_PRIVATE_FULL" = "true" ]; then
+            echo "GOPRIVATE=github.com/nics-dp" >> "$GITHUB_ENV"
+            echo "GONOSUMDB=github.com/nics-dp" >> "$GITHUB_ENV"
+            git config --global url."https://${GH_PAT}@github.com/".insteadOf "git@github.com:"
+          fi
+          git config --global url."https://${GH_PAT}@github.com".insteadOf "https://github.com"
+
+      - name: Run lint (reviewdog)
+        if: github.event_name == 'pull_request'
+        uses: reviewdog/action-golangci-lint@c76cceaaab89abe74e649d2e34c6c9adc26662d2 # v2.10.0
+        with:
+          reporter: github-pr-check
+          filter_mode: added
+          fail_level: warning
+          golangci_lint_flags: "--config=.golangci.yml"
+
+      - name: Run lint
+        if: github.event_name != 'pull_request'
+        run: mise run lint

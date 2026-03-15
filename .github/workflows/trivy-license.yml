@@ -1,0 +1,99 @@
+# yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
+
+name: License Check
+
+on:
+  workflow_call:
+    inputs:
+      go_private_full:
+        required: false
+        type: boolean
+        default: true
+        description: "Set GOPRIVATE/GONOSUMDB for repos importing nics-dp private modules"
+    secrets:
+      gh_pat:
+        required: false
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  license:
+    name: License Check
+    runs-on: ubuntu-latest
+    env:
+      GH_PAT: ${{ secrets.gh_pat }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Install mise
+        uses: jdx/mise-action@c1ecc8f748cd28cdeabf76dab3cccde4ce692fe4 # v4.0.0
+        with:
+          cache: true
+          experimental: true
+          log_level: "info"
+
+      - name: Prepare environment
+        run: mise run prepare
+
+      - name: Configure private git repository
+        if: env.GH_PAT != ''
+        env:
+          GO_PRIVATE_FULL: ${{ inputs.go_private_full }}
+        run: |
+          if [ "$GO_PRIVATE_FULL" = "true" ]; then
+            echo "GOPRIVATE=github.com/nics-dp" >> "$GITHUB_ENV"
+            echo "GONOSUMDB=github.com/nics-dp" >> "$GITHUB_ENV"
+            git config --global url."https://${GH_PAT}@github.com/".insteadOf "git@github.com:"
+          fi
+          git config --global url."https://${GH_PAT}@github.com".insteadOf "https://github.com"
+
+      - name: Run Trivy license scan (table)
+        uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # 0.35.0
+        with:
+          scan-type: fs
+          scanners: license
+          format: table
+          output: trivy-license-table.txt
+          exit-code: "0"
+
+      - name: Run Trivy license scan (JSON)
+        uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # 0.35.0
+        with:
+          scan-type: fs
+          scanners: license
+          format: json
+          output: trivy-license.json
+          exit-code: "0"
+
+      - name: Write results to summary
+        run: |
+          {
+            echo "## License Check"
+            echo ""
+            echo '```'
+            cat trivy-license-table.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Build PR comment body
+        if: github.event_name == 'pull_request'
+        id: comment
+        run: |
+          {
+            echo 'body<<TRIVY_LICENSE_EOF'
+            echo '## License Check'
+            echo ''
+            echo '```'
+            cat trivy-license-table.txt
+            echo '```'
+            echo 'TRIVY_LICENSE_EOF'
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Post sticky PR comment
+        if: github.event_name == 'pull_request'
+        uses: marocchino/sticky-pull-request-comment@70d2764d1a7d5d9560b100cbea0077fc8f633987 # v3.0.2
+        with:
+          header: trivy-license
+          message: ${{ steps.comment.outputs.body }}

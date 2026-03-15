@@ -1,0 +1,96 @@
+# yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
+name: Trivy IaC Scan
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+  pull-requests: write
+  security-events: write
+
+jobs:
+  trivy-iac:
+    name: Trivy IaC Scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Run Trivy IaC scan (SARIF)
+        uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # 0.35.0
+        with:
+          scan-type: config
+          scan-ref: .
+          format: sarif
+          output: trivy-iac.sarif
+          exit-code: "0"
+
+      - name: Upload SARIF to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@fb0994ef1c058010acf1efccff928b0a83b1ed54 # v4.32.6
+        with:
+          sarif_file: trivy-iac.sarif
+          category: trivy-iac
+
+      - name: Run Trivy IaC scan (JSON)
+        if: github.event_name == 'pull_request'
+        uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # 0.35.0
+        with:
+          scan-type: config
+          scan-ref: .
+          format: json
+          output: trivy-iac.json
+          exit-code: "0"
+
+      - name: Generate PR comment summary
+        if: github.event_name == 'pull_request'
+        id: summary
+        run: |
+          # shellcheck disable=SC2016
+          {
+            echo 'comment<<EOF'
+            echo '## Trivy IaC Scan Results'
+            echo ''
+
+            TOTAL=$(jq '[.Results[]? | .Misconfigurations // [] | length] | add // 0' trivy-iac.json)
+            CRITICAL=$(jq '[.Results[]? | .Misconfigurations // [] | map(select(.Severity == "CRITICAL")) | length] | add // 0' trivy-iac.json)
+            HIGH=$(jq '[.Results[]? | .Misconfigurations // [] | map(select(.Severity == "HIGH")) | length] | add // 0' trivy-iac.json)
+            MEDIUM=$(jq '[.Results[]? | .Misconfigurations // [] | map(select(.Severity == "MEDIUM")) | length] | add // 0' trivy-iac.json)
+            LOW=$(jq '[.Results[]? | .Misconfigurations // [] | map(select(.Severity == "LOW")) | length] | add // 0' trivy-iac.json)
+
+            if [ "$TOTAL" -eq 0 ]; then
+              echo 'No misconfigurations found.'
+            else
+              echo "| Severity | Count |"
+              echo "|----------|-------|"
+              echo "| Critical | $CRITICAL |"
+              echo "| High | $HIGH |"
+              echo "| Medium | $MEDIUM |"
+              echo "| Low | $LOW |"
+              echo "| **Total** | **$TOTAL** |"
+              echo ''
+
+              echo '<details>'
+              echo '<summary>Details</summary>'
+              echo ''
+              jq -r '
+                .Results[]? |
+                .Target as $target |
+                .Misconfigurations // [] | .[] |
+                "- **\($target)**: [\(.Severity)] \(.Title) (\(.ID))"
+              ' trivy-iac.json
+              echo ''
+              echo '</details>'
+            fi
+
+            echo ''
+            echo '*Scanned IaC files (`Dockerfile*`, `compose*.yml`, Terraform, Kubernetes, etc.) in the repository.*'
+            echo 'EOF'
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Post sticky PR comment
+        if: github.event_name == 'pull_request'
+        uses: marocchino/sticky-pull-request-comment@70d2764d1a7d5d9560b100cbea0077fc8f633987 # v3.0.2
+        with:
+          header: trivy-iac
+          message: ${{ steps.summary.outputs.comment }}

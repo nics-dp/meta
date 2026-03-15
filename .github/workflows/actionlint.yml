@@ -1,0 +1,59 @@
+# yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
+name: actionlint
+
+on:
+  workflow_call:
+    inputs:
+      actionlint-version:
+        required: false
+        type: string
+        default: "latest"
+        description: "actionlint version tag (e.g., v1.7.7) or 'latest'"
+
+permissions:
+  contents: read
+  checks: write
+  pull-requests: write
+
+jobs:
+  actionlint:
+    name: Actionlint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Actionlint (PR)
+        if: github.event_name == 'pull_request'
+        uses: reviewdog/action-actionlint@0d952c597ef8459f634d7145b0b044a9699e5e43 # v1.71.0
+        with:
+          reporter: github-pr-check
+          filter_mode: added
+          fail_level: warning
+
+      - name: Actionlint (non-PR)
+        if: github.event_name != 'pull_request'
+        shell: bash
+        env:
+          ACTIONLINT_VERSION: ${{ inputs.actionlint-version }}
+        run: |
+          if [ "$ACTIONLINT_VERSION" = "latest" ]; then
+            ACTIONLINT_VERSION=$(gh api repos/rhysd/actionlint/releases/latest --jq '.tag_name')
+          fi
+          gh release download "$ACTIONLINT_VERSION" -R rhysd/actionlint -p "actionlint_*_linux_amd64.tar.gz" -O actionlint.tar.gz
+          tar xzf actionlint.tar.gz actionlint
+          failed=false
+          if ! ./actionlint -color 2>&1 | tee actionlint-output.txt; then
+            failed=true
+          fi
+          {
+            echo '## Actionlint Results'
+            if [ "$failed" = "true" ]; then
+              echo '```'
+              cat actionlint-output.txt
+              echo '```'
+            else
+              echo '✅ No issues found.'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+          [ "$failed" = "true" ] && exit 1 || true

@@ -1,0 +1,43 @@
+# yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
+
+name: hadolint
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+  checks: write
+  pull-requests: write
+
+jobs:
+  hadolint:
+    name: Hadolint
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Find Dockerfiles (repo root only)
+        id: find
+        run: |
+          files=$(find . -name 'Dockerfile*' ! -name '*.env' -type f | sort)
+          if [ -z "$files" ]; then
+            echo "No Dockerfiles found, skipping hadolint"
+            echo "found=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "Found Dockerfiles:"
+            echo "$files"
+            echo "found=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Lint with reviewdog
+        if: steps.find.outputs.found == 'true'
+        uses: reviewdog/action-hadolint@921946a7ebaaf08ac72607bad67209f4e52b5407 # v1.50.5
+        env:
+          HADOLINT_TRUSTED_REGISTRIES: "docker.io,ghcr.io,dhi.io,gcr.io,quay.io"
+        with:
+          reporter: github-pr-check
+          filter_mode: added
+          fail_level: warning
+          exclude: "*.env"
