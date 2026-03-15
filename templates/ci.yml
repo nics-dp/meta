@@ -31,6 +31,7 @@ concurrency:
 # - CLI repo / Library (無 trivy-iac): 移除 security-events: write
 permissions:
   contents: read
+  checks: write
   pull-requests: write
   security-events: write
 
