@@ -42,35 +42,46 @@ jobs:
         id: upstream
         env:
           GH_TOKEN: ${{ secrets.gh_token }}
+          UPSTREAM_REPO: ${{ inputs.upstream_repo }}
         run: |
-          latest=$(gh api "repos/${{ inputs.upstream_repo }}/releases/latest" --jq '.tag_name')
+          latest=$(gh api "repos/${UPSTREAM_REPO}/releases/latest" --jq '.tag_name')
           echo "version=$latest" >> "$GITHUB_OUTPUT"
           echo "Upstream latest: $latest"
 
       - name: Get current version
         id: current
+        env:
+          VERSION_VARIABLE: ${{ inputs.version_variable }}
+          VERSION_FILE: ${{ inputs.version_file }}
         run: |
-          current=$(grep "^${{ inputs.version_variable }}=" "${{ inputs.version_file }}" | cut -d'=' -f2)
+          current=$(grep "^${VERSION_VARIABLE}=" "$VERSION_FILE" | cut -d'=' -f2)
           echo "version=$current" >> "$GITHUB_OUTPUT"
           echo "Current: $current"
 
       - name: Compare versions
         id: compare
+        env:
+          UPSTREAM_VERSION: ${{ steps.upstream.outputs.version }}
+          CURRENT_VERSION: ${{ steps.current.outputs.version }}
         run: |
-          if [ "${{ steps.upstream.outputs.version }}" = "${{ steps.current.outputs.version }}" ]; then
+          if [ "$UPSTREAM_VERSION" = "$CURRENT_VERSION" ]; then
             echo "changed=false" >> "$GITHUB_OUTPUT"
             echo "Already up to date"
           else
             echo "changed=true" >> "$GITHUB_OUTPUT"
-            echo "New version available: ${{ steps.upstream.outputs.version }}"
+            echo "New version available: $UPSTREAM_VERSION"
           fi
 
       - name: Update version file
         if: steps.compare.outputs.changed == 'true'
+        env:
+          VERSION_VARIABLE: ${{ inputs.version_variable }}
+          UPSTREAM_VERSION: ${{ steps.upstream.outputs.version }}
+          VERSION_FILE: ${{ inputs.version_file }}
         run: |
-          sed -i "s/^${{ inputs.version_variable }}=.*/${{ inputs.version_variable }}=${{ steps.upstream.outputs.version }}/" "${{ inputs.version_file }}"
-          echo "Updated ${{ inputs.version_file }}:"
-          cat "${{ inputs.version_file }}"
+          sed -i "s/^${VERSION_VARIABLE}=.*/${VERSION_VARIABLE}=${UPSTREAM_VERSION}/" "$VERSION_FILE"
+          echo "Updated ${VERSION_FILE}:"
+          cat "$VERSION_FILE"
 
       - name: Create Pull Request
         if: steps.compare.outputs.changed == 'true'
@@ -92,8 +103,13 @@ jobs:
 
       - name: Check outputs
         if: steps.cpr.outputs.pull-request-number
+        env:
+          PR_NUMBER: ${{ steps.cpr.outputs.pull-request-number }}
+          PR_URL: ${{ steps.cpr.outputs.pull-request-url }}
+          UPSTREAM_VERSION: ${{ steps.upstream.outputs.version }}
+          RELEASE_SUFFIX: ${{ inputs.release_suffix }}
         run: |
-          echo "Pull Request Number - ${{ steps.cpr.outputs.pull-request-number }}"
-          echo "Pull Request URL - ${{ steps.cpr.outputs.pull-request-url }}"
-          echo "Upstream version - ${{ steps.upstream.outputs.version }}"
-          echo "Release tag (after merge) - ${{ steps.upstream.outputs.version }}${{ inputs.release_suffix }}"
+          echo "Pull Request Number - ${PR_NUMBER}"
+          echo "Pull Request URL - ${PR_URL}"
+          echo "Upstream version - ${UPSTREAM_VERSION}"
+          echo "Release tag (after merge) - ${UPSTREAM_VERSION}${RELEASE_SUFFIX}"
