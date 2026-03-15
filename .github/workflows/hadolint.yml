@@ -21,7 +21,7 @@ jobs:
       - name: Find Dockerfiles (repo root only)
         id: find
         run: |
-          files=$(find . -maxdepth 1 -name 'Dockerfile*' ! -name '*.env' -type f | sort)
+          files=$(find . -name 'Dockerfile*' ! -name '*.env' -type f | sort)
           if [ -z "$files" ]; then
             echo "No Dockerfiles found, skipping hadolint"
             echo "found=false" >> "$GITHUB_OUTPUT"
