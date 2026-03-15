@@ -97,8 +97,9 @@ jobs:
         id: version
         env:
           RELEASE_TAG: ${{ github.event.release.tag_name }}
+          SNAPSHOT: ${{ inputs.snapshot }}
         run: |
-          if [[ "${{ inputs.snapshot }}" == "true" ]]; then
+          if [[ "$SNAPSHOT" == "true" ]]; then
             echo "version=0.0.0-snapshot+$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
             echo "version_tag=" >> "$GITHUB_OUTPUT"
           else
@@ -109,8 +110,10 @@ jobs:
 
       - name: Generate build matrix
         id: matrix
+        env:
+          PLATFORMS: ${{ inputs.platforms }}
         run: |
-          MATRIX=$(echo "${{ inputs.platforms }}" | tr ',' '\n' | jq -R '
+          MATRIX=$(echo "$PLATFORMS" | tr ',' '\n' | jq -R '
             split("/") |
             if length == 3 then
               {goos: .[0], goarch: .[1], goarm: (.[2] | ltrimstr("v"))}
@@ -142,13 +145,15 @@ jobs:
 
       - name: Configure private git repository
         if: env.GH_PAT != ''
+        env:
+          GO_PRIVATE_FULL: ${{ inputs.go_private_full }}
         run: |
-          if [[ "${{ inputs.go_private_full }}" == "true" ]]; then
+          if [[ "$GO_PRIVATE_FULL" == "true" ]]; then
             go env -w GOPRIVATE=github.com/nics-dp
             go env -w GONOSUMDB=github.com/nics-dp
-            git config --global url."https://${{ env.GH_PAT }}@github.com/".insteadOf "git@github.com:"
+            git config --global url."https://${GH_PAT}@github.com/".insteadOf "git@github.com:"
           fi
-          git config --global url."https://${{ env.GH_PAT }}@github.com".insteadOf "https://github.com"
+          git config --global url."https://${GH_PAT}@github.com".insteadOf "https://github.com"
 
       - name: Build binaries
         env:
@@ -158,6 +163,9 @@ jobs:
           CGO_ENABLED: ${{ inputs.cgo_enabled && '1' || '0' }}
           GO_EXTRA_ENV: ${{ inputs.go_env }}
           VERSION: ${{ needs.prepare.outputs.version }}
+          LDFLAGS_INPUT: ${{ inputs.ldflags }}
+          BINARY_PAIRS: ${{ inputs.binary }}
+          EXTRA_BUILD_FLAGS: ${{ inputs.extra_build_flags }}
         run: |
           if [[ -n "$GO_EXTRA_ENV" ]]; then
             while IFS= read -r line; do
@@ -170,18 +178,19 @@ jobs:
             EXT=".exe"
           fi
 
-          if [[ -n "${{ inputs.ldflags }}" ]]; then
-            LDFLAGS="${{ inputs.ldflags }}"
+          if [[ -n "$LDFLAGS_INPUT" ]]; then
+            LDFLAGS="$LDFLAGS_INPUT"
           else
             LDFLAGS="-s -w -X main.Version=v${VERSION} -X main.CommitSHA=$(git rev-parse HEAD) -X main.CommitDate=$(git log -1 --format=%cI)"
           fi
 
           mkdir -p output
 
-          IFS=',' read -ra PAIRS <<< "${{ inputs.binary }}"
+          IFS=',' read -ra PAIRS <<< "$BINARY_PAIRS"
           for pair in "${PAIRS[@]}"; do
             IFS=':' read -r name path <<< "$pair"
-            go build ${{ inputs.extra_build_flags }} -ldflags "${LDFLAGS}" -o "output/${name}${EXT}" "$path"
+            # shellcheck disable=SC2086
+            go build $EXTRA_BUILD_FLAGS -ldflags "${LDFLAGS}" -o "output/${name}${EXT}" "$path"
           done
 
       - name: Sign and notarize macOS binaries
@@ -202,30 +211,34 @@ jobs:
         id: archive
         env:
           VERSION: ${{ needs.prepare.outputs.version }}
+          TARGET_GOOS: ${{ matrix.goos }}
+          TARGET_GOARCH: ${{ matrix.goarch }}
+          TARGET_GOARM: ${{ matrix.goarm }}
+          PROJECT_NAME: ${{ inputs.project_name }}
         run: |
-          case "${{ matrix.goos }}" in
+          case "$TARGET_GOOS" in
             linux)   OS_TITLE="Linux" ;;
             darwin)  OS_TITLE="Darwin" ;;
             windows) OS_TITLE="Windows" ;;
             freebsd) OS_TITLE="FreeBSD" ;;
             openbsd) OS_TITLE="OpenBSD" ;;
             netbsd)  OS_TITLE="NetBSD" ;;
-            *)       OS_TITLE="${{ matrix.goos }}" ;;
+            *)       OS_TITLE="$TARGET_GOOS" ;;
           esac
 
-          case "${{ matrix.goarch }}" in
+          case "$TARGET_GOARCH" in
             amd64) ARCH_LABEL="x86_64" ;;
             386)   ARCH_LABEL="i386" ;;
-            arm)   ARCH_LABEL="armv${{ matrix.goarm || '7' }}" ;;
-            *)     ARCH_LABEL="${{ matrix.goarch }}" ;;
+            arm)   ARCH_LABEL="armv${TARGET_GOARM:-7}" ;;
+            *)     ARCH_LABEL="$TARGET_GOARCH" ;;
           esac
 
-          ARCHIVE_DIR="${{ inputs.project_name }}_${VERSION}_${OS_TITLE}_${ARCH_LABEL}"
+          ARCHIVE_DIR="${PROJECT_NAME}_${VERSION}_${OS_TITLE}_${ARCH_LABEL}"
           mkdir -p "${ARCHIVE_DIR}"
           cp output/* "${ARCHIVE_DIR}/"
           cp README* LICENSE* "${ARCHIVE_DIR}/" 2>/dev/null || true
 
-          if [[ "${{ matrix.goos }}" == "windows" ]]; then
+          if [[ "$TARGET_GOOS" == "windows" ]]; then
             zip -r "${ARCHIVE_DIR}.zip" "${ARCHIVE_DIR}"
             echo "file=${ARCHIVE_DIR}.zip" >> "$GITHUB_OUTPUT"
           else
@@ -265,10 +278,11 @@ jobs:
       - name: Generate source archive
         env:
           VERSION: ${{ needs.prepare.outputs.version }}
+          PROJECT_NAME: ${{ inputs.project_name }}
         run: |
           git archive --format=tar.gz \
-            --prefix="${{ inputs.project_name }}_${VERSION}_source/" \
-            HEAD > "dist/${{ inputs.project_name }}_${VERSION}_source.tar.gz"
+            --prefix="${PROJECT_NAME}_${VERSION}_source/" \
+            HEAD > "dist/${PROJECT_NAME}_${VERSION}_source.tar.gz"
 
       - name: Generate checksums
         working-directory: dist

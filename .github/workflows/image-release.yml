@@ -112,11 +112,13 @@ jobs:
       - name: Prepare build args from env file
         id: env-args
         if: inputs.env_file != ''
+        env:
+          ENV_FILE: ${{ inputs.env_file }}
         run: |
-          cat ${{ inputs.env_file }} >> "$GITHUB_ENV"
+          cat "$ENV_FILE" >> "$GITHUB_ENV"
           {
             echo "build_args<<ENVEOF"
-            grep -v '^\s*#' ${{ inputs.env_file }} | grep -v '^\s*$'
+            grep -v '^\s*#' "$ENV_FILE" | grep -v '^\s*$'
             echo "ENVEOF"
           } >> "$GITHUB_OUTPUT"
 
@@ -183,8 +185,12 @@ jobs:
 
       - name: Sign image (DockerHub)
         if: inputs.cosign
-        run: cosign sign --yes "index.docker.io/${{ env.DH_NAMESPACE }}/${{ env.IMAGE_NAME }}@${{ steps.build-and-push.outputs.digest }}"
+        env:
+          DIGEST: ${{ steps.build-and-push.outputs.digest }}
+        run: cosign sign --yes "index.docker.io/${DH_NAMESPACE}/${IMAGE_NAME}@${DIGEST}"
 
       - name: Sign image (GHCR)
         if: inputs.cosign
-        run: cosign sign --yes "${{ env.REGISTRY_GHCR }}/${{ env.GHCR_NAMESPACE }}/${{ env.IMAGE_NAME }}@${{ steps.build-and-push.outputs.digest }}"
+        env:
+          DIGEST: ${{ steps.build-and-push.outputs.digest }}
+        run: cosign sign --yes "${REGISTRY_GHCR}/${GHCR_NAMESPACE}/${IMAGE_NAME}@${DIGEST}"
