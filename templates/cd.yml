@@ -1,0 +1,105 @@
+# yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
+#
+# 標準 CD workflow 模板 (Dokploy)
+#
+# 使用方式: 複製到新 repo 的 .github/workflows/cd.yml
+# 僅適用於透過 Dokploy 部署的 service repos
+#
+# 必要 Secrets: DOKPLOY_COMPOSE_ID, DOKPLOY_API_TOKEN
+# 必要 Variables: DOKPLOY_BASE_URL
+
+name: cd
+
+on:
+  workflow_dispatch:
+  workflow_run:
+    workflows: ["release"]
+    types:
+      - completed
+
+permissions: {}
+
+jobs:
+  deploy:
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'workflow_run' &&
+       github.event.workflow_run.conclusion == 'success')
+    runs-on: ubuntu-latest
+    env:
+      DOKPLOY_BASE_URL: ${{ vars.DOKPLOY_BASE_URL }}
+      DOKPLOY_COMPOSE_ID: ${{ secrets.DOKPLOY_COMPOSE_ID }}
+      DOKPLOY_TOKEN: ${{ secrets.DOKPLOY_API_TOKEN }}
+
+    steps:
+      - name: Install jq
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y jq
+
+      - name: Get Dokploy Compose Status
+        id: status
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          RESPONSE="$(
+            curl -X GET \
+              "${{ env.DOKPLOY_BASE_URL }}/api/compose.one?composeId=${{ env.DOKPLOY_COMPOSE_ID }}" \
+              -H "x-api-key: ${{ env.DOKPLOY_TOKEN }}"
+          )"
+
+          STATUS="$(echo "$RESPONSE" | jq -r '.composeStatus')"
+
+          echo "Current composeStatus: $STATUS"
+          echo "compose_status=$STATUS" >> "$GITHUB_OUTPUT"
+
+      - name: Stop compose if running
+        if: steps.status.outputs.compose_status == 'running'
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          echo "Compose is running, sending compose.stop..."
+
+          curl -X POST \
+            "${{ env.DOKPLOY_BASE_URL }}/api/compose.stop" \
+            -H "x-api-key: ${{ env.DOKPLOY_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            --data "composeId=${{ env.DOKPLOY_COMPOSE_ID }}"
+
+          echo "Waiting for compose to stop..."
+
+          for i in {1..30}; do
+            sleep 10
+
+            STATUS="$(
+              curl -X GET \
+                "${{ env.DOKPLOY_BASE_URL }}/api/compose.one?composeId=${{ env.DOKPLOY_COMPOSE_ID }}" \
+                -H "x-api-key: ${{ env.DOKPLOY_TOKEN }}" \
+              | jq -r '.composeStatus'
+            )"
+
+            echo "Probe #$i - composeStatus: $STATUS"
+
+            if [ "$STATUS" != "running" ]; then
+              echo "Compose is no longer running (status=$STATUS)."
+              break
+            fi
+
+            if [ "$i" -eq 30 ]; then
+              echo "Timed out waiting for compose to stop." >&2
+              exit 1
+            fi
+          done
+
+      - name: Trigger Dokploy Docker Compose Deployment
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          curl -X POST \
+            "${{ env.DOKPLOY_BASE_URL }}/api/compose.redeploy" \
+            -H "x-api-key: ${{ env.DOKPLOY_TOKEN }}" \
+            -H "Content-Type: application/x-www-form-urlencoded" \
+            --data "composeId=${{ env.DOKPLOY_COMPOSE_ID }}"
