@@ -3,6 +3,7 @@ name: Notify Google Chat
 permissions: {}
 
 on:
+  workflow_call:
   pull_request:
     types: [opened, closed, reopened]
   push:
