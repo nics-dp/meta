@@ -29,12 +29,18 @@ jobs:
         shell: bash
         run: |
           bash <(curl -s https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash)
-          echo '## Actionlint Results' >> "$GITHUB_STEP_SUMMARY"
-          if ./actionlint -color 2>&1 | tee actionlint-output.txt; then
-            echo '✅ No issues found.' >> "$GITHUB_STEP_SUMMARY"
-          else
-            echo '```' >> "$GITHUB_STEP_SUMMARY"
-            cat actionlint-output.txt >> "$GITHUB_STEP_SUMMARY"
-            echo '```' >> "$GITHUB_STEP_SUMMARY"
-            exit 1
+          failed=false
+          if ! ./actionlint -color 2>&1 | tee actionlint-output.txt; then
+            failed=true
           fi
+          {
+            echo '## Actionlint Results'
+            if [ "$failed" = "true" ]; then
+              echo '```'
+              cat actionlint-output.txt
+              echo '```'
+            else
+              echo '✅ No issues found.'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+          [ "$failed" = "true" ] && exit 1 || true

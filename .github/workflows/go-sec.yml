@@ -36,13 +36,15 @@ jobs:
 
       - name: Configure private git repository
         if: env.GH_PAT != ''
+        env:
+          GO_PRIVATE_FULL: ${{ inputs.go_private_full }}
         run: |
-          if [ "${{ inputs.go_private_full }}" = "true" ]; then
+          if [ "$GO_PRIVATE_FULL" = "true" ]; then
             go env -w GOPRIVATE=github.com/nics-dp
             go env -w GONOSUMDB=github.com/nics-dp
-            git config --global url."https://${{ env.GH_PAT }}@github.com/".insteadOf "git@github.com:"
+            git config --global url."https://${GH_PAT}@github.com/".insteadOf "git@github.com:"
           fi
-          git config --global url."https://${{ env.GH_PAT }}@github.com".insteadOf "https://github.com"
+          git config --global url."https://${GH_PAT}@github.com".insteadOf "https://github.com"
 
       - name: Prepare environment
         run: mise run prepare

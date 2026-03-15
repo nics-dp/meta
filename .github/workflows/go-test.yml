@@ -50,19 +50,23 @@ jobs:
 
       - name: Configure private git repository
         if: env.GH_PAT != ''
+        env:
+          GO_PRIVATE_FULL: ${{ inputs.go_private_full }}
         run: |
-          if [ "${{ inputs.go_private_full }}" = "true" ]; then
+          if [ "$GO_PRIVATE_FULL" = "true" ]; then
             go env -w GOPRIVATE=github.com/nics-dp
             go env -w GONOSUMDB=github.com/nics-dp
-            git config --global url."https://${{ env.GH_PAT }}@github.com/".insteadOf "git@github.com:"
+            git config --global url."https://${GH_PAT}@github.com/".insteadOf "git@github.com:"
           fi
-          git config --global url."https://${{ env.GH_PAT }}@github.com".insteadOf "https://github.com"
+          git config --global url."https://${GH_PAT}@github.com".insteadOf "https://github.com"
 
       - name: Prepare environment
         run: mise run prepare
 
       - name: Run unit tests
-        run: ${{ inputs.test_command }}
+        env:
+          TEST_COMMAND: ${{ inputs.test_command }}
+        run: $TEST_COMMAND
 
       - name: Upload coverage artifact
         if: inputs.run_report
@@ -90,13 +94,15 @@ jobs:
 
       - name: Configure private git repository
         if: env.GH_PAT != ''
+        env:
+          GO_PRIVATE_FULL: ${{ inputs.go_private_full }}
         run: |
-          if [ "${{ inputs.go_private_full }}" = "true" ]; then
+          if [ "$GO_PRIVATE_FULL" = "true" ]; then
             go env -w GOPRIVATE=github.com/nics-dp
             go env -w GONOSUMDB=github.com/nics-dp
-            git config --global url."https://${{ env.GH_PAT }}@github.com/".insteadOf "git@github.com:"
+            git config --global url."https://${GH_PAT}@github.com/".insteadOf "git@github.com:"
           fi
-          git config --global url."https://${{ env.GH_PAT }}@github.com".insteadOf "https://github.com"
+          git config --global url."https://${GH_PAT}@github.com".insteadOf "https://github.com"
 
       - name: Prepare environment
         run: mise run prepare
@@ -107,7 +113,9 @@ jobs:
           name: coverage-data
 
       - name: Generate report
-        run: ${{ inputs.report_command }}
+        env:
+          REPORT_COMMAND: ${{ inputs.report_command }}
+        run: $REPORT_COMMAND
 
       - name: Upload reports
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0

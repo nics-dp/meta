@@ -46,6 +46,7 @@ jobs:
         if: github.event_name == 'pull_request'
         id: summary
         run: |
+          # shellcheck disable=SC2016
           {
             echo 'comment<<EOF'
             echo '## Trivy IaC Scan Results'

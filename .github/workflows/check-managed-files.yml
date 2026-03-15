@@ -21,8 +21,10 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           MANAGED_FILES: ${{ inputs.managed_files }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
-          changed=$(gh api --paginate "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files" --jq '.[].filename')
+          changed=$(gh api --paginate "repos/${REPO}/pulls/${PR_NUMBER}/files" --jq '.[].filename')
 
           IFS=',' read -ra files <<< "$MANAGED_FILES"
           found=()
