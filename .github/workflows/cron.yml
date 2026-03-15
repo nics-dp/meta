@@ -1,0 +1,34 @@
+# yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
+
+name: cron
+
+on:
+  schedule:
+    - cron: "0 0 * * 1"
+  workflow_dispatch:
+
+env:
+  REPOS: '["dcf-platform","dcf-access","dcf-service","dcf-access-cli","dcf-platform-cli","dcf-access-web","dcf-platform-web","libdcf","otel-bundle","test-repo","patroni","ZenQuery"]'
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    outputs:
+      repos: ${{ steps.repos.outputs.list }}
+    steps:
+      - id: repos
+        run: echo "list=$REPOS" >> "$GITHUB_OUTPUT"
+
+  sync-codeql:
+    needs: setup
+    strategy:
+      matrix:
+        repo: ${{ fromJSON(needs.setup.outputs.repos) }}
+    uses: ./.github/workflows/sync-codeql.yml
+    permissions:
+      contents: write
+      pull-requests: write
+    with:
+      repo_name: ${{ matrix.repo }}
+    secrets:
+      gh_token: ${{ secrets.GH_PAT_READ_NICSDP }}

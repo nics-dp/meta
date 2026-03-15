@@ -1,0 +1,99 @@
+# yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
+
+name: upstream-release-check
+
+on:
+  workflow_call:
+    inputs:
+      upstream_repo:
+        description: "Upstream repository (e.g., patroni/patroni)"
+        required: true
+        type: string
+      version_file:
+        description: "File containing the current version (e.g., Dockerfile.env)"
+        required: true
+        type: string
+      version_variable:
+        description: "Variable name in version_file (e.g., PATRONI_VERSION)"
+        required: true
+        type: string
+      release_suffix:
+        description: "Suffix to append to upstream tag for our release (e.g., .0.0.1)"
+        required: false
+        type: string
+        default: ".dcf"
+    secrets:
+      gh_token:
+        required: true
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          token: ${{ secrets.gh_token }}
+
+      - name: Get upstream latest release
+        id: upstream
+        env:
+          GH_TOKEN: ${{ secrets.gh_token }}
+        run: |
+          latest=$(gh api "repos/${{ inputs.upstream_repo }}/releases/latest" --jq '.tag_name')
+          echo "version=$latest" >> "$GITHUB_OUTPUT"
+          echo "Upstream latest: $latest"
+
+      - name: Get current version
+        id: current
+        run: |
+          current=$(grep "^${{ inputs.version_variable }}=" "${{ inputs.version_file }}" | cut -d'=' -f2)
+          echo "version=$current" >> "$GITHUB_OUTPUT"
+          echo "Current: $current"
+
+      - name: Compare versions
+        id: compare
+        run: |
+          if [ "${{ steps.upstream.outputs.version }}" = "${{ steps.current.outputs.version }}" ]; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "Already up to date"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "New version available: ${{ steps.upstream.outputs.version }}"
+          fi
+
+      - name: Update version file
+        if: steps.compare.outputs.changed == 'true'
+        run: |
+          sed -i "s/^${{ inputs.version_variable }}=.*/${{ inputs.version_variable }}=${{ steps.upstream.outputs.version }}/" "${{ inputs.version_file }}"
+          echo "Updated ${{ inputs.version_file }}:"
+          cat "${{ inputs.version_file }}"
+
+      - name: Create Pull Request
+        if: steps.compare.outputs.changed == 'true'
+        id: cpr
+        uses: peter-evans/create-pull-request@c0f553fe549906ede9cf27b5156039d195d2ece0 # v8.1.0
+        with:
+          commit-message: "chore: bump ${{ inputs.upstream_repo }} to ${{ steps.upstream.outputs.version }}"
+          title: "chore: bump ${{ inputs.upstream_repo }} to ${{ steps.upstream.outputs.version }}"
+          body: |
+            Upstream [${{ inputs.upstream_repo }}](https://github.com/${{ inputs.upstream_repo }}) released **${{ steps.upstream.outputs.version }}**.
+
+            This PR updates `${{ inputs.version_file }}` from `${{ steps.current.outputs.version }}` to `${{ steps.upstream.outputs.version }}`.
+
+            After merge, a release with tag `${{ steps.upstream.outputs.version }}${{ inputs.release_suffix }}` will be created automatically to trigger the image build.
+          branch: "chore/bump-upstream-${{ inputs.version_variable }}"
+          delete-branch: true
+          labels: dependencies
+          token: ${{ secrets.gh_token }}
+
+      - name: Check outputs
+        if: steps.cpr.outputs.pull-request-number
+        run: |
+          echo "Pull Request Number - ${{ steps.cpr.outputs.pull-request-number }}"
+          echo "Pull Request URL - ${{ steps.cpr.outputs.pull-request-url }}"
+          echo "Upstream version - ${{ steps.upstream.outputs.version }}"
+          echo "Release tag (after merge) - ${{ steps.upstream.outputs.version }}${{ inputs.release_suffix }}"
