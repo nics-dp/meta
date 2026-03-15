@@ -18,6 +18,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      checks: write
       pull-requests: write
     steps:
       - name: Checkout
@@ -35,7 +36,9 @@ jobs:
         if: github.event_name != 'pull_request'
         shell: bash
         run: |
-          bash <(curl -s https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash)
+          LATEST=$(gh api repos/rhysd/actionlint/releases/latest --jq '.tag_name')
+          gh release download "$LATEST" -R rhysd/actionlint -p "actionlint_*_linux_amd64.tar.gz" -O actionlint.tar.gz
+          tar xzf actionlint.tar.gz actionlint
           failed=false
           if ! ./actionlint -color 2>&1 | tee actionlint-output.txt; then
             failed=true

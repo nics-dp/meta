@@ -84,7 +84,7 @@ jobs:
             fi
 
             echo ''
-            echo '*Scanned `Dockerfile*`, `compose*.yml`, `docker-compose*.yml` at repo root.*'
+            echo '*Scanned IaC files (`Dockerfile*`, `compose*.yml`, Terraform, Kubernetes, etc.) in the repository.*'
             echo 'EOF'
           } >> "$GITHUB_OUTPUT"
 
