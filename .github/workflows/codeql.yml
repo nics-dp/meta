@@ -1,0 +1,103 @@
+# yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
+
+name: "CodeQL Advanced"
+
+on:
+  workflow_call:
+    inputs:
+      languages:
+        required: false
+        type: string
+        default: '[{"language":"actions","build-mode":"none"},{"language":"go","build-mode":"manual"}]'
+        description: "JSON array of {language, build-mode} objects for the matrix"
+      go_build_commands:
+        required: false
+        type: string
+        default: |
+          go mod download
+          go mod tidy
+          go mod vendor
+          go list ./...
+          go build ./...
+        description: "Shell commands to build Go code for CodeQL analysis"
+      go_install_tools:
+        required: false
+        type: string
+        default: ""
+        description: "Shell commands to install Go tools before build (e.g., swag, goimports)"
+      go_cgo_enabled:
+        required: false
+        type: boolean
+        default: false
+        description: "Whether to enable CGO for the Go build"
+      go_install_system_deps:
+        required: false
+        type: boolean
+        default: false
+        description: "Whether to install build-essential and pkg-config for CGO"
+    secrets:
+      gh_pat:
+        required: false
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    runs-on: "ubuntu-latest"
+    permissions:
+      security-events: write
+      packages: read
+      actions: read
+      contents: read
+    env:
+      GH_PAT: ${{ secrets.gh_pat }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(inputs.languages) }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@fb0994ef1c058010acf1efccff928b0a83b1ed54 # v4.32.6
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build-mode }}
+          dependency-caching: true
+          queries: security-extended,security-and-quality
+          external-repository-token: ${{ env.GH_PAT }}
+
+      - name: Install system deps for CGO
+        if: matrix.language == 'go' && inputs.go_install_system_deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential pkg-config
+
+      - name: Configure access to private Go modules
+        if: matrix.language == 'go' && env.GH_PAT != ''
+        run: |
+          git config --global url."https://${GH_PAT}@github.com".insteadOf "https://github.com"
+          echo "GOPRIVATE=github.com/nics-dp" >> "$GITHUB_ENV"
+
+      - name: Install Go tools
+        if: matrix.language == 'go' && inputs.go_install_tools != ''
+        env:
+          GO_INSTALL_TOOLS: ${{ inputs.go_install_tools }}
+        run: $GO_INSTALL_TOOLS
+
+      - name: Manual Go build for CodeQL
+        if: matrix.language == 'go'
+        env:
+          CGO_ENABLED: ${{ inputs.go_cgo_enabled && '1' || '0' }}
+          GOOS: linux
+          GO_BUILD_COMMANDS: ${{ inputs.go_build_commands }}
+        run: $GO_BUILD_COMMANDS
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@fb0994ef1c058010acf1efccff928b0a83b1ed54 # v4.32.6
+        with:
+          category: "/language:${{matrix.language}}"

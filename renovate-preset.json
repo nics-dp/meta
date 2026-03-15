@@ -1,0 +1,53 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "description": "nics-dp org-level Renovate preset",
+  "extends": [
+    "config:recommended",
+    ":timezone(Asia/Taipei)",
+    "schedule:earlyMondays"
+  ],
+  "env": {
+    "GOPRIVATE": "github.com/nics-dp",
+    "GONOSUMCHECK": "github.com/nics-dp"
+  },
+  "packageRules": [
+    {
+      "description": "Group Go module updates",
+      "matchManagers": ["gomod"],
+      "groupName": "go dependencies",
+      "commitMessagePrefix": "chore(go.deps):",
+      "labels": ["dependencies", "go"],
+      "automerge": false
+    },
+    {
+      "description": "Group GitHub Actions updates",
+      "matchManagers": ["github-actions"],
+      "groupName": "github-actions dependencies",
+      "commitMessagePrefix": "chore(ci.deps):",
+      "labels": ["dependencies", "github-actions"],
+      "automerge": false
+    },
+    {
+      "description": "Group Docker updates",
+      "matchManagers": ["dockerfile", "docker-compose"],
+      "groupName": "docker dependencies",
+      "commitMessagePrefix": "chore(docker.deps):",
+      "labels": ["dependencies", "docker"],
+      "automerge": false
+    },
+    {
+      "description": "Group npm updates",
+      "matchManagers": ["npm"],
+      "groupName": "npm dependencies",
+      "commitMessagePrefix": "chore(npm.deps):",
+      "labels": ["dependencies", "npm"],
+      "automerge": false
+    },
+    {
+      "description": "Automerge patch updates",
+      "matchUpdateTypes": ["patch"],
+      "automerge": true,
+      "automergeType": "pr"
+    }
+  ]
+}
