@@ -35,20 +35,20 @@ jobs:
           experimental: true
           log_level: "info"
 
+      - name: Prepare environment
+        run: mise run prepare
+
       - name: Configure private git repository
         if: env.GH_PAT != ''
         env:
           GO_PRIVATE_FULL: ${{ inputs.go_private_full }}
         run: |
           if [ "$GO_PRIVATE_FULL" = "true" ]; then
-            go env -w GOPRIVATE=github.com/nics-dp
-            go env -w GONOSUMDB=github.com/nics-dp
+            echo "GOPRIVATE=github.com/nics-dp" >> "$GITHUB_ENV"
+            echo "GONOSUMDB=github.com/nics-dp" >> "$GITHUB_ENV"
             git config --global url."https://${GH_PAT}@github.com/".insteadOf "git@github.com:"
           fi
           git config --global url."https://${GH_PAT}@github.com".insteadOf "https://github.com"
-
-      - name: Prepare environment
-        run: mise run prepare
 
       - name: Run lint (reviewdog)
         if: github.event_name == 'pull_request'

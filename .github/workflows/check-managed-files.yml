@@ -40,11 +40,11 @@ jobs:
           done
 
           if [ ${#found[@]} -gt 0 ]; then
-            echo "::error::以下檔案由 nics-dp/meta 集中管理，請勿直接修改："
+            echo "::error::The following files are centrally managed by nics-dp/meta and must not be modified directly:"
             for f in "${found[@]}"; do
               echo "::error::  - $f"
             done
-            echo "::error::應修改 meta repo 中的來源檔案，由 sync workflow 自動同步。"
+            echo "::error::Please update the source files in the meta repo; changes are synced automatically."
             exit 1
           fi
 

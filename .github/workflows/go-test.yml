@@ -48,20 +48,20 @@ jobs:
           experimental: true
           log_level: "info"
 
+      - name: Prepare environment
+        run: mise run prepare
+
       - name: Configure private git repository
         if: env.GH_PAT != ''
         env:
           GO_PRIVATE_FULL: ${{ inputs.go_private_full }}
         run: |
           if [ "$GO_PRIVATE_FULL" = "true" ]; then
-            go env -w GOPRIVATE=github.com/nics-dp
-            go env -w GONOSUMDB=github.com/nics-dp
+            echo "GOPRIVATE=github.com/nics-dp" >> "$GITHUB_ENV"
+            echo "GONOSUMDB=github.com/nics-dp" >> "$GITHUB_ENV"
             git config --global url."https://${GH_PAT}@github.com/".insteadOf "git@github.com:"
           fi
           git config --global url."https://${GH_PAT}@github.com".insteadOf "https://github.com"
-
-      - name: Prepare environment
-        run: mise run prepare
 
       - name: Run unit tests
         env:
@@ -92,20 +92,20 @@ jobs:
           cache: true
           experimental: true
 
+      - name: Prepare environment
+        run: mise run prepare
+
       - name: Configure private git repository
         if: env.GH_PAT != ''
         env:
           GO_PRIVATE_FULL: ${{ inputs.go_private_full }}
         run: |
           if [ "$GO_PRIVATE_FULL" = "true" ]; then
-            go env -w GOPRIVATE=github.com/nics-dp
-            go env -w GONOSUMDB=github.com/nics-dp
+            echo "GOPRIVATE=github.com/nics-dp" >> "$GITHUB_ENV"
+            echo "GONOSUMDB=github.com/nics-dp" >> "$GITHUB_ENV"
             git config --global url."https://${GH_PAT}@github.com/".insteadOf "git@github.com:"
           fi
           git config --global url."https://${GH_PAT}@github.com".insteadOf "https://github.com"
-
-      - name: Prepare environment
-        run: mise run prepare
 
       - name: Download coverage data
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
