@@ -1,0 +1,190 @@
+# yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
+
+name: Image Building and Publishing
+
+on:
+  workflow_call:
+    inputs:
+      image_name:
+        required: true
+        type: string
+        description: "Docker image name (e.g., dcf-platform)"
+      platforms:
+        required: false
+        type: string
+        default: "linux/amd64,linux/arm64"
+        description: "Target platforms for multi-arch build"
+      runs_on:
+        required: false
+        type: string
+        default: '"ubuntu-latest"'
+        description: 'Runner as JSON (e.g., ''"ubuntu-latest"'' or ''{"group":"releasers"}'')'
+      context:
+        required: false
+        type: string
+        default: "."
+        description: "Docker build context path"
+      build_args:
+        required: false
+        type: string
+        default: ""
+        description: "Docker build-args (multiline key=value)"
+      env_file:
+        required: false
+        type: string
+        default: ""
+        description: "Path to env file to load into GITHUB_ENV before build (e.g., Dockerfile.env)"
+      sbom:
+        required: false
+        type: boolean
+        default: true
+        description: "Enable BuildKit SBOM generation"
+      provenance:
+        required: false
+        type: boolean
+        default: true
+        description: "Enable BuildKit SLSA provenance attestation"
+      attest:
+        required: false
+        type: boolean
+        default: true
+        description: "Enable GitHub artifact attestation (Sigstore)"
+      cosign:
+        required: false
+        type: boolean
+        default: true
+        description: "Sign container images with cosign (keyless)"
+      ref:
+        required: false
+        type: string
+        default: ""
+        description: "Git ref to checkout (defaults to event ref)"
+    outputs:
+      digest:
+        description: "Image digest (sha256:...)"
+        value: ${{ jobs.build-and-push.outputs.digest }}
+    secrets:
+      dockerhub_username:
+        required: true
+      dockerhub_token:
+        required: true
+      gh_pat:
+        required: false
+
+env:
+  REGISTRY_DH: docker.io
+  DH_NAMESPACE: nicsdp
+  REGISTRY_GHCR: ghcr.io
+  GHCR_NAMESPACE: nics-dp
+  IMAGE_NAME: ${{ inputs.image_name }}
+
+jobs:
+  build-and-push:
+    runs-on: ${{ fromJSON(inputs.runs_on) }}
+    outputs:
+      digest: ${{ steps.build-and-push.outputs.digest }}
+    permissions:
+      contents: read
+      packages: write
+      attestations: write
+      id-token: write
+
+    steps:
+      - name: Log in to DockerHub Container Registry
+        uses: docker/login-action@b45d80f862d83dbcd57f89517bcf500b2ab88fb2 # v4.0.0
+        with:
+          registry: ${{ env.REGISTRY_DH }}
+          username: ${{ secrets.dockerhub_username }}
+          password: ${{ secrets.dockerhub_token }}
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@b45d80f862d83dbcd57f89517bcf500b2ab88fb2 # v4.0.0
+        with:
+          registry: ${{ env.REGISTRY_GHCR }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: Prepare build args from env file
+        id: env-args
+        if: inputs.env_file != ''
+        run: |
+          cat ${{ inputs.env_file }} >> "$GITHUB_ENV"
+          {
+            echo "build_args<<ENVEOF"
+            grep -v '^\s*#' ${{ inputs.env_file }} | grep -v '^\s*$'
+            echo "ENVEOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@ce360397dd3f832beb865e1373c09c0e9f86d70a # v4.0.0
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4.0.0
+
+      - name: Extract metadata (tags, labels)
+        id: meta
+        uses: docker/metadata-action@030e881283bb7a6894de51c315a6bfe6a94e05cf # v6.0.0
+        with:
+          images: |
+            ${{ env.REGISTRY_DH }}/${{ env.DH_NAMESPACE }}/${{ env.IMAGE_NAME }}
+            ${{ env.REGISTRY_GHCR }}/${{ env.GHCR_NAMESPACE }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{raw}}
+            type=semver,pattern=v{{major}}.{{minor}}
+            type=semver,pattern=v{{major}}
+          flavor: |
+            latest=auto
+
+      - name: Build and push
+        id: build-and-push
+        uses: docker/build-push-action@d08e5c354a6adb9ed34480a06d141179aa583294 # v7.0.0
+        with:
+          context: ${{ inputs.context }}
+          platforms: ${{ inputs.platforms }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            ${{ inputs.build_args }}
+            ${{ steps.env-args.outputs.build_args }}
+          secrets: |
+            github_token=${{ secrets.gh_pat }}
+          cache-from: type=registry,ref=${{ env.REGISTRY_GHCR }}/${{ env.GHCR_NAMESPACE }}/${{ env.IMAGE_NAME }}:buildcache
+          cache-to: type=registry,ref=${{ env.REGISTRY_GHCR }}/${{ env.GHCR_NAMESPACE }}/${{ env.IMAGE_NAME }}:buildcache,mode=max
+          sbom: ${{ inputs.sbom }}
+          provenance: ${{ inputs.provenance && 'mode=max' || 'false' }}
+
+      - name: Generate artifact attestation (DockerHub)
+        if: inputs.attest
+        uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32 # v4
+        with:
+          subject-name: index.docker.io/${{ env.DH_NAMESPACE }}/${{ env.IMAGE_NAME }}
+          subject-digest: ${{ steps.build-and-push.outputs.digest }}
+          push-to-registry: true
+
+      - name: Generate artifact attestation (GHCR)
+        if: inputs.attest
+        uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32 # v4
+        with:
+          subject-name: ${{ env.REGISTRY_GHCR }}/${{ env.GHCR_NAMESPACE }}/${{ env.IMAGE_NAME }}
+          subject-digest: ${{ steps.build-and-push.outputs.digest }}
+          push-to-registry: true
+
+      - name: Install cosign
+        if: inputs.cosign
+        uses: sigstore/cosign-installer@ba7bc0a3fef59531c69a25acd34668d6d3fe6f22 # v4.1.0
+
+      - name: Sign image (DockerHub)
+        if: inputs.cosign
+        run: cosign sign --yes "index.docker.io/${{ env.DH_NAMESPACE }}/${{ env.IMAGE_NAME }}@${{ steps.build-and-push.outputs.digest }}"
+
+      - name: Sign image (GHCR)
+        if: inputs.cosign
+        run: cosign sign --yes "${{ env.REGISTRY_GHCR }}/${{ env.GHCR_NAMESPACE }}/${{ env.IMAGE_NAME }}@${{ steps.build-and-push.outputs.digest }}"

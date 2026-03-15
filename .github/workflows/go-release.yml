@@ -1,0 +1,285 @@
+# yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
+
+name: go-release
+
+on:
+  workflow_call:
+    inputs:
+      project_name:
+        required: true
+        type: string
+        description: "Project name for archive naming (e.g., dcf-platform)"
+      binary:
+        required: true
+        type: string
+        description: "Comma-separated name:path pairs (e.g., platform:./cmd/platform or tui:./cmd/tui,node:./cmd/node)"
+      platforms:
+        required: false
+        type: string
+        default: "linux/amd64,linux/arm64,darwin/amd64,darwin/arm64,windows/amd64"
+        description: "Comma-separated GOOS/GOARCH targets"
+      go_version:
+        required: false
+        type: string
+        default: "stable"
+      cgo_enabled:
+        required: false
+        type: boolean
+        default: false
+      go_env:
+        required: false
+        type: string
+        default: "GOEXPERIMENT=jsonv2,simd,runtimesecret,goroutineleakprofile"
+        description: "Extra env vars for build, one per line (e.g., GOEXPERIMENT=jsonv2)"
+      ldflags:
+        required: false
+        type: string
+        default: ""
+        description: "Custom ldflags (default: -s -w with version/commit/date injection)"
+      extra_build_flags:
+        required: false
+        type: string
+        default: "-trimpath"
+        description: "Extra go build flags"
+      go_private_full:
+        required: false
+        type: boolean
+        default: true
+        description: "Set GOPRIVATE/GONOSUMDB for nics-dp private modules"
+      notarize:
+        required: false
+        type: boolean
+        default: false
+        description: "Sign and notarize macOS binaries with quill"
+      snapshot:
+        required: false
+        type: boolean
+        default: false
+        description: "Snapshot build (no GitHub Release, short artifact retention)"
+      ref:
+        required: false
+        type: string
+        default: ""
+        description: "Git ref to checkout (defaults to event ref)"
+      runs_on:
+        required: false
+        type: string
+        default: '"ubuntu-latest"'
+        description: 'Runner for build jobs as JSON'
+    secrets:
+      gh_pat:
+        required: true
+      quill_sign_p12:
+        required: false
+      quill_sign_password:
+        required: false
+      quill_notary_key:
+        required: false
+      quill_notary_key_id:
+        required: false
+      quill_notary_issuer:
+        required: false
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.matrix.outputs.result }}
+      version: ${{ steps.version.outputs.version }}
+      version_tag: ${{ steps.version.outputs.version_tag }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ inputs.ref }}
+          fetch-depth: 0
+
+      - name: Compute version
+        id: version
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          if [[ "${{ inputs.snapshot }}" == "true" ]]; then
+            echo "version=0.0.0-snapshot+$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+            echo "version_tag=" >> "$GITHUB_OUTPUT"
+          else
+            TAG="${RELEASE_TAG:-$GITHUB_REF_NAME}"
+            echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
+            echo "version_tag=${TAG}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Generate build matrix
+        id: matrix
+        run: |
+          MATRIX=$(echo "${{ inputs.platforms }}" | tr ',' '\n' | jq -R '
+            split("/") |
+            if length == 3 then
+              {goos: .[0], goarch: .[1], goarm: (.[2] | ltrimstr("v"))}
+            else
+              {goos: .[0], goarch: .[1], goarm: ""}
+            end
+          ' | jq -sc '{include: .}')
+          echo "result=${MATRIX}" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: prepare
+    runs-on: ${{ fromJSON(inputs.runs_on) }}
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.prepare.outputs.matrix) }}
+    env:
+      GH_PAT: ${{ secrets.gh_pat }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ inputs.ref }}
+
+      - uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v6.3.0
+        with:
+          go-version: ${{ inputs.go_version }}
+          cache: true
+
+      - name: Configure private git repository
+        if: env.GH_PAT != ''
+        run: |
+          if [[ "${{ inputs.go_private_full }}" == "true" ]]; then
+            go env -w GOPRIVATE=github.com/nics-dp
+            go env -w GONOSUMDB=github.com/nics-dp
+            git config --global url."https://${{ env.GH_PAT }}@github.com/".insteadOf "git@github.com:"
+          fi
+          git config --global url."https://${{ env.GH_PAT }}@github.com".insteadOf "https://github.com"
+
+      - name: Build binaries
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          GOARM: ${{ matrix.goarm }}
+          CGO_ENABLED: ${{ inputs.cgo_enabled && '1' || '0' }}
+          GO_EXTRA_ENV: ${{ inputs.go_env }}
+          VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          if [[ -n "$GO_EXTRA_ENV" ]]; then
+            while IFS= read -r line; do
+              [[ -n "$line" ]] && export "${line?}"
+            done <<< "$GO_EXTRA_ENV"
+          fi
+
+          EXT=""
+          if [[ "$GOOS" == "windows" ]]; then
+            EXT=".exe"
+          fi
+
+          if [[ -n "${{ inputs.ldflags }}" ]]; then
+            LDFLAGS="${{ inputs.ldflags }}"
+          else
+            LDFLAGS="-s -w -X main.Version=v${VERSION} -X main.CommitSHA=$(git rev-parse HEAD) -X main.CommitDate=$(git log -1 --format=%cI)"
+          fi
+
+          mkdir -p output
+
+          IFS=',' read -ra PAIRS <<< "${{ inputs.binary }}"
+          for pair in "${PAIRS[@]}"; do
+            IFS=':' read -r name path <<< "$pair"
+            go build ${{ inputs.extra_build_flags }} -ldflags "${LDFLAGS}" -o "output/${name}${EXT}" "$path"
+          done
+
+      - name: Sign and notarize macOS binaries
+        if: matrix.goos == 'darwin' && inputs.notarize
+        env:
+          QUILL_SIGN_P12: ${{ secrets.quill_sign_p12 }}
+          QUILL_SIGN_PASSWORD: ${{ secrets.quill_sign_password }}
+          QUILL_NOTARY_KEY: ${{ secrets.quill_notary_key }}
+          QUILL_NOTARY_KEY_ID: ${{ secrets.quill_notary_key_id }}
+          QUILL_NOTARY_ISSUER: ${{ secrets.quill_notary_issuer }}
+        run: |
+          go install github.com/anchore/quill/cmd/quill@latest
+          for bin in output/*; do
+            [[ -f "$bin" ]] && quill sign-and-notarize "$bin"
+          done
+
+      - name: Create archive
+        id: archive
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          case "${{ matrix.goos }}" in
+            linux)   OS_TITLE="Linux" ;;
+            darwin)  OS_TITLE="Darwin" ;;
+            windows) OS_TITLE="Windows" ;;
+            freebsd) OS_TITLE="FreeBSD" ;;
+            openbsd) OS_TITLE="OpenBSD" ;;
+            netbsd)  OS_TITLE="NetBSD" ;;
+            *)       OS_TITLE="${{ matrix.goos }}" ;;
+          esac
+
+          case "${{ matrix.goarch }}" in
+            amd64) ARCH_LABEL="x86_64" ;;
+            386)   ARCH_LABEL="i386" ;;
+            arm)   ARCH_LABEL="armv${{ matrix.goarm || '7' }}" ;;
+            *)     ARCH_LABEL="${{ matrix.goarch }}" ;;
+          esac
+
+          ARCHIVE_DIR="${{ inputs.project_name }}_${VERSION}_${OS_TITLE}_${ARCH_LABEL}"
+          mkdir -p "${ARCHIVE_DIR}"
+          cp output/* "${ARCHIVE_DIR}/"
+          cp README* LICENSE* "${ARCHIVE_DIR}/" 2>/dev/null || true
+
+          if [[ "${{ matrix.goos }}" == "windows" ]]; then
+            zip -r "${ARCHIVE_DIR}.zip" "${ARCHIVE_DIR}"
+            echo "file=${ARCHIVE_DIR}.zip" >> "$GITHUB_OUTPUT"
+          else
+            tar czf "${ARCHIVE_DIR}.tar.gz" "${ARCHIVE_DIR}"
+            echo "file=${ARCHIVE_DIR}.tar.gz" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: build-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.goarm && format('-v{0}', matrix.goarm) || '' }}
+          path: ${{ steps.archive.outputs.file }}
+          retention-days: ${{ inputs.snapshot && 7 || 30 }}
+
+  release:
+    needs: [prepare, build]
+    if: ${{ !inputs.snapshot }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: Download all build artifacts
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: build-*
+          path: dist
+          merge-multiple: true
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@ba7bc0a3fef59531c69a25acd34668d6d3fe6f22 # v4.1.0
+
+      - name: Generate source archive
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          git archive --format=tar.gz \
+            --prefix="${{ inputs.project_name }}_${VERSION}_source/" \
+            HEAD > "dist/${{ inputs.project_name }}_${VERSION}_source.tar.gz"
+
+      - name: Generate checksums
+        working-directory: dist
+        run: sha256sum ./*.tar.gz ./*.zip 2>/dev/null > checksums.txt
+
+      - name: Sign checksums with cosign
+        working-directory: dist
+        run: cosign sign-blob --bundle checksums.txt.sigstore.json checksums.txt --yes
+
+      - name: Upload release assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION_TAG: ${{ needs.prepare.outputs.version_tag }}
+        run: gh release upload "$VERSION_TAG" dist/* --clobber

@@ -1,0 +1,38 @@
+# yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
+
+name: release-please
+
+on:
+  workflow_call:
+    inputs:
+      release_type:
+        description: "Release type (simple, go, node, etc.)"
+        type: string
+        default: simple
+    secrets:
+      gh_pat:
+        description: "PAT with contents:write + pull-requests:write (GITHUB_TOKEN won't trigger downstream workflows)"
+        required: true
+    outputs:
+      release_created:
+        description: "Whether a release was created"
+        value: ${{ jobs.release-please.outputs.release_created }}
+      tag_name:
+        description: "The tag name of the release"
+        value: ${{ jobs.release-please.outputs.tag_name }}
+
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
+    steps:
+      - uses: googleapis/release-please-action@16a9c90856f42705d54a6fda1823352bdc62cf38 # v4.4.0
+        id: release
+        with:
+          release-type: ${{ inputs.release_type }}
+          token: ${{ secrets.gh_pat }}
