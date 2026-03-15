@@ -1,0 +1,89 @@
+# yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
+
+name: gosec
+
+on:
+  workflow_call:
+    inputs:
+      go_private_full:
+        required: false
+        type: boolean
+        default: true
+        description: "Set GOPRIVATE/GONOSUMDB for repos importing nics-dp private modules"
+    secrets:
+      gh_pat:
+        required: false
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  security:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    env:
+      GH_PAT: ${{ secrets.gh_pat }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Install mise
+        uses: jdx/mise-action@c1ecc8f748cd28cdeabf76dab3cccde4ce692fe4 # v4.0.0
+        with:
+          cache: true
+          experimental: true
+          log_level: "info"
+
+      - name: Configure private git repository
+        if: env.GH_PAT != ''
+        run: |
+          if [ "${{ inputs.go_private_full }}" = "true" ]; then
+            go env -w GOPRIVATE=github.com/nics-dp
+            go env -w GONOSUMDB=github.com/nics-dp
+            git config --global url."https://${{ env.GH_PAT }}@github.com/".insteadOf "git@github.com:"
+          fi
+          git config --global url."https://${{ env.GH_PAT }}@github.com".insteadOf "https://github.com"
+
+      - name: Prepare environment
+        run: mise run prepare
+
+      - name: Run security scan
+        id: gosec
+        run: |
+          mise run security 2>&1 | tee gosec-output.txt
+          echo "exit_code=${PIPESTATUS[0]}" >> "$GITHUB_OUTPUT"
+
+      - name: Write summary
+        if: always()
+        run: |
+          {
+            echo "## gosec Security Scan"
+            echo ""
+            if [ -s gosec-output.txt ]; then
+              echo '```'
+              tail -50 gosec-output.txt
+              echo '```'
+            else
+              echo "No issues found."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Post PR comment
+        if: always() && github.event_name == 'pull_request'
+        uses: marocchino/sticky-pull-request-comment@70d2764d1a7d5d9560b100cbea0077fc8f633987 # v3.0.2
+        with:
+          header: gosec
+          message: |
+            ## gosec Security Scan
+            <details>
+            <summary>Results</summary>
+
+            ```
+            ${{ steps.gosec.outputs.exit_code == '0' && 'No issues found.' || 'See CI log for details.' }}
+            ```
+
+            </details>
+
+      - name: Fail if scan found issues
+        if: always() && steps.gosec.outputs.exit_code != '0'
+        run: exit 1

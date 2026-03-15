@@ -1,0 +1,45 @@
+# yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
+
+name: check-managed-files
+
+on:
+  workflow_call:
+    inputs:
+      managed_files:
+        description: Comma-separated list of centrally-managed file paths.
+        required: false
+        type: string
+        default: ".github/workflows/codeql.yml"
+
+jobs:
+  check:
+    # Only check on PRs, skip sync PRs from meta repo
+    if: github.event_name == 'pull_request' && !startsWith(github.head_ref, 'ci/sync-')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check for managed file changes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MANAGED_FILES: ${{ inputs.managed_files }}
+        run: |
+          changed=$(gh api --paginate "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files" --jq '.[].filename')
+
+          IFS=',' read -ra files <<< "$MANAGED_FILES"
+          found=()
+          for mf in "${files[@]}"; do
+            mf=$(echo "$mf" | xargs)
+            if echo "$changed" | grep -qx "$mf"; then
+              found+=("$mf")
+            fi
+          done
+
+          if [ ${#found[@]} -gt 0 ]; then
+            echo "::error::以下檔案由 nics-dp/meta 集中管理，請勿直接修改："
+            for f in "${found[@]}"; do
+              echo "::error::  - $f"
+            done
+            echo "::error::應修改 meta repo 中的來源檔案，由 sync workflow 自動同步。"
+            exit 1
+          fi
+
+          echo "✓ No managed files were modified."
