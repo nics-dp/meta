@@ -288,7 +288,9 @@ jobs:
 
       - name: Generate checksums
         working-directory: dist
-        run: sha256sum ./*.tar.gz ./*.zip 2>/dev/null > checksums.txt
+        run: |
+          shopt -s nullglob
+          sha256sum ./*.tar.gz ./*.zip > checksums.txt
 
       - name: Sign checksums with cosign
         working-directory: dist
