@@ -1,0 +1,160 @@
+# yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
+
+name: SBOM Image
+
+on:
+  workflow_call:
+    inputs:
+      project_name:
+        required: true
+        type: string
+        description: "Project name for artifact naming (e.g., dcf-platform)"
+      image_name:
+        required: true
+        type: string
+        description: "Docker image name (e.g., dcf-platform)"
+      digest:
+        required: true
+        type: string
+        description: "Image digest from build (e.g., sha256:abc123...)"
+      ref:
+        required: false
+        type: string
+        default: ""
+        description: "Git ref to checkout (defaults to event ref)"
+      snapshot:
+        required: false
+        type: boolean
+        default: false
+        description: "Snapshot mode (skip release upload)"
+      runs_on:
+        required: false
+        type: string
+        default: '{"group":"releasers"}'
+        description: 'Runner as JSON (e.g., ''"ubuntu-latest"'' or ''{"group":"releasers"}'')'
+
+env:
+  REGISTRY_GHCR: ghcr.io
+  GHCR_NAMESPACE: nics-dp
+
+jobs:
+  sbom-image:
+    runs-on: ${{ fromJSON(inputs.runs_on) }}
+    permissions:
+      contents: write
+      packages: read
+      security-events: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ inputs.ref }}
+          fetch-depth: 1
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@b45d80f862d83dbcd57f89517bcf500b2ab88fb2 # v4.0.0
+        with:
+          registry: ${{ env.REGISTRY_GHCR }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Compute version
+        id: version
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          SNAPSHOT: ${{ inputs.snapshot }}
+        run: |
+          if [[ "$SNAPSHOT" == "true" ]]; then
+            echo "version=0.0.0-snapshot+$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+          else
+            TAG="${RELEASE_TAG:-$GITHUB_REF_NAME}"
+            echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
+            echo "version_tag=${TAG}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Generate SBOM from image (CycloneDX JSON 1.6)
+        uses: anchore/sbom-action@57aae528053a48a3f6235f2d9461b05fbcb7366d # v0.23.1
+        with:
+          image: ${{ env.REGISTRY_GHCR }}/${{ env.GHCR_NAMESPACE }}/${{ inputs.image_name }}@${{ inputs.digest }}
+          format: cyclonedx-json@1.6
+          output-file: sbom-image.cdx.json
+          upload-artifact: false
+
+      - name: Set up Go (for tooling)
+        uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v6.3.0
+        with:
+          go-version: stable
+          cache: false
+
+      - name: Enrich SBOM with parlay
+        run: |
+          go install github.com/snyk/parlay@v0.11.0
+          parlay ecosystems enrich sbom-image.cdx.json > enriched-image.cdx.json
+
+      - name: Scan SBOM with Trivy (SARIF)
+        uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # 0.35.0
+        with:
+          scan-type: sbom
+          input: enriched-image.cdx.json
+          format: sarif
+          output: trivy-image.sarif
+
+      - name: Upload Trivy SARIF to GitHub Security tab
+        if: always()
+        uses: github/codeql-action/upload-sarif@fb0994ef1c058010acf1efccff928b0a83b1ed54 # v4.32.6
+        with:
+          sarif_file: trivy-image.sarif
+          category: trivy-image
+
+      - name: Scan SBOM with Trivy (JSON)
+        uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # 0.35.0
+        with:
+          scan-type: sbom
+          input: enriched-image.cdx.json
+          format: json
+          output: trivy-image.json
+
+      - name: Scan SBOM with Grype (SARIF)
+        id: grype-sarif
+        uses: anchore/scan-action@7037fa011853d5a11690026fb85feee79f4c946c # v7.3.2
+        with:
+          sbom: enriched-image.cdx.json
+          output-format: sarif
+
+      - name: Upload Grype SARIF to GitHub Security tab
+        if: always()
+        uses: github/codeql-action/upload-sarif@fb0994ef1c058010acf1efccff928b0a83b1ed54 # v4.32.6
+        with:
+          sarif_file: ${{ steps.grype-sarif.outputs.sarif }}
+          category: grype-image
+
+      - name: Scan SBOM with Grype (JSON)
+        id: grype-json
+        uses: anchore/scan-action@7037fa011853d5a11690026fb85feee79f4c946c # v7.3.2
+        with:
+          sbom: enriched-image.cdx.json
+          output-format: json
+
+      - name: Prepare release assets
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          PROJECT_NAME: ${{ inputs.project_name }}
+          GRYPE_JSON: ${{ steps.grype-json.outputs.json }}
+        run: |
+          mv enriched-image.cdx.json "${PROJECT_NAME}_${VERSION}_image.cdx.json"
+          mv trivy-image.json "${PROJECT_NAME}_${VERSION}_image.trivy.json"
+          mv "$GRYPE_JSON" "${PROJECT_NAME}_${VERSION}_image.grype.json"
+
+      - name: Upload to GitHub Release
+        if: ${{ !inputs.snapshot }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION_TAG: ${{ steps.version.outputs.version_tag }}
+          VERSION: ${{ steps.version.outputs.version }}
+          PROJECT_NAME: ${{ inputs.project_name }}
+        run: |
+          gh release upload "$VERSION_TAG" \
+            "${PROJECT_NAME}_${VERSION}_image.cdx.json" \
+            "${PROJECT_NAME}_${VERSION}_image.trivy.json" \
+            "${PROJECT_NAME}_${VERSION}_image.grype.json" \
+            --clobber
