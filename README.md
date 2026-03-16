@@ -274,7 +274,7 @@ uses: nics-dp/meta/.github/workflows/bun-semgrep.yml@main
 - **Go repos:** 使用 `go` language + `manual` build-mode
 - **Web repos:** 使用 `javascript-typescript` language + `none` build-mode
 
-私有 repo 可設定 `GH_PAT_READ_NICSDP` 以存取 private modules / private repositories；未設定時，CodeQL 仍會執行，但不會傳 `external-repository-token`，也不會啟用 private module access 設定。
+私有 repo 可設定 `GH_PAT_READ_NICSDP` 以存取 private modules / private repositories；未設定時，CodeQL 仍會執行，但不會傳 `external-repository-token`，也不會啟用 private module access 設定。PAT 僅限定於需要的 steps (CodeQL init 和 Git URL rewrite)，不會暴露給 caller 提供的 build commands。
 
 > **注意:** `.github/workflows/codeql.yml` (reusable workflow) 仍保留供特殊場景使用，但建議優先使用 `configs/codeqls/` per-repo configs。
 
@@ -504,7 +504,9 @@ uses: nics-dp/meta/.github/workflows/check-managed-files.yml@main
 
 | 參數 | 類型 | 預設值 | 說明 |
 |------|------|--------|------|
-| `managed_files` | string | `.github/workflows/codeql.yml,.commitlintrc.yml,.golangci.yml,renovate.json` | 逗號分隔的受保護檔案路徑 |
+| `managed_files` | string | (見下方) | 逗號分隔的受保護檔案路徑 |
+
+預設受保護檔案: `.github/workflows/codeql.yml`, `.commitlintrc.yml`, `.golangci.yml`, `renovate.json`, `.prettierrc.json`, `.prettierignore`, `eslint.config.js`, `vitest.config.ts`, `knip.json`, `lighthouserc.json`
 
 ---
 
@@ -565,7 +567,7 @@ secrets:
 
 適用於 React + Vite + TypeScript + Bun 專案。包含 workflow templates 與 `mise.toml`。詳見 [`web-templates/.github/README.md`](web-templates/.github/README.md)。
 
-包含: CI (eslint, typecheck, build, audit, vitest, prettier, semgrep, trivy-license), codeql, notify, release-please workflows + `mise.toml` + eslint, prettier, vitest, knip, lighthouse configs
+包含: CI (eslint, typecheck, build, audit, vitest, prettier, semgrep, trivy-license, knip, lighthouse, bundle-size), codeql, notify, release-please workflows + `mise.toml` + eslint, prettier, vitest, knip, lighthouse configs
 
 ---
 

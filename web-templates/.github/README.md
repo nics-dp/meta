@@ -7,7 +7,7 @@ All workflows call reusable workflows from `nics-dp/meta`, and CI tasks run thro
 
 | File | Purpose | Triggers |
 |---|---|---|
-| `ci.yml` | Lint, typecheck, build, audit, test, format check, Semgrep | push, PR, manual |
+| `ci.yml` | Lint, typecheck, build, audit, test, format check, Semgrep, trivy-license, knip, lighthouse, bundle-size | push, PR, manual |
 | `codeql.yml` | CodeQL security analysis (JS/TS + Actions) | push, PR, weekly, manual |
 | `notify.yml` | Google Chat notifications | PR, push, release, issue, CI events |
 | `release-please.yml` | Automated release management | push to main/release |
@@ -99,7 +99,7 @@ All workflows call reusable workflows from `nics-dp/meta`, and CI tasks run thro
 |---|---|---|
 | `test` | `bun-test.yml` | Runs `mise run test` |
 | `format-check` | `bun-format-check.yml` | Runs `mise run format-check` |
-| `trivy-license` | `trivy-license.yml` | License compliance |
+| `trivy-license` | `trivy-license.yml` | License compliance (no `gh_pat` needed — web repos don't access private Go modules) |
 | `semgrep` | `bun-semgrep.yml` | Semgrep static analysis (JS/TS) |
 
 ### Optional tools
