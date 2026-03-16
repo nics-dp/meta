@@ -16,9 +16,10 @@ All workflows call reusable workflows from `nics-dp/meta`.
 
 ## Setup
 
-1. Copy workflow files:
+1. Copy workflow files and `mise.toml`:
    ```
    cp -r golang-templates/.github <new-repo>/.github
+   cp golang-templates/mise.toml <new-repo>/
    ```
 
 2. Copy configs from `configs/`:

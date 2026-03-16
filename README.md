@@ -559,7 +559,7 @@ secrets:
 
 適用於 Go service、CLI、library 專案。詳見 [`golang-templates/.github/README.md`](golang-templates/.github/README.md)。
 
-包含: CI (lint, sec, vulncheck, semgrep, test), release, snapshot, codeql, notify, release-please workflows + `.golangci.yml`
+包含: CI (lint, sec, vulncheck, semgrep, test), release, snapshot, codeql, notify, release-please workflows + `mise.toml` + `.golangci.yml`
 
 ### web-templates/ — Web 專案
 
@@ -573,7 +573,7 @@ secrets:
 
 ### Go 專案
 
-1. 從 `golang-templates/.github/` 複製 workflows
+1. 從 `golang-templates/.github/` 複製 workflows，並複製 `golang-templates/mise.toml`
 2. 從 `configs/` 複製 `.golangci.yml`、`.commitlintrc.yml`、`renovate.json`
 3. 替換 `TODO` 標記 (`project_name`, `binary`, `image_name`)
 4. 新增 `configs/codeqls/<repo-name>.yml`，設定 CodeQL workflow
@@ -595,7 +595,7 @@ secrets:
 
 ### Go repos
 
-1. **mise.toml** — 定義 `prepare`, `lint`, `security`, `test`, `vulncheck`, `report` tasks
+1. **mise.toml** — 定義 `prepare`, `lint`, `security`, `test`, `vulncheck`, `report` tasks (建議直接使用 `golang-templates/mise.toml`)
 2. **coverage.out** — `mise run test` 需產出此檔案 (go-test.yml 預期此路徑)
 3. **Go module** — go.mod 存在且版本正確
 4. **Private module access** — `GH_PAT_READ_NICSDP` secret 已設定

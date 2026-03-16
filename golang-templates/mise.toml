@@ -1,0 +1,32 @@
+[tools]
+go = "latest"
+golangci-lint = "latest"
+gosec = "latest"
+govulncheck = "latest"
+
+[tasks.prepare]
+description = "Download Go module dependencies"
+run = "go mod download"
+
+[tasks.lint]
+description = "Run golangci-lint"
+run = "golangci-lint run ./..."
+
+[tasks.security]
+description = "Run gosec security scanner"
+run = "gosec -quiet ./..."
+
+[tasks.vulncheck]
+description = "Run govulncheck vulnerability check"
+run = "govulncheck ./..."
+
+[tasks.test]
+description = "Run unit tests with coverage"
+run = "go test -race -coverprofile=coverage.out ./..."
+
+[tasks.report]
+description = "Generate HTML coverage report"
+run = """
+go tool cover -html=coverage.out -o coverage.html
+go tool cover -func=coverage.out > coverage.md
+"""
