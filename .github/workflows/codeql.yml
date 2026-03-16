@@ -84,6 +84,9 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y build-essential pkg-config
 
+      # NOTE: PAT is set in global git config here and persists through
+      # Install Go tools + Manual Go build steps. Callers should only pass
+      # trusted build commands. The revoke step clears it before analyze.
       - name: Configure access to private Go modules
         if: matrix.language == 'go' && env.HAS_GH_PAT == 'true'
         env:
@@ -109,7 +112,7 @@ jobs:
           bash -euo pipefail -lc "$GO_BUILD_COMMANDS"
 
       - name: Revoke private module access
-        if: matrix.language == 'go' && env.HAS_GH_PAT == 'true'
+        if: always() && matrix.language == 'go' && env.HAS_GH_PAT == 'true'
         env:
           GH_PAT: ${{ secrets.gh_pat }}
         run: git config --global --remove-section "url.https://${GH_PAT}@github.com" 2>/dev/null || true

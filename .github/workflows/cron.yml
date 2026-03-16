@@ -12,7 +12,7 @@ permissions: {}
 env:
   # All DCF repos (commitlintrc)
   ALL_REPOS: '["dcf-platform","dcf-access","dcf-service","dcf-access-cli","dcf-platform-cli","dcf-access-web","dcf-platform-web","libdcf","otel-bundle","test-repo","ZenQuery","patroni"]'
-  # Repos that should receive synced renovate.json
+  # Repos that should receive synced renovate.json (patroni excluded — uses its own Renovate config)
   RENOVATE_SYNC_REPOS: '["dcf-platform","dcf-access","dcf-service","dcf-access-cli","dcf-platform-cli","dcf-access-web","dcf-platform-web","libdcf","otel-bundle","test-repo","ZenQuery"]'
   # Go repos only (golangci-lint)
   GO_REPOS: '["dcf-platform","dcf-access","dcf-service","dcf-access-cli","dcf-platform-cli","libdcf","otel-bundle","test-repo","ZenQuery"]'

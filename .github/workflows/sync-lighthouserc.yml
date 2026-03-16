@@ -56,6 +56,14 @@ jobs:
           path: ${{ github.repository_owner }}/meta
           token: ${{ secrets.gh_token || secrets.GH_PAT_READ_NICSDP || github.token }}
 
+      - name: Log sync source
+        env:
+          REF_NAME: ${{ github.ref_name }}
+          SHA: ${{ github.sha }}
+        run: |
+          echo "Sync source ref: $REF_NAME"
+          echo "Sync source sha: $SHA"
+
       - name: Copy lighthouserc config
         env:
           REPO_OWNER: ${{ github.repository_owner }}
