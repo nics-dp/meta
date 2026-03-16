@@ -131,18 +131,20 @@ jobs:
       - name: Coverage summary
         if: github.event_name == 'pull_request'
         id: coverage-summary
+        env:
+          ARTIFACT_URL: ${{ steps.upload-reports.outputs.artifact-url }}
         run: |
           TOTAL=$(go tool cover -func=coverage.out | tail -1 | awk '{print $NF}')
           {
             echo "## Test Coverage: ${TOTAL}"
             echo ""
-            echo "📦 [Full Report](${{ steps.upload-reports.outputs.artifact-url }})"
+            echo "📦 [Full Report](${ARTIFACT_URL})"
           } >> "$GITHUB_STEP_SUMMARY"
           {
             echo 'message<<EOF'
             echo "## Test Coverage: ${TOTAL}"
             echo ""
-            echo "📦 [Full Report](${{ steps.upload-reports.outputs.artifact-url }})"
+            echo "📦 [Full Report](${ARTIFACT_URL})"
             echo 'EOF'
           } >> "$GITHUB_OUTPUT"
 
