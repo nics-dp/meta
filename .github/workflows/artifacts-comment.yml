@@ -43,7 +43,8 @@ jobs:
             // List artifacts for current workflow run
             const artifacts = await github.paginate(
               github.rest.actions.listWorkflowRunArtifacts,
-              {owner, repo, run_id: context.runId}
+              {owner, repo, run_id: context.runId},
+              (response) => response.data
             );
 
             if (!artifacts.length) {
