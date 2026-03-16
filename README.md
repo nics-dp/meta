@@ -106,6 +106,8 @@ secrets:
 
 每個 repo 的 codeql.yml 可依需要自訂：語言 matrix、Go build 指令、額外工具安裝等。詳見 `codeqls/` 目錄下各檔案。
 
+私有 repo 可設定 `GH_PAT_READ_NICSDP` 以存取 private modules / private repositories；未設定時，CodeQL 仍會執行，但不會傳 `external-repository-token`，也不會啟用 private module access 設定。
+
 > **注意:** `.github/workflows/codeql.yml` (reusable workflow) 仍保留但已不被 consumer repos 使用。
 
 ---
@@ -216,6 +218,8 @@ Sync workflows 由 meta repo 的 `cron.yml` 統一排程觸發 (每週一 00:00 
 ### sync-codeql.yml — CodeQL 設定同步
 
 將本 repo 的 `codeqls/<repo_name>.yml` 複製到 consumer repo 的 `.github/workflows/codeql.yml`。
+
+`workflow_call` 模式使用傳入的 `gh_token`；`workflow_dispatch` 手動執行時，若要同步到 private repo，需先在 meta repo 設定 repo-level `GH_PAT_READ_NICSDP`。
 
 ```yaml
 uses: nics-dp/meta/.github/workflows/sync-codeql.yml@main
