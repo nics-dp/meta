@@ -107,6 +107,17 @@ jobs:
             --argjson sections "$SECTIONS" \
             '{ cards: [{ header: { title: $title }, sections: $sections }] }')
 
-          curl -sS -X POST "$GOOGLE_CHAT_WEBHOOK" \
+          http_code=$(curl --silent --show-error \
+            --output /tmp/google-chat-response.txt \
+            --write-out "%{http_code}" \
+            -X POST "$GOOGLE_CHAT_WEBHOOK" \
             -H "Content-Type: application/json" \
-            -d "$PAYLOAD"
+            -d "$PAYLOAD")
+
+          echo "Google Chat response status: $http_code"
+
+          if [ "$http_code" -lt 200 ] || [ "$http_code" -ge 300 ]; then
+            echo "Google Chat webhook request failed"
+            cat /tmp/google-chat-response.txt
+            exit 1
+          fi
