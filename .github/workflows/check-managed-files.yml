@@ -9,7 +9,7 @@ on:
         description: Comma-separated list of centrally-managed file paths.
         required: false
         type: string
-        default: ".github/workflows/codeql.yml"
+        default: ".github/workflows/codeql.yml,.commitlintrc.yml,.golangci.yml,renovate.json,.prettierrc.json,.prettierignore,eslint.config.js,vitest.config.ts,knip.json,lighthouserc.json"
 
 permissions:
   contents: read

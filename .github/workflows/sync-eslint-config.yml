@@ -1,0 +1,94 @@
+# yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
+
+name: eslint-config-sync
+on:
+  workflow_call:
+    inputs:
+      repo_name:
+        description: The repository name, without the org prefix.
+        required: true
+        type: string
+    secrets:
+      gh_token:
+        required: true
+      GH_PAT_READ_NICSDP:
+        required: false
+  workflow_dispatch: # requires repo-level GH_PAT_READ_NICSDP for cross-repo private access
+    inputs:
+      repo_name:
+        description: The repository name, without the org prefix.
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate repo_name
+        env:
+          REPO_NAME: ${{ inputs.repo_name }}
+        run: |
+          if [[ "$REPO_NAME" == "." || "$REPO_NAME" == ".." ]]; then
+            echo "::error::Invalid repo_name: dot-only names are not allowed"
+            exit 1
+          fi
+
+          if [[ ! "$REPO_NAME" =~ ^[a-zA-Z0-9]([a-zA-Z0-9._-]*[a-zA-Z0-9])?$ ]]; then
+            echo "::error::Invalid repo_name: must start and end with an alphanumeric character and contain only alphanumeric, dot, hyphen, or underscore characters"
+            exit 1
+          fi
+
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          repository: ${{ github.repository_owner }}/${{ inputs.repo_name }}
+          path: ${{ github.repository_owner }}/${{ inputs.repo_name }}
+          # Falls back to github.token on workflow_dispatch, which only works for same-org public repos
+          token: ${{ secrets.gh_token || secrets.GH_PAT_READ_NICSDP || github.token }}
+
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          repository: ${{ github.repository }}
+          ref: ${{ github.sha }}
+          path: ${{ github.repository_owner }}/meta
+          token: ${{ secrets.gh_token || secrets.GH_PAT_READ_NICSDP || github.token }}
+
+      - name: Log sync source
+        env:
+          REF_NAME: ${{ github.ref_name }}
+          SHA: ${{ github.sha }}
+        run: |
+          echo "Sync source ref: $REF_NAME"
+          echo "Sync source sha: $SHA"
+
+      - name: Copy eslint config
+        env:
+          REPO_OWNER: ${{ github.repository_owner }}
+          REPO_NAME: ${{ inputs.repo_name }}
+        run: |
+          cp "${REPO_OWNER}/meta/configs/eslint.config.js" "${REPO_OWNER}/${REPO_NAME}/eslint.config.js"
+
+      - name: Create Pull Request
+        id: cpr
+        uses: peter-evans/create-pull-request@c0f553fe549906ede9cf27b5156039d195d2ece0 # v8.1.0
+        with:
+          commit-message: "ci: sync eslint config"
+          title: "ci: sync eslint config"
+          body: |
+            This is an automated pull request to sync `eslint.config.js` with the meta repository.
+          branch: "ci/sync-eslint-config"
+          delete-branch: true
+          path: "${{ github.repository_owner }}/${{ inputs.repo_name }}"
+          token: ${{ secrets.gh_token || secrets.GH_PAT_READ_NICSDP || github.token }}
+
+      - name: Check outputs
+        if: ${{ steps.cpr.outputs.pull-request-number }}
+        env:
+          PR_NUMBER: ${{ steps.cpr.outputs.pull-request-number }}
+          PR_URL: ${{ steps.cpr.outputs.pull-request-url }}
+        run: |
+          echo "Pull Request Number - ${PR_NUMBER}"
+          echo "Pull Request URL - ${PR_URL}"

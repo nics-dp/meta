@@ -1,0 +1,76 @@
+# yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
+
+name: go-semgrep
+
+on:
+  workflow_call:
+    inputs:
+      config:
+        required: false
+        type: string
+        default: "p/golang"
+        description: "Semgrep config/ruleset (e.g., p/golang, path to rules file)"
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  scan:
+    name: Semgrep (Go)
+    runs-on: ubuntu-latest
+    container:
+      image: semgrep/semgrep:1.155.0
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Run semgrep
+        id: semgrep
+        shell: bash
+        env:
+          CONFIG: ${{ inputs.config }}
+        run: |
+          CONFIG_FLAGS=""
+          for cfg in $CONFIG; do
+            CONFIG_FLAGS="$CONFIG_FLAGS --config $cfg"
+          done
+          # shellcheck disable=SC2086
+          semgrep scan --error --enable-nosem $CONFIG_FLAGS . 2>&1 | tee semgrep-output.txt
+          echo "exit_code=${PIPESTATUS[0]}" >> "$GITHUB_OUTPUT"
+
+      - name: Write summary
+        if: always()
+        run: |
+          {
+            echo "## Semgrep (Go)"
+            echo ""
+            if grep -q "No findings" semgrep-output.txt 2>/dev/null; then
+              echo "No findings."
+            elif [ -s semgrep-output.txt ]; then
+              echo '```'
+              tail -80 semgrep-output.txt
+              echo '```'
+            else
+              echo "No output captured."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Post PR comment
+        if: always() && github.event_name == 'pull_request'
+        uses: marocchino/sticky-pull-request-comment@70d2764d1a7d5d9560b100cbea0077fc8f633987 # v3.0.2
+        with:
+          header: go-semgrep
+          message: |
+            ## Semgrep (Go)
+            <details>
+            <summary>Results</summary>
+
+            ```
+            ${{ steps.semgrep.outputs.exit_code == '0' && 'No findings.' || 'Findings detected. See CI log for details.' }}
+            ```
+
+            </details>
+
+      - name: Fail if findings detected
+        if: always() && steps.semgrep.outputs.exit_code != '0'
+        run: exit 1

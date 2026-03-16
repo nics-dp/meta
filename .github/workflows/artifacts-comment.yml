@@ -1,0 +1,82 @@
+# yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
+
+name: artifacts-comment
+
+on:
+  workflow_call:
+    inputs:
+      pr_number:
+        required: false
+        type: number
+        default: 0
+        description: "PR number to comment on (auto-detected for pull_request / workflow_run events)"
+
+permissions:
+  actions: read
+  issues: write
+  pull-requests: write
+
+jobs:
+  comment:
+    name: Artifacts Comment
+    runs-on: ubuntu-latest
+    steps:
+      - name: Post artifacts comment
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        env:
+          INPUT_PR_NUMBER: ${{ inputs.pr_number }}
+        with:
+          script: |
+            const {owner, repo} = context.repo;
+
+            // Determine PR number
+            let prNumber = parseInt(process.env.INPUT_PR_NUMBER) || 0;
+            if (!prNumber) {
+              prNumber = context.payload.pull_request?.number
+                      || context.payload.workflow_run?.pull_requests?.[0]?.number
+                      || 0;
+            }
+            if (!prNumber) {
+              core.info('No PR number found, skipping comment');
+              return;
+            }
+
+            // List artifacts for current workflow run
+            const artifacts = await github.paginate(
+              github.rest.actions.listWorkflowRunArtifacts,
+              {owner, repo, run_id: context.runId},
+              (response) => response.data.artifacts
+            );
+
+            if (!artifacts.length) {
+              core.info('No artifacts found, skipping comment');
+              return;
+            }
+
+            // Build comment body
+            const marker = '<!-- bot: artifacts -->';
+            const runUrl = `${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}`;
+            let body = `${marker}\n## Build Artifacts\n\n`;
+            for (const art of artifacts) {
+              body += `* [\`${art.name}.zip\`](https://nightly.link/${owner}/${repo}/actions/artifacts/${art.id}.zip)\n`;
+            }
+            body += `\n*From [workflow run #${context.runNumber}](${runUrl})*`;
+
+            // Upsert comment
+            const comments = await github.paginate(
+              github.rest.issues.listComments,
+              {owner, repo, issue_number: prNumber}
+            );
+            const existing = comments.filter(c => c.body?.includes(marker));
+            if (existing.length > 0) {
+              const last = existing[existing.length - 1];
+              core.info(`Updating comment ${last.id}`);
+              await github.rest.issues.updateComment({
+                owner, repo, comment_id: last.id, body
+              });
+            } else {
+              core.info(`Creating comment on PR #${prNumber}`);
+              await github.rest.issues.createComment({
+                owner, repo, issue_number: prNumber, body
+              });
+            }

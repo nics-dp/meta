@@ -1,0 +1,81 @@
+# yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
+#
+# Web CI workflow template
+# React + Vite + TypeScript + Bun
+#
+# All jobs call reusable workflows from nics-dp/meta.
+#
+# Adjust per project:
+# - Recommended jobs (test, format-check, trivy-license): keep enabled
+# - Optional jobs (knip, lighthouse): remove if not needed
+# - Bundle size is disabled by default until the repo adds its own size-limit config
+
+name: ci
+
+on:
+  push:
+    branches: [main, dev, "release/**", "feature/**"]
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches: [main, dev, "release/**"]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  checks: write
+  pull-requests: write
+
+jobs:
+  check-managed:
+    uses: nics-dp/meta/.github/workflows/check-managed-files.yml@main
+
+  commitlint:
+    uses: nics-dp/meta/.github/workflows/commitlint.yml@main
+
+  # --- Required ---
+
+  lint:
+    uses: nics-dp/meta/.github/workflows/bun-lint.yml@main
+
+  typecheck:
+    uses: nics-dp/meta/.github/workflows/bun-typecheck.yml@main
+
+  build:
+    needs: [lint, typecheck]
+    uses: nics-dp/meta/.github/workflows/bun-build.yml@main
+
+  audit:
+    uses: nics-dp/meta/.github/workflows/bun-audit.yml@main
+
+  # --- Recommended ---
+
+  test:
+    needs: [lint, typecheck]
+    uses: nics-dp/meta/.github/workflows/bun-test.yml@main
+
+  format-check:
+    uses: nics-dp/meta/.github/workflows/bun-format-check.yml@main
+
+  trivy-license:
+    # No gh_pat secret needed: web repos do not access private Go modules
+    uses: nics-dp/meta/.github/workflows/trivy-license.yml@main
+
+  semgrep:
+    uses: nics-dp/meta/.github/workflows/bun-semgrep.yml@main
+
+  # --- Optional ---
+
+  knip:
+    uses: nics-dp/meta/.github/workflows/bun-knip.yml@main
+
+  lighthouse:
+    needs: [build]
+    uses: nics-dp/meta/.github/workflows/bun-lighthouse.yml@main
+
+  # bundle-size:
+  #   needs: [build]
+  #   uses: nics-dp/meta/.github/workflows/bun-bundle-size.yml@main

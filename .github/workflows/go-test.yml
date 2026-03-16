@@ -38,7 +38,7 @@ jobs:
     name: Unit Test
     runs-on: ubuntu-latest
     env:
-      GH_PAT: ${{ secrets.gh_pat }}
+      HAS_GH_PAT: ${{ secrets.gh_pat != '' }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
@@ -53,8 +53,9 @@ jobs:
         run: mise run prepare
 
       - name: Configure private git repository
-        if: env.GH_PAT != ''
+        if: env.HAS_GH_PAT == 'true'
         env:
+          GH_PAT: ${{ secrets.gh_pat }}
           GO_PRIVATE_FULL: ${{ inputs.go_private_full }}
         run: |
           if [ "$GO_PRIVATE_FULL" = "true" ]; then
@@ -67,7 +68,8 @@ jobs:
       - name: Run unit tests
         env:
           TEST_COMMAND: ${{ inputs.test_command }}
-        run: $TEST_COMMAND
+        run: |
+          bash -euo pipefail -lc "$TEST_COMMAND"
 
       - name: Upload coverage artifact
         if: inputs.run_report
@@ -83,7 +85,7 @@ jobs:
     needs: [test]
     if: inputs.run_report
     env:
-      GH_PAT: ${{ secrets.gh_pat }}
+      HAS_GH_PAT: ${{ secrets.gh_pat != '' }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
@@ -92,13 +94,15 @@ jobs:
         with:
           cache: true
           experimental: true
+          log_level: "info"
 
       - name: Prepare environment
         run: mise run prepare
 
       - name: Configure private git repository
-        if: env.GH_PAT != ''
+        if: env.HAS_GH_PAT == 'true'
         env:
+          GH_PAT: ${{ secrets.gh_pat }}
           GO_PRIVATE_FULL: ${{ inputs.go_private_full }}
         run: |
           if [ "$GO_PRIVATE_FULL" = "true" ]; then
@@ -116,7 +120,8 @@ jobs:
       - name: Generate report
         env:
           REPORT_COMMAND: ${{ inputs.report_command }}
-        run: $REPORT_COMMAND
+        run: |
+          bash -euo pipefail -lc "$REPORT_COMMAND"
 
       - name: Upload reports
         id: upload-reports

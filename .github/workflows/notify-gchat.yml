@@ -1,0 +1,123 @@
+# yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
+
+name: g-chat-notify
+
+on:
+  workflow_call:
+    inputs:
+      type:
+        required: true
+        type: string
+        description: "pr | push | release | issue | ci-failure | ci-success"
+      title:
+        required: true
+        type: string
+        description: "Card header title (caller composes with icon)"
+      url:
+        required: true
+        type: string
+        description: "Button link URL"
+      actor:
+        required: false
+        type: string
+        default: ""
+      repository:
+        required: false
+        type: string
+        default: ""
+      body:
+        required: false
+        type: string
+        default: ""
+        description: "Description text (truncated to 1000 chars)"
+      extra_fields:
+        required: false
+        type: string
+        default: "[]"
+        description: 'JSON array: [{"label":"Branch","value":"main"}]'
+    secrets:
+      google_chat_webhook:
+        required: true
+
+permissions: {}
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send Google Chat notification
+        env:
+          TYPE: ${{ inputs.type }}
+          TITLE: ${{ inputs.title }}
+          URL: ${{ inputs.url }}
+          ACTOR: ${{ inputs.actor || github.actor }}
+          REPOSITORY: ${{ inputs.repository || github.repository }}
+          BODY: ${{ inputs.body }}
+          EXTRA_FIELDS: ${{ inputs.extra_fields }}
+          GOOGLE_CHAT_WEBHOOK: ${{ secrets.google_chat_webhook }}
+        run: |
+          if [ -z "$GOOGLE_CHAT_WEBHOOK" ]; then
+            echo "No webhook configured, skipping notification"
+            exit 0
+          fi
+
+          # Determine button text based on type
+          case "$TYPE" in
+            ci-failure|ci-success) BTN_TEXT="VIEW LOGS" ;;
+            push)                  BTN_TEXT="VIEW CHANGES" ;;
+            *)                     BTN_TEXT="VIEW ON GITHUB" ;;
+          esac
+
+          # Truncate body to 1000 chars
+          if [ ${#BODY} -gt 1000 ]; then
+            BODY=$(printf '%s' "$BODY" | head -c 1000 | iconv -c -t UTF-8)
+            BODY="${BODY}..."
+          fi
+
+          # Validate extra_fields JSON, default to empty array on error
+          EXTRA_FIELDS=$(printf '%s' "$EXTRA_FIELDS" | jq -c 'if type == "array" then . else [] end' 2>/dev/null || echo '[]')
+
+          # Build widgets array: Actor + Repository + extra_fields
+          WIDGETS=$(jq -n \
+            --arg actor "$ACTOR" \
+            --arg repo "$REPOSITORY" \
+            --argjson extra "$EXTRA_FIELDS" \
+            '[
+              { keyValue: { topLabel: "Actor", content: $actor, icon: "PERSON" } },
+              { keyValue: { topLabel: "Repository", content: $repo } }
+            ] + [
+              $extra[] | { keyValue: { topLabel: .label, content: .value } }
+            ]')
+
+          # Build sections array
+          SECTIONS=$(jq -n \
+            --argjson widgets "$WIDGETS" \
+            --arg body "$BODY" \
+            --arg btn_text "$BTN_TEXT" \
+            --arg url "$URL" \
+            '[
+              { widgets: $widgets },
+              (if $body != "" then { widgets: [{ textParagraph: { text: $body } }] } else empty end),
+              { widgets: [{ buttons: [{ textButton: { text: $btn_text, onClick: { openLink: { url: $url } } } }] }] }
+            ]')
+
+          # Build final card payload
+          PAYLOAD=$(jq -n \
+            --arg title "$TITLE" \
+            --argjson sections "$SECTIONS" \
+            '{ cards: [{ header: { title: $title }, sections: $sections }] }')
+
+          http_code=$(curl --silent --show-error \
+            --output /tmp/google-chat-response.txt \
+            --write-out "%{http_code}" \
+            -X POST "$GOOGLE_CHAT_WEBHOOK" \
+            -H "Content-Type: application/json" \
+            -d "$PAYLOAD")
+
+          echo "Google Chat response status: $http_code"
+
+          if [ "$http_code" -lt 200 ] || [ "$http_code" -ge 300 ]; then
+            echo "Google Chat webhook request failed"
+            cat /tmp/google-chat-response.txt
+            exit 1
+          fi

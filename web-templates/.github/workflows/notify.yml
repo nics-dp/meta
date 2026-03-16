@@ -1,0 +1,141 @@
+# yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
+#
+# 標準 Notify workflow 模板 (Google Chat)
+#
+# 使用方式: 複製到新 repo 的 .github/workflows/notify.yml
+# 選用 Secrets: GOOGLE_CHAT_WEBHOOK (未設定時 notify-gchat 會自動跳過)
+
+name: notify
+
+on:
+  pull_request:
+    types: [opened, closed, reopened]
+  push:
+    branches: [main, dev]
+  release:
+    types: [published]
+  issues:
+    types: [opened, closed]
+  workflow_run:
+    workflows: [ci]
+    types: [completed]
+
+permissions:
+  contents: read
+
+jobs:
+  pr-prepare:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    outputs:
+      title: ${{ steps.prep.outputs.title }}
+      extra_fields: ${{ steps.prep.outputs.extra_fields }}
+    steps:
+      - id: prep
+        env:
+          PR_MERGED: ${{ github.event.pull_request.merged }}
+          PR_ACTION: ${{ github.event.action }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BASE: ${{ github.event.pull_request.base.ref }}
+          PR_HEAD: ${{ github.event.pull_request.head.ref }}
+        run: |
+          case "${PR_MERGED}:${PR_ACTION}" in
+            true:*)     ICON="✅"; STATUS="Merged" ;;
+            *:closed)   ICON="❌"; STATUS="Closed" ;;
+            *:reopened) ICON="🔄"; STATUS="Reopened" ;;
+            *)          ICON="🔀"; STATUS="Opened" ;;
+          esac
+          {
+            echo "title<<TITLE_EOF"
+            echo "${ICON} PR #${PR_NUMBER}: ${PR_TITLE}"
+            echo "TITLE_EOF"
+          } >> "$GITHUB_OUTPUT"
+          EXTRA=$(jq -nc --arg status "$STATUS" --arg branch "${PR_HEAD} → ${PR_BASE}" \
+            '[{"label":"Status","value":$status},{"label":"Branch","value":$branch}]')
+          echo "extra_fields=${EXTRA}" >> "$GITHUB_OUTPUT"
+
+  pr-notify:
+    needs: pr-prepare
+    if: github.event_name == 'pull_request'
+    uses: nics-dp/meta/.github/workflows/notify-gchat.yml@main
+    with:
+      type: pr
+      title: ${{ needs.pr-prepare.outputs.title }}
+      url: ${{ github.event.pull_request.html_url }}
+      actor: ${{ github.event.pull_request.user.login }}
+      body: ${{ github.event.pull_request.body }}
+      extra_fields: ${{ needs.pr-prepare.outputs.extra_fields }}
+    secrets:
+      google_chat_webhook: ${{ secrets.GOOGLE_CHAT_WEBHOOK }}
+
+  push:
+    if: github.event_name == 'push'
+    uses: nics-dp/meta/.github/workflows/notify-gchat.yml@main
+    with:
+      type: push
+      title: "📦 Push to ${{ github.ref_name }}"
+      url: ${{ github.event.compare }}
+      actor: ${{ github.actor }}
+      body: ${{ github.event.head_commit.message }}
+    secrets:
+      google_chat_webhook: ${{ secrets.GOOGLE_CHAT_WEBHOOK }}
+
+  release:
+    if: github.event_name == 'release'
+    uses: nics-dp/meta/.github/workflows/notify-gchat.yml@main
+    with:
+      type: release
+      title: "🚀 Release: ${{ github.event.release.tag_name }}"
+      url: ${{ github.event.release.html_url }}
+      actor: ${{ github.event.release.author.login }}
+      body: ${{ github.event.release.body }}
+    secrets:
+      google_chat_webhook: ${{ secrets.GOOGLE_CHAT_WEBHOOK }}
+
+  issue-prepare:
+    if: github.event_name == 'issues'
+    runs-on: ubuntu-latest
+    outputs:
+      title: ${{ steps.prep.outputs.title }}
+    steps:
+      - id: prep
+        env:
+          ISSUE_ACTION: ${{ github.event.action }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          ISSUE_TITLE: ${{ github.event.issue.title }}
+        run: |
+          case "${ISSUE_ACTION}" in
+            closed) ICON="✅" ;;
+            *)      ICON="📋" ;;
+          esac
+          {
+            echo "title<<TITLE_EOF"
+            echo "${ICON} Issue #${ISSUE_NUMBER}: ${ISSUE_TITLE}"
+            echo "TITLE_EOF"
+          } >> "$GITHUB_OUTPUT"
+
+  issue-notify:
+    needs: issue-prepare
+    if: github.event_name == 'issues'
+    uses: nics-dp/meta/.github/workflows/notify-gchat.yml@main
+    with:
+      type: issue
+      title: ${{ needs.issue-prepare.outputs.title }}
+      url: ${{ github.event.issue.html_url }}
+      actor: ${{ github.event.issue.user.login }}
+      body: ${{ github.event.issue.body }}
+    secrets:
+      google_chat_webhook: ${{ secrets.GOOGLE_CHAT_WEBHOOK }}
+
+  workflow-failure:
+    if: >-
+      github.event_name == 'workflow_run' &&
+      github.event.workflow_run.conclusion == 'failure'
+    uses: nics-dp/meta/.github/workflows/notify-gchat.yml@main
+    with:
+      type: ci-failure
+      title: "❌ ${{ github.event.workflow_run.name }} Failed"
+      url: ${{ github.event.workflow_run.html_url }}
+    secrets:
+      google_chat_webhook: ${{ secrets.GOOGLE_CHAT_WEBHOOK }}
