@@ -115,11 +115,16 @@ jobs:
         env:
           ENV_FILE: ${{ inputs.env_file }}
         run: |
-          cat "$ENV_FILE" >> "$GITHUB_ENV"
+          # Only export simple KEY=VALUE lines (no multiline, no delimiters)
+          while IFS='=' read -r key value; do
+            [[ -z "$key" || "$key" =~ ^# ]] && continue
+            echo "${key}=${value}" >> "$GITHUB_ENV"
+          done < "$ENV_FILE"
+          DELIM="ENV_$(openssl rand -hex 8)"
           {
-            echo "build_args<<ENVEOF"
+            echo "build_args<<${DELIM}"
             grep -v '^\s*#' "$ENV_FILE" | grep -v '^\s*$'
-            echo "ENVEOF"
+            echo "${DELIM}"
           } >> "$GITHUB_OUTPUT"
 
       - name: Set up QEMU

@@ -82,6 +82,8 @@ on:
 
 jobs:
   prepare:
+    permissions:
+      contents: read
     runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.matrix.outputs.result }}
@@ -153,7 +155,7 @@ jobs:
             echo "GONOSUMDB=github.com/nics-dp" >> "$GITHUB_ENV"
             git config --global url."https://${GH_PAT}@github.com/".insteadOf "git@github.com:"
           fi
-          git config --global url."https://${GH_PAT}@github.com".insteadOf "https://github.com"
+          git config --global url."https://${GH_PAT}@github.com/nics-dp".insteadOf "https://github.com/nics-dp"
 
       - name: Build binaries
         env:
