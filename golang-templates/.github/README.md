@@ -7,7 +7,7 @@ All workflows call reusable workflows from `nics-dp/meta`.
 
 | File | Purpose | Triggers |
 |---|---|---|
-| `ci.yml` | Lint, security scan, vulnerability check, Semgrep, test, Dockerfile lint | push, PR, manual |
+| `ci.yml` | Managed file check, commitlint, hadolint, trivy-iac, trivy-license, lint, security scan, vulnerability check, Semgrep, test | push, PR, manual |
 | `release-please.yml` | Auto-create Release PR with changelog, then GitHub Release | push to main/release |
 | `release.yml` | Build Go binaries, Docker image, SBOMs, sign artifacts | release created |
 | `snapshot.yml` | Build snapshot artifacts on PR, post artifact links via `artifacts-comment` | CI success on PR, manual |
@@ -58,7 +58,7 @@ All workflows call reusable workflows from `nics-dp/meta`.
 
 ## CodeQL
 
-The `codeql.yml` template is a starting point. For repos managed by `sync-codeql`, the per-repo config in `meta/codeqls/<repo-name>.yml` takes precedence. Do not manually edit `.github/workflows/codeql.yml` in synced repos.
+The `codeql.yml` template is a starting point. For repos managed by `sync-codeql`, the per-repo config in `configs/codeqls/<repo-name>.yml` takes precedence. Do not manually edit `.github/workflows/codeql.yml` in synced repos.
 
 ## Related Files
 

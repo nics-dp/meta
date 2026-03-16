@@ -116,6 +116,90 @@ secrets:
 
 ---
 
+### hadolint.yml — Dockerfile Lint
+
+PR-only，使用 reviewdog 對 Dockerfile 進行 inline annotation。自動偵測 `Dockerfile*` (排除 `*.env`)。
+
+```yaml
+uses: nics-dp/meta/.github/workflows/hadolint.yml@main
+```
+
+無需額外輸入參數。
+
+---
+
+### trivy-iac.yml — IaC 安全掃描
+
+對 Dockerfile 和 compose 檔案執行 Trivy config scan，產出 SARIF + sticky PR comment。
+
+```yaml
+uses: nics-dp/meta/.github/workflows/trivy-iac.yml@main
+```
+
+無需額外輸入參數。
+
+---
+
+### trivy-license.yml — License 合規檢查
+
+執行 Trivy fs scan 檢查依賴 license 合規性。
+
+```yaml
+uses: nics-dp/meta/.github/workflows/trivy-license.yml@main
+secrets:
+  gh_pat: ${{ secrets.GH_PAT_READ_NICSDP }}  # 選用，Go repos 存取私有模組
+```
+
+| 參數 | 類型 | 預設值 | 說明 |
+|------|------|--------|------|
+| `go_private_full` | boolean | `true` | 設定 GOPRIVATE/GONOSUMDB |
+
+> Web repos 不需要傳 `gh_pat`，因為不存取私有 Go modules。
+
+---
+
+### commitlint.yml — Commit 訊息驗證
+
+PR-only，使用 wagoid/commitlint-github-action 驗證 conventional commits。
+
+```yaml
+uses: nics-dp/meta/.github/workflows/commitlint.yml@main
+```
+
+無需額外輸入參數。
+
+---
+
+### actionlint.yml — Workflow YAML Lint
+
+PR 時使用 reviewdog inline annotation，非 PR 時輸出至 step summary。
+
+```yaml
+uses: nics-dp/meta/.github/workflows/actionlint.yml@main
+```
+
+| 參數 | 類型 | 預設值 | 說明 |
+|------|------|--------|------|
+| `actionlint-version` | string | `v1.7.11` | actionlint 版本 (僅非 PR 路徑使用) |
+
+---
+
+### check-managed-files.yml — 集中管理檔案保護
+
+檢查 PR 是否修改了由 meta 集中管理的檔案，若有則 CI 失敗。自動跳過 sync workflow 建立的 PR (`ci/sync-*` 分支)。
+
+```yaml
+uses: nics-dp/meta/.github/workflows/check-managed-files.yml@main
+```
+
+| 參數 | 類型 | 預設值 | 說明 |
+|------|------|--------|------|
+| `managed_files` | string | (見下方) | 逗號分隔的受保護檔案路徑 |
+
+預設受保護檔案: `.github/workflows/codeql.yml`, `.commitlintrc.yml`, `.golangci.yml`, `renovate.json`, `.prettierrc.json`, `.prettierignore`, `eslint.config.js`, `vitest.config.ts`, `knip.json`, `lighthouserc.json`
+
+---
+
 ### bun-lint.yml — ESLint 檢查
 
 執行 `mise run lint` (內部預設呼叫 `bun run lint`)。
@@ -267,6 +351,8 @@ uses: nics-dp/meta/.github/workflows/bun-semgrep.yml@main
 
 ### codeql.yml — CodeQL 分析 (集中管理)
 
+> **注意:** 大多數 repos 使用 `configs/codeqls/` 下的 per-repo configs (透過 `sync-codeql` 同步)。此 reusable workflow 保留供特殊場景使用。
+
 各 repo 的 CodeQL workflow 為**獨立可執行**的 workflow (直接使用 `github/codeql-action`)，集中管理於 `configs/codeqls/<repo-name>.yml`，透過 `sync-codeql.yml` 同步到各 repo 的 `.github/workflows/codeql.yml`。
 
 每個 repo 的 codeql.yml 可依需要自訂：語言 matrix、Go build 指令、額外工具安裝等。詳見 `configs/codeqls/` 目錄下各檔案。
@@ -276,14 +362,12 @@ uses: nics-dp/meta/.github/workflows/bun-semgrep.yml@main
 
 私有 repo 可設定 `GH_PAT_READ_NICSDP` 以存取 private modules / private repositories；未設定時，CodeQL 仍會執行，但不會傳 `external-repository-token`，也不會啟用 private module access 設定。PAT 僅限定於需要的 steps (CodeQL init 和 Git URL rewrite)，不會暴露給 caller 提供的 build commands。
 
-> **注意:** `.github/workflows/codeql.yml` (reusable workflow) 仍保留供特殊場景使用，但建議優先使用 `configs/codeqls/` per-repo configs。
-
 #### codeql.yml reusable workflow 參數
 
 | 參數 | 類型 | 預設值 | 說明 |
 |------|------|--------|------|
 | `languages` | string | `[{"language":"actions","build-mode":"none"},{"language":"go","build-mode":"manual"}]` | JSON array of `{language, build-mode}` objects |
-| `go_build_commands` | string | `go mod download && go build ./...` | Go build 指令 (支援多行) |
+| `go_build_commands` | string | `go mod download`<br>`go build ./...` | Go build 指令 (支援多行) |
 | `go_install_tools` | string | `""` | Build 前安裝工具的指令 (支援多行) |
 | `go_cgo_enabled` | boolean | `false` | 啟用 CGO |
 | `go_install_system_deps` | boolean | `false` | 安裝 `build-essential` 和 `pkg-config` |
@@ -339,7 +423,7 @@ with:
 
 ### image-release.yml — Container Image 建置
 
-建置 Docker image 並推送至 DockerHub + GHCR，支援 Trivy/Grype 掃描和 attestation。
+建置 Docker image 並推送至 DockerHub + GHCR，支援 attestation 和 cosign 簽章。
 
 ```yaml
 uses: nics-dp/meta/.github/workflows/image-release.yml@main
@@ -348,12 +432,9 @@ permissions:
   packages: write
   attestations: write
   id-token: write
-  security-events: write
 with:
   image_name: dcf-platform                    # 必要
   runs_on: '{"group":"releasers"}'            # 選用
-  run_trivy: true                             # 選用
-  run_grype: true                             # 選用
 secrets:
   dockerhub_username: ${{ secrets.DOCKERHUB_USERNAME }}  # 必要
   dockerhub_token: ${{ secrets.DOCKERHUB_TOKEN }}        # 必要
@@ -368,13 +449,14 @@ secrets:
 | `context` | string | `.` | 否 | Docker build context 路徑 |
 | `build_args` | string | `""` | 否 | Docker build-args (多行 key=value) |
 | `env_file` | string | `""` | 否 | Env 檔案路徑 (載入為 build-args) |
-| `run_trivy` | boolean | `false` | 否 | 執行 Trivy 漏洞掃描 |
-| `trivy_exit_code` | number | `0` | 否 | Trivy 發現漏洞時的 exit code |
-| `run_grype` | boolean | `false` | 否 | 執行 Grype 漏洞掃描 |
-| `grype_fail_on` | string | `""` | 否 | Grype 失敗嚴重度門檻 |
+| `sbom` | boolean | `true` | 否 | 啟用 BuildKit SBOM 產生 |
 | `provenance` | boolean | `true` | 否 | 啟用 SLSA provenance attestation |
 | `attest` | boolean | `true` | 否 | 啟用 Sigstore artifact attestation |
+| `cosign` | boolean | `true` | 否 | 使用 cosign 簽章 (keyless) |
+| `snapshot` | boolean | `false` | 否 | 僅使用 SHA tag (不含 semver/latest) |
 | `ref` | string | `""` | 否 | Git ref |
+
+**Outputs:** `digest` — Image digest (`sha256:...`)，供 `sbom-image.yml` 使用
 
 **必要 Secrets:** `dockerhub_username`, `dockerhub_token`
 **選用 Secrets:** `gh_pat` (Dockerfile 中存取私有模組時需要)
@@ -384,6 +466,76 @@ secrets:
 - `ghcr.io/nics-dp/<image_name>`
 
 **Tag 策略:** branch ref, PR ref, semver (`v1.2.3`, `v1.2`, `v1`), `latest`
+
+---
+
+### release-please.yml — 自動 Release 管理
+
+使用 googleapis/release-please-action，依據 conventional commits 自動建立 Release PR (含 changelog)，merge 後建立 GitHub Release + tag。
+
+```yaml
+uses: nics-dp/meta/.github/workflows/release-please.yml@main
+secrets:
+  gh_pat: ${{ secrets.GH_PAT_READ_NICSDP }}  # 必要，GITHUB_TOKEN 不會觸發下游 workflows
+```
+
+| 參數 | 類型 | 預設值 | 必要 | 說明 |
+|------|------|--------|------|------|
+| `release_type` | string | `simple` | 否 | Release type (`simple`, `go`, `node` 等) |
+
+**必要 Secrets:** `gh_pat` — 需要 `contents:write` + `pull-requests:write` 的 PAT
+
+**Outputs:** `release_created` (boolean), `tag_name` (string)
+
+---
+
+### sbom-source.yml — Source Code SBOM
+
+產出 CycloneDX 1.6 SBOM + parlay 增強 + Trivy/Grype 漏洞掃描，上傳至 GitHub Release + Security tab + Dependency Graph。
+
+```yaml
+uses: nics-dp/meta/.github/workflows/sbom-source.yml@main
+permissions:
+  contents: write
+  security-events: write
+with:
+  project_name: dcf-platform  # 必要
+```
+
+| 參數 | 類型 | 預設值 | 必要 | 說明 |
+|------|------|--------|------|------|
+| `project_name` | string | — | **是** | 專案名稱 (影響 artifact 命名) |
+| `scan_path` | string | `.` | 否 | 掃描目錄 |
+| `ref` | string | `""` | 否 | Git ref |
+| `snapshot` | boolean | `false` | 否 | Snapshot 模式 (不上傳 Release) |
+| `runs_on` | string | `"ubuntu-latest"` | 否 | Runner (JSON 格式) |
+
+---
+
+### sbom-image.yml — Container Image SBOM
+
+對 container image 產出 CycloneDX 1.6 SBOM + Trivy/Grype 漏洞掃描，上傳至 GitHub Release + Security tab。
+
+```yaml
+uses: nics-dp/meta/.github/workflows/sbom-image.yml@main
+permissions:
+  contents: write
+  packages: read
+  security-events: write
+with:
+  project_name: dcf-platform                                    # 必要
+  image_name: dcf-platform                                      # 必要
+  digest: ${{ needs.image-build.outputs.digest }}                # 必要
+```
+
+| 參數 | 類型 | 預設值 | 必要 | 說明 |
+|------|------|--------|------|------|
+| `project_name` | string | — | **是** | 專案名稱 (影響 artifact 命名) |
+| `image_name` | string | — | **是** | Docker image 名稱 |
+| `digest` | string | — | **是** | Image digest (`sha256:...`) |
+| `ref` | string | `""` | 否 | Git ref |
+| `snapshot` | boolean | `false` | 否 | Snapshot 模式 (不上傳 Release) |
+| `runs_on` | string | `"ubuntu-latest"` | 否 | Runner (JSON 格式) |
 
 ---
 
@@ -486,27 +638,12 @@ with:
   title: "PR #1: Title"       # 必要
   url: "https://..."          # 必要
   actor: "username"            # 選用 (預設 github.actor)
+  repository: "org/repo"       # 選用 (預設 github.repository)
   body: "description"          # 選用
   extra_fields: '[{"label":"Branch","value":"main"}]'  # 選用
 secrets:
   google_chat_webhook: ${{ secrets.GOOGLE_CHAT_WEBHOOK }}
 ```
-
----
-
-### check-managed-files.yml — 集中管理檔案保護
-
-檢查 PR 是否修改了由 meta 集中管理的檔案，若有則 CI 失敗。自動跳過 sync workflow 建立的 PR (`ci/sync-*` 分支)。
-
-```yaml
-uses: nics-dp/meta/.github/workflows/check-managed-files.yml@main
-```
-
-| 參數 | 類型 | 預設值 | 說明 |
-|------|------|--------|------|
-| `managed_files` | string | (見下方) | 逗號分隔的受保護檔案路徑 |
-
-預設受保護檔案: `.github/workflows/codeql.yml`, `.commitlintrc.yml`, `.golangci.yml`, `renovate.json`, `.prettierrc.json`, `.prettierignore`, `eslint.config.js`, `vitest.config.ts`, `knip.json`, `lighthouserc.json`
 
 ---
 
@@ -579,7 +716,7 @@ secrets:
 2. 從 `configs/` 複製 `.golangci.yml`、`.commitlintrc.yml`、`renovate.json`
 3. 替換 `TODO` 標記 (`project_name`, `binary`, `image_name`)
 4. 新增 `configs/codeqls/<repo-name>.yml`，設定 CodeQL workflow
-5. 更新 `cron.yml` 的 repo 清單 (`CODEQL_REPOS`, `GO_REPOS`, `ALL_REPOS`)
+5. 更新 `cron.yml` 的 repo 清單 (`CODEQL_REPOS`, `GO_REPOS`, `ALL_REPOS`, `RENOVATE_SYNC_REPOS`)
 6. 確認 repo secrets: `GH_PAT_READ_NICSDP`, `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN`
 
 ### Web 專案

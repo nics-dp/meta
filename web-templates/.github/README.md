@@ -113,7 +113,7 @@ The `codeql.yml` template analyzes `javascript-typescript` and `actions`.
 Unlike Go repos, web projects use `build-mode: none` (no manual build needed)
 and don't require `GH_PAT` (no private module access).
 
-For repos managed by `sync-codeql`, copy this template to `meta/configs/codeqls/<repo-name>.yml`.
+For repos managed by `sync-codeql`, copy this template to `configs/codeqls/<repo-name>.yml`.
 
 ## Required Secrets
 
