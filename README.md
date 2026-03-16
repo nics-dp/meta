@@ -10,7 +10,7 @@ nics-dp 組織的共用設定與 CI/CD 基礎設施 repo。本 repo 不包含可
 | `configs/` | Sync 來源設定檔 (commitlintrc, renovate, golangci, prettier, eslint, vitest, knip, lighthouserc) |
 | `configs/codeqls/` | 各 repo 的 CodeQL workflow 設定 (`<repo-name>.yml`) |
 | `golang-templates/` | Go 專案模板 (workflows) |
-| `web-templates/` | Web 專案模板 (workflows) |
+| `web-templates/` | Web 專案模板 (workflows + `mise.toml`) |
 | `renovate-preset.json` | Org-level Renovate 設定 preset |
 
 ## 如何引用 Reusable Workflows
@@ -104,7 +104,7 @@ secrets:
 
 ### bun-lint.yml — ESLint 檢查
 
-執行 `bun run lint` (ESLint + eslint-plugin-security)。
+執行 `mise run lint` (內部預設呼叫 `bun run lint`)。
 
 ```yaml
 uses: nics-dp/meta/.github/workflows/bun-lint.yml@main
@@ -112,13 +112,14 @@ uses: nics-dp/meta/.github/workflows/bun-lint.yml@main
 
 | 參數 | 類型 | 預設值 | 說明 |
 |------|------|--------|------|
-| `command` | string | `bun run lint` | Lint 指令 |
+| `task` | string | `lint` | `mise` task 名稱 |
+| `command` | string | `""` | 選用，直接覆寫 shell 指令 |
 
 ---
 
 ### bun-typecheck.yml — TypeScript 型別檢查
 
-執行 `bun run typecheck` (tsc --noEmit)。
+執行 `mise run typecheck` (內部預設呼叫 `bun run typecheck`)。
 
 ```yaml
 uses: nics-dp/meta/.github/workflows/bun-typecheck.yml@main
@@ -126,13 +127,14 @@ uses: nics-dp/meta/.github/workflows/bun-typecheck.yml@main
 
 | 參數 | 類型 | 預設值 | 說明 |
 |------|------|--------|------|
-| `command` | string | `bun run typecheck` | Typecheck 指令 |
+| `task` | string | `typecheck` | `mise` task 名稱 |
+| `command` | string | `""` | 選用，直接覆寫 shell 指令 |
 
 ---
 
 ### bun-build.yml — 建置
 
-執行 `bun run build` (Vite build)。
+執行 `mise run build` (內部預設呼叫 `bun run build`)。
 
 ```yaml
 uses: nics-dp/meta/.github/workflows/bun-build.yml@main
@@ -140,25 +142,29 @@ uses: nics-dp/meta/.github/workflows/bun-build.yml@main
 
 | 參數 | 類型 | 預設值 | 說明 |
 |------|------|--------|------|
-| `command` | string | `bun run build` | Build 指令 |
+| `task` | string | `build` | `mise` task 名稱 |
+| `command` | string | `""` | 選用，直接覆寫 shell 指令 |
 
 ---
 
 ### bun-audit.yml — 依賴漏洞檢查
 
-執行 `bun audit`。
+執行 `mise run audit` (內部預設呼叫 `bun audit`)。
 
 ```yaml
 uses: nics-dp/meta/.github/workflows/bun-audit.yml@main
 ```
 
-無額外參數。
+| 參數 | 類型 | 預設值 | 說明 |
+|------|------|--------|------|
+| `task` | string | `audit` | `mise` task 名稱 |
+| `command` | string | `""` | 選用，直接覆寫 shell 指令 |
 
 ---
 
 ### bun-test.yml — 單元測試
 
-執行 `bun run test:coverage` (Vitest + coverage)。
+執行 `mise run test` (內部預設呼叫 `bun run test:coverage`)。
 
 ```yaml
 uses: nics-dp/meta/.github/workflows/bun-test.yml@main
@@ -166,13 +172,14 @@ uses: nics-dp/meta/.github/workflows/bun-test.yml@main
 
 | 參數 | 類型 | 預設值 | 說明 |
 |------|------|--------|------|
-| `command` | string | `bun run test:coverage` | 測試指令 |
+| `task` | string | `test` | `mise` task 名稱 |
+| `command` | string | `""` | 選用，直接覆寫 shell 指令 |
 
 ---
 
 ### bun-format-check.yml — 格式檢查
 
-執行 `bun run format:check` (Prettier)。
+執行 `mise run format-check` (內部預設呼叫 `bun run format:check`)。
 
 ```yaml
 uses: nics-dp/meta/.github/workflows/bun-format-check.yml@main
@@ -180,13 +187,14 @@ uses: nics-dp/meta/.github/workflows/bun-format-check.yml@main
 
 | 參數 | 類型 | 預設值 | 說明 |
 |------|------|--------|------|
-| `command` | string | `bun run format:check` | Format check 指令 |
+| `task` | string | `format-check` | `mise` task 名稱 |
+| `command` | string | `""` | 選用，直接覆寫 shell 指令 |
 
 ---
 
 ### bun-knip.yml — Dead Code 檢查
 
-執行 `bun run knip` (Knip)。
+執行 `mise run knip` (內部預設呼叫 `bun run knip`)。
 
 ```yaml
 uses: nics-dp/meta/.github/workflows/bun-knip.yml@main
@@ -194,13 +202,14 @@ uses: nics-dp/meta/.github/workflows/bun-knip.yml@main
 
 | 參數 | 類型 | 預設值 | 說明 |
 |------|------|--------|------|
-| `command` | string | `bun run knip` | Knip 指令 |
+| `task` | string | `knip` | `mise` task 名稱 |
+| `command` | string | `""` | 選用，直接覆寫 shell 指令 |
 
 ---
 
 ### bun-lighthouse.yml — Lighthouse CI
 
-執行 build 後運行 `@lhci/cli autorun`。
+執行 `mise run lighthouse`。
 
 ```yaml
 uses: nics-dp/meta/.github/workflows/bun-lighthouse.yml@main
@@ -208,13 +217,14 @@ uses: nics-dp/meta/.github/workflows/bun-lighthouse.yml@main
 
 | 參數 | 類型 | 預設值 | 說明 |
 |------|------|--------|------|
-| `build_command` | string | `bun run build` | Build 指令 |
+| `task` | string | `lighthouse` | `mise` task 名稱 |
+| `build_command` | string | `""` | 選用，直接覆寫 shell 指令 |
 
 ---
 
 ### bun-bundle-size.yml — Bundle Size 檢查
 
-執行 build 後運行 `size-limit`。
+執行 `mise run bundle-size`。
 
 ```yaml
 uses: nics-dp/meta/.github/workflows/bun-bundle-size.yml@main
@@ -222,7 +232,8 @@ uses: nics-dp/meta/.github/workflows/bun-bundle-size.yml@main
 
 | 參數 | 類型 | 預設值 | 說明 |
 |------|------|--------|------|
-| `build_command` | string | `bun run build` | Build 指令 |
+| `task` | string | `bundle-size` | `mise` task 名稱 |
+| `build_command` | string | `""` | 選用，直接覆寫 shell 指令 |
 
 ---
 
@@ -356,7 +367,8 @@ Sync workflows 由 meta repo 的 `cron.yml` 統一排程觸發 (每週一 00:00 
 
 | 清單 | 說明 | 用於 |
 |------|------|------|
-| `ALL_REPOS` | 所有 DCF repos (含 patroni) | sync-commitlintrc, sync-renovate |
+| `ALL_REPOS` | 所有 DCF repos (含 patroni) | sync-commitlintrc |
+| `RENOVATE_SYNC_REPOS` | 需要同步 `renovate.json` 的 repos | sync-renovate |
 | `GO_REPOS` | Go repos (不含 web repos、patroni) | sync-golangci |
 | `WEB_REPOS` | Web repos | sync-prettier, sync-eslint-config, sync-vitest-config, sync-knip, sync-lighthouserc |
 | `CODEQL_REPOS` | 有 CodeQL 設定的 repos (不含 patroni) | sync-codeql |
@@ -366,7 +378,17 @@ Sync workflows 由 meta repo 的 `cron.yml` 統一排程觸發 (每週一 00:00 
 | Workflow | 來源 | 目標 |
 |----------|------|------|
 | `sync-commitlintrc.yml` | `configs/.commitlintrc.yml` | `.commitlintrc.yml` |
+
+### Renovate sync repos
+
+| Workflow | 來源 | 目標 |
+|----------|------|------|
 | `sync-renovate.yml` | `configs/renovate.json` | `renovate.json` |
+
+### CodeQL repos
+
+| Workflow | 來源 | 目標 |
+|----------|------|------|
 | `sync-codeql.yml` | `configs/codeqls/<repo>.yml` | `.github/workflows/codeql.yml` |
 
 ### Go repos
@@ -471,7 +493,7 @@ secrets:
 |------|----------|------|
 | `configs/codeqls/<repo>.yml` | `.github/workflows/codeql.yml` | Per-repo |
 | `configs/.commitlintrc.yml` | `.commitlintrc.yml` | All repos |
-| `configs/renovate.json` | `renovate.json` | All repos |
+| `configs/renovate.json` | `renovate.json` | `RENOVATE_SYNC_REPOS` |
 | `configs/.golangci.yml` | `.golangci.yml` | Go repos |
 | `configs/.prettierrc.json` | `.prettierrc.json` | Web repos |
 | `configs/.prettierignore` | `.prettierignore` | Web repos |
@@ -492,9 +514,9 @@ secrets:
 
 ### web-templates/ — Web 專案
 
-適用於 React + Vite + TypeScript + Bun 專案。詳見 [`web-templates/.github/README.md`](web-templates/.github/README.md)。
+適用於 React + Vite + TypeScript + Bun 專案。包含 workflow templates 與 `mise.toml`。詳見 [`web-templates/.github/README.md`](web-templates/.github/README.md)。
 
-包含: CI (eslint, typecheck, build, audit, vitest, prettier, trivy-license), codeql, notify, release-please workflows + eslint, prettier, vitest, knip, lighthouse configs
+包含: CI (eslint, typecheck, build, audit, vitest, prettier, trivy-license), codeql, notify, release-please workflows + `mise.toml` + eslint, prettier, vitest, knip, lighthouse configs
 
 ---
 
@@ -511,11 +533,11 @@ secrets:
 
 ### Web 專案
 
-1. 從 `web-templates/.github/` 複製 workflows
+1. 從 `web-templates/.github/` 複製 workflows，並複製 `web-templates/mise.toml`
 2. 從 `configs/` 複製所有 web 設定檔 (`.prettierrc.json`, `.prettierignore`, `eslint.config.js`, `vitest.config.ts`, `knip.json`, `lighthouserc.json`, `.commitlintrc.yml`, `renovate.json`)
 3. 安裝 devDependencies (見 `web-templates/.github/README.md`)
 4. 新增 `configs/codeqls/<repo-name>.yml` (使用 `javascript-typescript` language)
-5. 更新 `cron.yml` 的 repo 清單 (`CODEQL_REPOS`, `WEB_REPOS`, `ALL_REPOS`)
+5. 更新 `cron.yml` 的 repo 清單 (`CODEQL_REPOS`, `WEB_REPOS`, `ALL_REPOS`, `RENOVATE_SYNC_REPOS`)
 6. 確認 repo secrets: `GH_PAT_READ_NICSDP`
 
 ---
@@ -531,9 +553,10 @@ secrets:
 
 ### Web repos
 
-1. **bun.lock** — 使用 Bun 作為 package manager
-2. **package.json scripts** — 需包含 `lint`, `typecheck`, `build`, `test:coverage`, `format:check`
-3. **Private access** — `GH_PAT_READ_NICSDP` secret 已設定 (用於 release-please)
+1. **mise.toml** — 建議直接使用 `web-templates/mise.toml`
+2. **bun.lock** — 使用 Bun 作為 package manager
+3. **package.json scripts** — 需包含 `lint`, `typecheck`, `build`, `test:coverage`, `format:check`
+4. **Private access** — `GH_PAT_READ_NICSDP` secret 已設定 (用於 release-please)
 
 ## 相關文件
 

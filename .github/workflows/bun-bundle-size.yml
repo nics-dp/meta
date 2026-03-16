@@ -5,11 +5,16 @@ name: bun-bundle-size
 on:
   workflow_call:
     inputs:
+      task:
+        required: false
+        type: string
+        default: "bundle-size"
+        description: "mise task to run"
       build_command:
         required: false
         type: string
-        default: "bun run build"
-        description: "Build command to run before size check"
+        default: ""
+        description: "Optional shell command override"
 
 permissions:
   contents: read
@@ -20,13 +25,22 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: oven-sh/setup-bun@735343b667d3e6f658f44e0a0e05bf0299db72d5 # v2.0.3
-      - run: bun install --frozen-lockfile
+      - uses: jdx/mise-action@c1ecc8f748cd28cdeabf76dab3cccde4ce692fe4 # v4.0.0
+        with:
+          cache: true
+          experimental: true
+          log_level: "info"
 
-      - name: Build
+      - name: Prepare environment
+        run: mise run prepare
+
+      - name: Run bundle size check
         env:
-          BUILD_COMMAND: ${{ inputs.build_command }}
-        run: bash -euo pipefail -lc "$BUILD_COMMAND"
-
-      - name: Check bundle size
-        run: bunx size-limit
+          TASK: ${{ inputs.task }}
+          COMMAND: ${{ inputs.build_command }}
+        run: |
+          if [ -n "$COMMAND" ]; then
+            bash -euo pipefail -lc "$COMMAND"
+          else
+            mise run "$TASK"
+          fi

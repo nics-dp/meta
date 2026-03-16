@@ -1,7 +1,7 @@
 # GitHub Workflows for Web Projects
 
 This directory contains workflow and config templates for React + Vite + TypeScript + Bun web projects.
-All workflows call reusable workflows from `nics-dp/meta`.
+All workflows call reusable workflows from `nics-dp/meta`, and CI tasks run through `mise`.
 
 ## Workflows
 
@@ -19,7 +19,12 @@ All workflows call reusable workflows from `nics-dp/meta`.
    cp -r web-templates/.github <new-repo>/.github
    ```
 
-2. Copy all configs from `configs/`:
+2. Copy `mise.toml`:
+   ```
+   cp web-templates/mise.toml <new-repo>/
+   ```
+
+3. Copy all configs from `configs/`:
    ```
    cp configs/.prettierrc.json <new-repo>/
    cp configs/.prettierignore <new-repo>/
@@ -29,7 +34,7 @@ All workflows call reusable workflows from `nics-dp/meta`.
    cp configs/renovate.json <new-repo>/
    ```
 
-3. Optional configs (copy if enabling the corresponding CI job):
+4. Optional configs (copy if enabling the corresponding CI job):
    ```
    cp configs/knip.json <new-repo>/
    cp configs/lighthouserc.json <new-repo>/
@@ -80,26 +85,26 @@ All workflows call reusable workflows from `nics-dp/meta`.
 |---|---|---|
 | `check-managed` | `check-managed-files.yml` | Blocks PRs modifying synced files |
 | `commitlint` | `commitlint.yml` | Conventional commit messages |
-| `lint` | `bun-lint.yml` | Code quality + security patterns (ESLint) |
-| `typecheck` | `bun-typecheck.yml` | TypeScript type errors (tsc --noEmit) |
-| `build` | `bun-build.yml` | Build succeeds (vite build) |
-| `audit` | `bun-audit.yml` | Known dependency vulnerabilities (bun audit) |
+| `lint` | `bun-lint.yml` | Runs `mise run lint` |
+| `typecheck` | `bun-typecheck.yml` | Runs `mise run typecheck` |
+| `build` | `bun-build.yml` | Runs `mise run build` |
+| `audit` | `bun-audit.yml` | Runs `mise run audit` |
 
 ### Recommended (enabled by default)
 
 | Job | Tool | What it checks |
 |---|---|---|
-| `test` | `bun-test.yml` | Unit tests + coverage (Vitest) |
-| `format-check` | `bun-format-check.yml` | Code formatting consistency (Prettier) |
+| `test` | `bun-test.yml` | Runs `mise run test` |
+| `format-check` | `bun-format-check.yml` | Runs `mise run format-check` |
 | `trivy-license` | `trivy-license.yml` | License compliance |
 
-### Optional (enabled by default, remove if not needed)
+### Optional (commented out by default, uncomment if needed)
 
 | Job | Tool | What it checks |
 |---|---|---|
-| `knip` | `bun-knip.yml` | Unused exports, deps, files (Knip) |
-| `lighthouse` | `bun-lighthouse.yml` | Performance, a11y, SEO scores |
-| `bundle-size` | `bun-bundle-size.yml` | JS bundle size regression (size-limit) |
+| `knip` | `bun-knip.yml` | Runs `mise run knip` |
+| `lighthouse` | `bun-lighthouse.yml` | Runs `mise run lighthouse` |
+| `bundle-size` | `bun-bundle-size.yml` | Runs `mise run bundle-size` |
 
 ## CodeQL
 

@@ -5,11 +5,16 @@ name: bun-format-check
 on:
   workflow_call:
     inputs:
+      task:
+        required: false
+        type: string
+        default: "format-check"
+        description: "mise task to run"
       command:
         required: false
         type: string
-        default: "bun run format:check"
-        description: "Format check command to run"
+        default: ""
+        description: "Optional shell command override"
 
 permissions:
   contents: read
@@ -20,10 +25,22 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: oven-sh/setup-bun@735343b667d3e6f658f44e0a0e05bf0299db72d5 # v2.0.3
-      - run: bun install --frozen-lockfile
+      - uses: jdx/mise-action@c1ecc8f748cd28cdeabf76dab3cccde4ce692fe4 # v4.0.0
+        with:
+          cache: true
+          experimental: true
+          log_level: "info"
+
+      - name: Prepare environment
+        run: mise run prepare
 
       - name: Run format check
         env:
-          FORMAT_COMMAND: ${{ inputs.command }}
-        run: bash -euo pipefail -lc "$FORMAT_COMMAND"
+          TASK: ${{ inputs.task }}
+          COMMAND: ${{ inputs.command }}
+        run: |
+          if [ -n "$COMMAND" ]; then
+            bash -euo pipefail -lc "$COMMAND"
+          else
+            mise run "$TASK"
+          fi

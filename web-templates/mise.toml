@@ -1,0 +1,48 @@
+[tools]
+bun = "latest"
+
+[tasks.prepare]
+description = "Install dependencies for CI and local development"
+run = "bun install --frozen-lockfile"
+
+[tasks.lint]
+description = "Run ESLint"
+run = "bun run lint"
+
+[tasks.typecheck]
+description = "Run TypeScript type checking"
+run = "bun run typecheck"
+
+[tasks.build]
+description = "Build the web app"
+run = "bun run build"
+
+[tasks.audit]
+description = "Run dependency audit"
+run = "bun audit"
+
+[tasks.test]
+description = "Run Vitest with coverage"
+run = "bun run test:coverage"
+
+[tasks.format-check]
+description = "Run Prettier format check"
+run = "bun run format:check"
+
+[tasks.knip]
+description = "Run Knip dead code analysis"
+run = "bun run knip"
+
+[tasks.lighthouse]
+description = "Run Lighthouse CI"
+run = """
+bun run build
+bunx @lhci/cli autorun
+"""
+
+[tasks.bundle-size]
+description = "Run bundle size checks"
+run = """
+bun run build
+bunx size-limit
+"""
