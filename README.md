@@ -567,7 +567,7 @@ secrets:
 
 適用於 React + Vite + TypeScript + Bun 專案。包含 workflow templates 與 `mise.toml`。詳見 [`web-templates/.github/README.md`](web-templates/.github/README.md)。
 
-包含: CI (eslint, typecheck, build, audit, vitest, prettier, semgrep, trivy-license, knip, lighthouse, bundle-size), codeql, notify, release-please workflows + `mise.toml` + eslint, prettier, vitest, knip, lighthouse configs
+包含: CI (eslint, typecheck, build, audit, vitest, prettier, semgrep, trivy-license, knip, lighthouse), codeql, notify, release-please workflows + `mise.toml` + eslint, prettier, vitest, knip, lighthouse configs。`bundle-size` workflow 仍提供，但需 repo 自行補上 `size-limit` 設定後再啟用
 
 ---
 

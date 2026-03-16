@@ -7,7 +7,8 @@
 #
 # Adjust per project:
 # - Recommended jobs (test, format-check, trivy-license): keep enabled
-# - Optional jobs (knip, lighthouse, bundle-size): remove if not needed
+# - Optional jobs (knip, lighthouse): remove if not needed
+# - Bundle size is disabled by default until the repo adds its own size-limit config
 
 name: ci
 
@@ -75,6 +76,6 @@ jobs:
     needs: [build]
     uses: nics-dp/meta/.github/workflows/bun-lighthouse.yml@main
 
-  bundle-size:
-    needs: [build]
-    uses: nics-dp/meta/.github/workflows/bun-bundle-size.yml@main
+  # bundle-size:
+  #   needs: [build]
+  #   uses: nics-dp/meta/.github/workflows/bun-bundle-size.yml@main

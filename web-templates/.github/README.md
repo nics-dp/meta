@@ -7,7 +7,7 @@ All workflows call reusable workflows from `nics-dp/meta`, and CI tasks run thro
 
 | File | Purpose | Triggers |
 |---|---|---|
-| `ci.yml` | Lint, typecheck, build, audit, test, format check, Semgrep, trivy-license, knip, lighthouse, bundle-size | push, PR, manual |
+| `ci.yml` | Lint, typecheck, build, audit, test, format check, Semgrep, trivy-license, knip, lighthouse | push, PR, manual |
 | `codeql.yml` | CodeQL security analysis (JS/TS + Actions) | push, PR, weekly, manual |
 | `notify.yml` | Google Chat notifications | PR, push, release, issue, CI events |
 | `release-please.yml` | Automated release management | push to main/release |
@@ -35,8 +35,9 @@ All workflows call reusable workflows from `nics-dp/meta`, and CI tasks run thro
    ```
 
 4. Handle the jobs that are enabled in `ci.yml` by default:
-   - Keep the default jobs: copy the optional configs below so `knip`, `lighthouse`, and `bundle-size` can run.
-   - Slim down the template: remove or comment out those jobs in `.github/workflows/ci.yml` before the first CI run.
+   - Keep the default optional jobs: copy the optional configs below so `knip` and `lighthouse` can run.
+   - Enable `bundle-size` only after adding your own `size-limit` configuration.
+   - Slim down the template: remove or comment out optional jobs in `.github/workflows/ci.yml` before the first CI run.
    ```
    cp configs/knip.json <new-repo>/
    cp configs/lighthouserc.json <new-repo>/
@@ -65,20 +66,14 @@ All workflows call reusable workflows from `nics-dp/meta`, and CI tasks run thro
 6. Install devDependencies:
    ```bash
    # 必備
-   bun add -d prettier prettier-plugin-tailwindcss eslint-plugin-security
+   bun add -d prettier prettier-plugin-tailwindcss
 
    # 必備 (預設 ci.yml 會跑 test)
-   bun add -d vitest @testing-library/react @testing-library/jest-dom jsdom @vitest/coverage-v8
+   bun add -d vitest jsdom @vitest/coverage-v8
 
    # 若保留 ci.yml 內預設啟用的 optional jobs，這些也需要安裝
-   bun add -d knip @lhci/cli @size-limit/preset-app size-limit
+   bun add -d knip @lhci/cli
    ```
-
-7. Create test setup file at `src/test/setup.ts`:
-   ```ts
-   import '@testing-library/jest-dom/vitest'
-   ```
-   This file is required by the default `vitest.config.ts`.
 
 ## CI Jobs
 
@@ -104,13 +99,13 @@ All workflows call reusable workflows from `nics-dp/meta`, and CI tasks run thro
 
 ### Optional tools
 
-These jobs are currently enabled in the shipped `ci.yml`. If you don't want them, comment them out or remove them before the first CI run.
+These jobs are enabled in the shipped `ci.yml`. If you don't want them, comment them out or remove them before the first CI run.
 
 | Job | Tool | What it checks |
 |---|---|---|
 | `knip` | `bun-knip.yml` | Runs `mise run knip` |
 | `lighthouse` | `bun-lighthouse.yml` | Runs `mise run lighthouse` |
-| `bundle-size` | `bun-bundle-size.yml` | Runs `mise run bundle-size` |
+| `bundle-size` | `bun-bundle-size.yml` | Disabled by default; enable after adding repo-specific `size-limit` config |
 
 ## CodeQL
 
