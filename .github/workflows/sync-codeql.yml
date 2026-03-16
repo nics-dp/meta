@@ -30,13 +30,13 @@ jobs:
         with:
           repository: ${{ github.repository_owner }}/${{ inputs.repo_name }}
           path: ${{ github.repository_owner }}/${{ inputs.repo_name }}
-          token: ${{ secrets.gh_token }}
+          token: ${{ secrets.gh_token || github.token }}
 
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           repository: ${{ github.repository_owner }}/meta
           path: ${{ github.repository_owner }}/meta
-          token: ${{ secrets.gh_token }}
+          token: ${{ secrets.gh_token || github.token }}
 
       - name: Copy CodeQL config
         env:
@@ -62,7 +62,7 @@ jobs:
           branch: "ci/sync-codeql-config"
           delete-branch: true
           path: "${{ github.repository_owner }}/${{ inputs.repo_name }}"
-          token: ${{ secrets.gh_token }}
+          token: ${{ secrets.gh_token || github.token }}
 
       - name: Check outputs
         if: ${{ steps.cpr.outputs.pull-request-number }}

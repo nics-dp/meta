@@ -65,7 +65,7 @@ jobs:
           curl -X POST \
             "${{ env.DOKPLOY_BASE_URL }}/api/compose.stop" \
             -H "x-api-key: ${{ env.DOKPLOY_TOKEN }}" \
-            -H "Content-Type: application/json" \
+            -H "Content-Type: application/x-www-form-urlencoded" \
             --data "composeId=${{ env.DOKPLOY_COMPOSE_ID }}"
 
           echo "Waiting for compose to stop..."

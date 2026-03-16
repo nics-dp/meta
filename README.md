@@ -8,8 +8,8 @@ nics-dp 組織的共用設定與 CI/CD 基礎設施 repo。本 repo 不包含可
 |-----------|------|
 | `.github/workflows/` | Reusable GitHub Actions workflows |
 | `codeqls/` | 各 repo 的 CodeQL workflow 設定 (`<repo-name>.yml`) |
-| `dependabots/` | 各 repo 的 Dependabot 設定 (`<repo-name>.yml`) |
-| `templates/` | 新專案模板 (workflows + `.golangci.yml`) |
+| `templates/` | 新專案模板 (workflows + `.golangci.yml` + `.commitlintrc.yml`) |
+| `renovate-preset.json` | Org-level Renovate 設定 preset |
 
 ## 如何引用 Reusable Workflows
 
@@ -209,30 +209,9 @@ secrets:
 
 ## Sync Workflows (設定檔同步)
 
-Sync workflows 由 meta repo 的 `cron.yml` 統一排程觸發 (每週一 00:00 UTC)，使用 matrix 對所有 consumer repos 執行同步 (sync-dependabot、sync-codeql)。Consumer repos 不需要在自己的 cron.yml 中呼叫這些 workflows。
+Sync workflows 由 meta repo 的 `cron.yml` 統一排程觸發 (每週一 00:00 UTC)，使用 matrix 對所有 consumer repos 執行同步 (sync-codeql)。Consumer repos 不需要在自己的 cron.yml 中呼叫這些 workflows。
 
 目標 repo 清單定義在 `cron.yml` 頂部的 `env.REPOS`，新增或移除 repo 只需修改該處。
-
-### sync-dependabot.yml — Dependabot 設定同步
-
-將本 repo 的 `dependabots/<repo_name>.yml` 複製到 consumer repo 的 `.github/dependabot.yml`。
-
-```yaml
-uses: nics-dp/meta/.github/workflows/sync-dependabot.yml@main
-permissions:
-  contents: write
-  pull-requests: write
-with:
-  repo_name: platform  # 必要
-secrets:
-  gh_token: ${{ secrets.GH_PAT_READ_NICSDP }}
-```
-
-| 參數 | 類型 | 必要 | 說明 |
-|------|------|------|------|
-| `repo_name` | string | **是** | 目標 repo 名稱 (不含 org prefix) |
-
----
 
 ### sync-codeql.yml — CodeQL 設定同步
 
@@ -286,7 +265,7 @@ uses: nics-dp/meta/.github/workflows/check-managed-files.yml@main
 
 | 參數 | 類型 | 預設值 | 說明 |
 |------|------|--------|------|
-| `managed_files` | string | `.github/workflows/codeql.yml,.github/dependabot.yml` | 逗號分隔的受保護檔案路徑 |
+| `managed_files` | string | `.github/workflows/codeql.yml` | 逗號分隔的受保護檔案路徑 |
 
 ---
 
@@ -322,10 +301,6 @@ secrets:
 
 各 repo 的 CodeQL workflow 設定，以 `<repo-name>.yml` 命名。透過 `sync-codeql.yml` 同步到各 repo 的 `.github/workflows/codeql.yml`。
 
-### dependabots/
-
-各 repo 的 Dependabot 設定，以 `<repo-name>.yml` 命名。透過 `sync-dependabot.yml` 同步到各 repo 的 `.github/dependabot.yml`。
-
 ## Consumer Repo 典型設定
 
 新增 repo 時，從 `templates/` 複製所需的 workflow 檔案到 `.github/workflows/`：
@@ -339,11 +314,13 @@ secrets:
 | `codeql.yml` | CodeQL 靜態安全分析 | 公開 repo 移除 secrets |
 | `cd.yml` | 自動部署 (Dokploy) | 僅 service repos |
 | `notify.yml` | Google Chat 通知 | — |
+| `release-please.yml` | 自動版本管理 | — |
+| `.commitlintrc.yml` | Commitlint 設定 | 直接複製到 repo 根目錄 |
 
 新增 repo 後，還需：
-1. 更新 meta `cron.yml` 的 `env.REPOS` 清單，以納入 sync-dependabot 和 sync-codeql
-2. 新增 `dependabots/<repo-name>.yml`，設定該 repo 的 Dependabot 組態
-3. 新增 `codeqls/<repo-name>.yml`，設定該 repo 的 CodeQL workflow
+1. 更新 meta `cron.yml` 的 `env.REPOS` 清單，以納入 sync-codeql
+2. 新增 `codeqls/<repo-name>.yml`，設定該 repo 的 CodeQL workflow
+3. 新增 `renovate.json`，引用 `github>nics-dp/meta:renovate-preset`
 
 ---
 
