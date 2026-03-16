@@ -7,6 +7,8 @@ on:
     - cron: "0 0 * * 1"
   workflow_dispatch:
 
+permissions: {}
+
 env:
   REPOS: '["dcf-platform","dcf-access","dcf-service","dcf-access-cli","dcf-platform-cli","dcf-access-web","dcf-platform-web","libdcf","otel-bundle","test-repo","patroni","ZenQuery"]'
 
