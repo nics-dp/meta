@@ -8,7 +8,7 @@
   ],
   "env": {
     "GOPRIVATE": "github.com/nics-dp",
-    "GONOSUMCHECK": "github.com/nics-dp"
+    "GONOSUMDB": "github.com/nics-dp"
   },
   "packageRules": [
     {
@@ -48,6 +48,32 @@
       "matchUpdateTypes": ["patch"],
       "automerge": true,
       "automergeType": "pr"
+    }
+  ],
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "Update actionlint version in reusable workflow",
+      "fileMatch": ["^\\.github/workflows/actionlint\\.yml$"],
+      "matchStrings": ["default:\\s*\"(?<currentValue>v\\d+\\.\\d+\\.\\d+)\"\\s*\\n\\s*description:\\s*\"actionlint version"],
+      "depNameTemplate": "rhysd/actionlint",
+      "datasourceTemplate": "github-releases"
+    },
+    {
+      "customType": "regex",
+      "description": "Update quill version in go-release workflow",
+      "fileMatch": ["^\\.github/workflows/go-release\\.yml$"],
+      "matchStrings": ["go install github\\.com/anchore/quill/cmd/quill@(?<currentValue>v\\d+\\.\\d+\\.\\d+)"],
+      "depNameTemplate": "anchore/quill",
+      "datasourceTemplate": "github-releases"
+    },
+    {
+      "customType": "regex",
+      "description": "Update parlay version in SBOM workflows",
+      "fileMatch": ["^\\.github/workflows/sbom-(?:source|image)\\.yml$"],
+      "matchStrings": ["go install github\\.com/snyk/parlay@(?<currentValue>v\\d+\\.\\d+\\.\\d+)"],
+      "depNameTemplate": "snyk/parlay",
+      "datasourceTemplate": "github-releases"
     }
   ]
 }
