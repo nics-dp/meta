@@ -7,7 +7,7 @@
 # 根據專案類型調整:
 # - Service repo (Go binary + Docker image): 保留 go-release + image-build jobs
 # - CLI repo (Go binary only): 移除 image-build job，移除 cgo_enabled
-# - Docker-only repo: 移除 go-release job
+# - Docker-only repo: 移除 go-release job，以及所有相依 go-release 的 jobs（例如 sbom-source）
 #
 # 必須修改的參數 (標記為 TODO):
 # - project_name: 專案名稱
