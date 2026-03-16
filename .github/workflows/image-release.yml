@@ -114,12 +114,17 @@ jobs:
         with:
           ref: ${{ inputs.ref }}
 
-      - name: Prepare build args from env file
+      - name: Prepare non-secret build args from env file
         id: env-args
         if: inputs.env_file != ''
         env:
           ENV_FILE: ${{ inputs.env_file }}
         run: |
+          # IMPORTANT: The env file is used to populate both GITHUB_ENV and the
+          # "build_args" output, which is intended to be passed to Docker build-args.
+          # Docker build args are NOT secret-safe (they may appear in image metadata,
+          # layers, or logs), so the env file MUST NOT contain secrets or credentials.
+          #
           # Only export valid KEY=VALUE lines (shell-safe keys, skip invalid lines)
           DELIM="ENV_ARGS_EOF_${RANDOM}${RANDOM}"
           echo "build_args<<${DELIM}" >> "$GITHUB_OUTPUT"
