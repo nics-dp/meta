@@ -29,9 +29,6 @@ on:
         type: string
         default: '{"group":"releasers"}'
         description: 'Runner as JSON (e.g., ''"ubuntu-latest"'' or ''{"group":"releasers"}'')'
-    secrets:
-      gh_pat:
-        required: false
 
 jobs:
   sbom-source:

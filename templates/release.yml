@@ -46,8 +46,6 @@ jobs:
       security-events: write
     with:
       project_name: TODO        # TODO: 與 go-release 的 project_name 一致
-    secrets:
-      gh_pat: ${{ secrets.GH_PAT_READ_NICSDP }}
 
   # 僅 service/Docker repos 需要，CLI repos 請移除以下 jobs
   image-build:

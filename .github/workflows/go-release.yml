@@ -68,7 +68,7 @@ on:
         description: 'Runner for build jobs as JSON'
     secrets:
       gh_pat:
-        required: true
+        required: false
       quill_sign_p12:
         required: false
       quill_sign_password:
