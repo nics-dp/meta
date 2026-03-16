@@ -75,6 +75,7 @@ on:
         required: true
       gh_pat:
         required: false
+        description: "Optional PAT for GitHub registry access; falls back to GITHUB_TOKEN when not provided (with its usual permission limits)."
 
 env:
   REGISTRY_DH: docker.io
@@ -169,7 +170,7 @@ jobs:
             ${{ inputs.build_args }}
             ${{ steps.env-args.outputs.build_args }}
           secrets: |
-            github_token=${{ secrets.gh_pat }}
+            github_token=${{ secrets.gh_pat || secrets.GITHUB_TOKEN }}
           cache-from: type=registry,ref=${{ env.REGISTRY_GHCR }}/${{ env.GHCR_NAMESPACE }}/${{ env.IMAGE_NAME }}:buildcache
           cache-to: type=registry,ref=${{ env.REGISTRY_GHCR }}/${{ env.GHCR_NAMESPACE }}/${{ env.IMAGE_NAME }}:buildcache,mode=max
           sbom: ${{ inputs.sbom }}
