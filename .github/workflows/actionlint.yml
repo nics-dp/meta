@@ -38,6 +38,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           ACTIONLINT_VERSION: ${{ inputs.actionlint-version }}
         run: |
+          set -o pipefail
           gh release download "$ACTIONLINT_VERSION" -R rhysd/actionlint -p "actionlint_*_linux_amd64.tar.gz" -O actionlint.tar.gz
           tar xzf actionlint.tar.gz actionlint
           failed=false
