@@ -37,7 +37,7 @@ jobs:
             exit 1
           fi
 
-          if [[ ! "$REPO_NAME" =~ ^[a-zA-Z0-9](?:[a-zA-Z0-9._-]*[a-zA-Z0-9])?$ ]]; then
+          if [[ ! "$REPO_NAME" =~ ^[a-zA-Z0-9]([a-zA-Z0-9._-]*[a-zA-Z0-9])?$ ]]; then
             echo "::error::Invalid repo_name: must start and end with an alphanumeric character and contain only alphanumeric, dot, hyphen, or underscore characters"
             exit 1
           fi
