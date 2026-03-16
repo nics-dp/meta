@@ -27,7 +27,7 @@ jobs:
       actions: read
       contents: read
     env:
-      GH_PAT: ${{ secrets.GH_PAT_READ_NICSDP }}
+      HAS_GH_PAT: ${{ secrets.GH_PAT_READ_NICSDP != '' }}
 
     strategy:
       fail-fast: false
@@ -45,7 +45,7 @@ jobs:
           fetch-depth: 0
 
       - name: Initialize CodeQL
-        if: env.GH_PAT == ''
+        if: env.HAS_GH_PAT != 'true'
         uses: github/codeql-action/init@fb0994ef1c058010acf1efccff928b0a83b1ed54 # v4.32.6
         with:
           languages: ${{ matrix.language }}
@@ -54,17 +54,19 @@ jobs:
           queries: security-extended,security-and-quality
 
       - name: Initialize CodeQL with private repo access
-        if: env.GH_PAT != ''
+        if: env.HAS_GH_PAT == 'true'
         uses: github/codeql-action/init@fb0994ef1c058010acf1efccff928b0a83b1ed54 # v4.32.6
         with:
           languages: ${{ matrix.language }}
           build-mode: ${{ matrix.build-mode }}
           dependency-caching: true
           queries: security-extended,security-and-quality
-          external-repository-token: ${{ env.GH_PAT }}
+          external-repository-token: ${{ secrets.GH_PAT_READ_NICSDP }}
 
       - name: Configure access to private Go modules
-        if: matrix.language == 'go' && env.GH_PAT != ''
+        if: matrix.language == 'go' && env.HAS_GH_PAT == 'true'
+        env:
+          GH_PAT: ${{ secrets.GH_PAT_READ_NICSDP }}
         run: |
           git config --global url."https://${GH_PAT}@github.com".insteadOf "https://github.com"
           echo "GOPRIVATE=github.com/nics-dp" >> "$GITHUB_ENV"
@@ -82,6 +84,12 @@ jobs:
         run: |
           go mod download
           go build ./...
+
+      - name: Revoke private module access
+        if: matrix.language == 'go' && env.HAS_GH_PAT == 'true'
+        env:
+          GH_PAT: ${{ secrets.GH_PAT_READ_NICSDP }}
+        run: git config --global --remove-section "url.https://${GH_PAT}@github.com" 2>/dev/null || true
 
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@fb0994ef1c058010acf1efccff928b0a83b1ed54 # v4.32.6

@@ -44,7 +44,7 @@ jobs:
             const artifacts = await github.paginate(
               github.rest.actions.listWorkflowRunArtifacts,
               {owner, repo, run_id: context.runId},
-              (response) => response.data
+              (response) => response.data.artifacts
             );
 
             if (!artifacts.length) {
@@ -66,7 +66,7 @@ jobs:
               github.rest.issues.listComments,
               {owner, repo, issue_number: prNumber}
             );
-            const existing = comments.filter(c => c.body.includes(marker));
+            const existing = comments.filter(c => c.body?.includes(marker));
             if (existing.length > 0) {
               const last = existing[existing.length - 1];
               core.info(`Updating comment ${last.id}`);
