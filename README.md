@@ -311,7 +311,6 @@ secrets:
 | `release.yml` | 正式發布 (Go binary + Docker image) | `project_name`, `binary`, `image_name` |
 | `snapshot.yml` | 預覽建置 | 與 release.yml 保持一致 |
 | `codeql.yml` | CodeQL 靜態安全分析 | 公開 repo 移除 secrets |
-| `cd.yml` | 自動部署 (Dokploy) | 僅 service repos |
 | `notify.yml` | Google Chat 通知 | — |
 | `release-please.yml` | 自動版本管理 | — |
 

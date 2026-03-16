@@ -11,7 +11,9 @@ on:
     secrets:
       gh_token:
         required: true
-  workflow_dispatch: # requires GH_PAT_READ_NICSDP in repo secrets for cross-repo access
+      GH_PAT_READ_NICSDP:
+        required: false
+  workflow_dispatch: # requires repo-level GH_PAT_READ_NICSDP for cross-repo private access
     inputs:
       repo_name:
         description: The repository name, without the org prefix.
@@ -30,14 +32,14 @@ jobs:
         with:
           repository: ${{ github.repository_owner }}/${{ inputs.repo_name }}
           path: ${{ github.repository_owner }}/${{ inputs.repo_name }}
-          token: ${{ secrets.gh_token || github.token }}
+          token: ${{ secrets.gh_token || secrets.GH_PAT_READ_NICSDP || github.token }}
 
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           repository: ${{ github.repository }}
           ref: ${{ github.sha }}
           path: ${{ github.repository_owner }}/meta
-          token: ${{ secrets.gh_token || github.token }}
+          token: ${{ secrets.gh_token || secrets.GH_PAT_READ_NICSDP || github.token }}
 
       - name: Log sync source
         run: |
@@ -68,7 +70,7 @@ jobs:
           branch: "ci/sync-codeql-config"
           delete-branch: true
           path: "${{ github.repository_owner }}/${{ inputs.repo_name }}"
-          token: ${{ secrets.gh_token || github.token }}
+          token: ${{ secrets.gh_token || secrets.GH_PAT_READ_NICSDP || github.token }}
 
       - name: Check outputs
         if: ${{ steps.cpr.outputs.pull-request-number }}
