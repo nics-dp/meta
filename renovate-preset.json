@@ -11,7 +11,7 @@
     "GONOSUMDB": "github.com/nics-dp"
   },
   "github-actions": {
-    "managerFilePatterns": ["codeqls/**"]
+    "managerFilePatterns": [".github/workflows/**", "codeqls/**", "templates/**"]
   },
   "packageRules": [
     {
@@ -76,6 +76,14 @@
       "fileMatch": ["^\\.github/workflows/sbom-(?:source|image)\\.yml$"],
       "matchStrings": ["go install github\\.com/snyk/parlay@(?<currentValue>v\\d+\\.\\d+\\.\\d+)"],
       "depNameTemplate": "snyk/parlay",
+      "datasourceTemplate": "github-releases"
+    },
+    {
+      "customType": "regex",
+      "description": "Update swag version in CodeQL configs",
+      "fileMatch": ["^codeqls/.+\\.yml$"],
+      "matchStrings": ["go install github\\.com/swaggo/swag/cmd/swag@(?<currentValue>v\\d+\\.\\d+\\.\\d+)"],
+      "depNameTemplate": "swaggo/swag",
       "datasourceTemplate": "github-releases"
     }
   ]

@@ -72,7 +72,7 @@ jobs:
       - name: Install Go tools
         if: matrix.language == 'go'
         run: |
-          go install github.com/swaggo/swag/cmd/swag@latest
+          go install github.com/swaggo/swag/cmd/swag@v1.16.6
 
       - name: Manual Go build for CodeQL
         if: matrix.language == 'go'

@@ -51,7 +51,9 @@ jobs:
             echo "${ICON} PR #${PR_NUMBER}: ${PR_TITLE}"
             echo "TITLE_EOF"
           } >> "$GITHUB_OUTPUT"
-          echo "extra_fields=[{\"label\":\"Status\",\"value\":\"${STATUS}\"},{\"label\":\"Branch\",\"value\":\"${PR_HEAD} → ${PR_BASE}\"}]" >> "$GITHUB_OUTPUT"
+          EXTRA=$(jq -nc --arg status "$STATUS" --arg branch "${PR_HEAD} → ${PR_BASE}" \
+            '[{"label":"Status","value":$status},{"label":"Branch","value":$branch}]')
+          echo "extra_fields=${EXTRA}" >> "$GITHUB_OUTPUT"
 
   pr-notify:
     needs: pr-prepare
