@@ -149,8 +149,8 @@ jobs:
           GO_PRIVATE_FULL: ${{ inputs.go_private_full }}
         run: |
           if [[ "$GO_PRIVATE_FULL" == "true" ]]; then
-            go env -w GOPRIVATE=github.com/nics-dp
-            go env -w GONOSUMDB=github.com/nics-dp
+            echo "GOPRIVATE=github.com/nics-dp" >> "$GITHUB_ENV"
+            echo "GONOSUMDB=github.com/nics-dp" >> "$GITHUB_ENV"
             git config --global url."https://${GH_PAT}@github.com/".insteadOf "git@github.com:"
           fi
           git config --global url."https://${GH_PAT}@github.com".insteadOf "https://github.com"
@@ -202,7 +202,7 @@ jobs:
           QUILL_NOTARY_KEY_ID: ${{ secrets.quill_notary_key_id }}
           QUILL_NOTARY_ISSUER: ${{ secrets.quill_notary_issuer }}
         run: |
-          go install github.com/anchore/quill/cmd/quill@latest
+          go install github.com/anchore/quill/cmd/quill@v0.7.1
           for bin in output/*; do
             [[ -f "$bin" ]] && quill sign-and-notarize "$bin"
           done

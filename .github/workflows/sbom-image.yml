@@ -88,7 +88,7 @@ jobs:
 
       - name: Enrich SBOM with parlay
         run: |
-          go install github.com/snyk/parlay@latest
+          go install github.com/snyk/parlay@v0.11.0
           parlay ecosystems enrich sbom-image.cdx.json > enriched-image.cdx.json
 
       - name: Scan SBOM with Trivy (SARIF)
