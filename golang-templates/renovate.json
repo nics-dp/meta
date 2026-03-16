@@ -1,0 +1,5 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["github>nics-dp/meta:renovate-preset"],
+  "ignoreDeps": ["actions/checkout", "github/codeql-action"]
+}

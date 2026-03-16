@@ -1,4 +1,4 @@
-# yaml-language-server: $schema=https://json.schemastore.org/golangci-lint.json
+# yaml-language-server: $schema=https://golangci-lint.run/jsonschema/golangci.jsonschema.json
 
 version: "2"
 run:
@@ -38,6 +38,19 @@ linters:
   settings:
     exhaustive:
       default-signifies-exhaustive: true
+    nestif:
+      min-complexity: 12
+    revive:
+      rules:
+        - name: exported
+          disabled: false
+          arguments:
+            - "checkPrivateReceivers"
+            - "disableStutteringCheck"
+        - name: var-naming
+          disabled: true
+        - name: package-comments
+          disabled: true
 issues:
   max-issues-per-linter: 0
   max-same-issues: 0

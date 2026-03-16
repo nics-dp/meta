@@ -1,0 +1,64 @@
+# GitHub Workflows for Go Projects
+
+This directory contains workflow templates for setting up CI/CD in a new Go repository.
+All workflows call reusable workflows from `nics-dp/meta`.
+
+## Workflows
+
+| File | Purpose | Triggers |
+|---|---|---|
+| `ci.yml` | Lint, security scan, vulnerability check, test, Dockerfile lint | push, PR, manual |
+| `release-please.yml` | Auto-create Release PR with changelog, then GitHub Release | push to main/release |
+| `release.yml` | Build Go binaries, Docker image, SBOMs, sign artifacts | release created |
+| `snapshot.yml` | Build snapshot artifacts on PR (no publish) | CI success on PR, manual |
+| `codeql.yml` | CodeQL security analysis (Go + Actions) | push, PR, weekly, manual |
+| `notify.yml` | Google Chat notifications for PR/push/release/issue/CI events | various |
+
+## Setup
+
+1. Copy `golang-templates/` contents into your new repo root:
+   ```
+   cp -r golang-templates/.github <new-repo>/.github
+   cp golang-templates/.golangci.yml <new-repo>/
+   cp golang-templates/.commitlintrc.yml <new-repo>/
+   cp golang-templates/renovate.json <new-repo>/
+   ```
+
+2. Search for `TODO` in the copied files and replace with project-specific values:
+   - `release.yml` / `snapshot.yml`: `project_name`, `binary`, `image_name`
+
+3. Adjust by project type:
+
+   **Service repo** (Go binary + Docker image): use all workflows as-is.
+
+   **CLI repo** (Go binary only):
+   - `ci.yml`: remove `hadolint` and `trivy-iac` jobs, remove `security-events: write`
+   - `release.yml`: remove `image-build` and `sbom-image` jobs
+   - `snapshot.yml`: remove `image-build` job, change `notify-pr` needs to `[go-release]`
+
+   **Library** (no binary, no Docker):
+   - `ci.yml`: remove `hadolint` and `trivy-iac` jobs, remove `security-events: write`
+   - Remove `release.yml` and `snapshot.yml` entirely
+
+4. For private repos importing `nics-dp` modules, ensure `GH_PAT_READ_NICSDP` is configured as a repo secret.
+
+## Required Secrets
+
+| Secret | Used by | Required |
+|---|---|---|
+| `GH_PAT_READ_NICSDP` | ci, release, snapshot, release-please | Private repos |
+| `DOCKERHUB_USERNAME` | release, snapshot | Docker image repos |
+| `DOCKERHUB_TOKEN` | release, snapshot | Docker image repos |
+| `GOOGLE_CHAT_WEBHOOK` | notify | Optional |
+
+## CodeQL
+
+The `codeql.yml` template is a starting point. For repos managed by `sync-codeql`, the per-repo config in `meta/codeqls/<repo-name>.yml` takes precedence. Do not manually edit `.github/workflows/codeql.yml` in synced repos.
+
+## Related Files
+
+| File | Purpose |
+|---|---|
+| `.golangci.yml` | golangci-lint v2 config (linters, formatters, exclusions) |
+| `.commitlintrc.yml` | Conventional commit message validation rules |
+| `renovate.json` | Extends the org-level Renovate preset from `nics-dp/meta` |
