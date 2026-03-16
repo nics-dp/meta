@@ -1,0 +1,132 @@
+# yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
+#
+# 標準 Web CI workflow 模板
+# 適用於 React + Vite + TypeScript + Bun 專案
+#
+# 使用方式: 複製到新 repo 的 .github/workflows/ci.yml
+#
+# 根據專案需求調整:
+# - 推薦 jobs (test, format-check, trivy-license): 建議啟用
+# - 可選 jobs (knip, lighthouse, bundle-size): 依需要取消註解
+
+name: ci
+
+on:
+  push:
+    branches: [main, dev, "release/**", "feature/**"]
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches: [main, dev, "release/**"]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  checks: write
+  pull-requests: write
+
+jobs:
+  check-managed:
+    uses: nics-dp/meta/.github/workflows/check-managed-files.yml@main
+
+  commitlint:
+    uses: nics-dp/meta/.github/workflows/commitlint.yml@main
+
+  # ─── 必備 ───
+
+  lint:
+    name: ESLint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: oven-sh/setup-bun@735343b667d3e6f658f44e0a0e05bf0299db72d5 # v2.0.3
+      - run: bun install --frozen-lockfile
+      - run: bun run lint
+
+  typecheck:
+    name: TypeScript
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: oven-sh/setup-bun@735343b667d3e6f658f44e0a0e05bf0299db72d5 # v2.0.3
+      - run: bun install --frozen-lockfile
+      - run: bun run typecheck
+
+  build:
+    name: Build
+    needs: [lint, typecheck]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: oven-sh/setup-bun@735343b667d3e6f658f44e0a0e05bf0299db72d5 # v2.0.3
+      - run: bun install --frozen-lockfile
+      - run: bun run build
+
+  audit:
+    name: Dependency Audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: oven-sh/setup-bun@735343b667d3e6f658f44e0a0e05bf0299db72d5 # v2.0.3
+      - run: bun install --frozen-lockfile
+      - run: bun audit
+
+  # ─── 推薦 ───
+
+  test:
+    name: Vitest
+    needs: [lint, typecheck]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: oven-sh/setup-bun@735343b667d3e6f658f44e0a0e05bf0299db72d5 # v2.0.3
+      - run: bun install --frozen-lockfile
+      - run: bun run test:coverage
+
+  format-check:
+    name: Prettier
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: oven-sh/setup-bun@735343b667d3e6f658f44e0a0e05bf0299db72d5 # v2.0.3
+      - run: bun install --frozen-lockfile
+      - run: bun run format:check
+
+  trivy-license:
+    uses: nics-dp/meta/.github/workflows/trivy-license.yml@main
+
+  # ─── 可選 ───
+
+  # knip:
+  #   name: Dead Code
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+  #     - uses: oven-sh/setup-bun@735343b667d3e6f658f44e0a0e05bf0299db72d5 # v2.0.3
+  #     - run: bun install --frozen-lockfile
+  #     - run: bun run knip
+
+  # lighthouse:
+  #   name: Lighthouse CI
+  #   needs: [build]
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+  #     - uses: oven-sh/setup-bun@735343b667d3e6f658f44e0a0e05bf0299db72d5 # v2.0.3
+  #     - run: bun install --frozen-lockfile
+  #     - run: bun run build
+  #     - run: bunx @lhci/cli autorun
+
+  # bundle-size:
+  #   name: Bundle Size
+  #   needs: [build]
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+  #     - uses: oven-sh/setup-bun@735343b667d3e6f658f44e0a0e05bf0299db72d5 # v2.0.3
+  #     - run: bun install --frozen-lockfile
+  #     - run: bun run build
+  #     - run: bunx size-limit

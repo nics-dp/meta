@@ -1,0 +1,22 @@
+# yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
+#
+# release-please workflow 模板
+# 自動建立 Release PR (含 changelog) 並建立 GitHub Release
+#
+# 使用方式: 複製到 .github/workflows/release-please.yml
+
+name: release-please
+
+on:
+  push:
+    branches: [main, "release/**"]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  release-please:
+    uses: nics-dp/meta/.github/workflows/release-please.yml@main
+    secrets:
+      gh_pat: ${{ secrets.GH_PAT_READ_NICSDP }}

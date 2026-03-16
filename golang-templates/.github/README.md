@@ -1,6 +1,6 @@
 # GitHub Workflows for Go Projects
 
-This directory contains workflow templates for setting up CI/CD in a new Go repository.
+This directory contains workflow and config templates for setting up CI/CD in a new Go repository.
 All workflows call reusable workflows from `nics-dp/meta`.
 
 ## Workflows
@@ -16,18 +16,22 @@ All workflows call reusable workflows from `nics-dp/meta`.
 
 ## Setup
 
-1. Copy `golang-templates/` contents into your new repo root:
+1. Copy workflow files:
    ```
    cp -r golang-templates/.github <new-repo>/.github
-   cp golang-templates/.golangci.yml <new-repo>/
-   cp golang-templates/.commitlintrc.yml <new-repo>/
-   cp golang-templates/renovate.json <new-repo>/
    ```
 
-2. Search for `TODO` in the copied files and replace with project-specific values:
+2. Copy configs from `configs/`:
+   ```
+   cp configs/.golangci.yml <new-repo>/
+   cp configs/.commitlintrc.yml <new-repo>/
+   cp configs/renovate.json <new-repo>/
+   ```
+
+3. Search for `TODO` in the copied files and replace with project-specific values:
    - `release.yml` / `snapshot.yml`: `project_name`, `binary`, `image_name`
 
-3. Adjust by project type:
+4. Adjust by project type:
 
    **Service repo** (Go binary + Docker image): use all workflows as-is.
 
@@ -40,7 +44,7 @@ All workflows call reusable workflows from `nics-dp/meta`.
    - `ci.yml`: remove `hadolint` and `trivy-iac` jobs, remove `security-events: write`
    - Remove `release.yml` and `snapshot.yml` entirely
 
-4. For private repos importing `nics-dp` modules, ensure `GH_PAT_READ_NICSDP` is configured as a repo secret.
+5. For private repos importing `nics-dp` modules, ensure `GH_PAT_READ_NICSDP` is configured as a repo secret.
 
 ## Required Secrets
 
@@ -57,8 +61,8 @@ The `codeql.yml` template is a starting point. For repos managed by `sync-codeql
 
 ## Related Files
 
-| File | Purpose |
-|---|---|
-| `.golangci.yml` | golangci-lint v2 config (linters, formatters, exclusions) |
-| `.commitlintrc.yml` | Conventional commit message validation rules |
-| `renovate.json` | Extends the org-level Renovate preset from `nics-dp/meta` |
+| File | Source | Purpose |
+|---|---|---|
+| `.golangci.yml` | `configs/.golangci.yml` | golangci-lint v2 config (synced via `sync-golangci`) |
+| `.commitlintrc.yml` | `configs/.commitlintrc.yml` | Conventional commit message rules (synced via `sync-commitlintrc`) |
+| `renovate.json` | `configs/renovate.json` | Renovate preset + ignoreDeps (synced via `sync-renovate`) |

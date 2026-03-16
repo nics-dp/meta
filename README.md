@@ -7,8 +7,10 @@ nics-dp 組織的共用設定與 CI/CD 基礎設施 repo。本 repo 不包含可
 | 目錄/檔案 | 說明 |
 |-----------|------|
 | `.github/workflows/` | Reusable GitHub Actions workflows |
-| `codeqls/` | 各 repo 的 CodeQL workflow 設定 (`<repo-name>.yml`) |
-| `templates/` | 新專案模板 (workflow templates) |
+| `configs/` | Sync 來源設定檔 (commitlintrc, renovate, golangci, prettier, eslint, vitest, knip, lighthouserc) |
+| `configs/codeqls/` | 各 repo 的 CodeQL workflow 設定 (`<repo-name>.yml`) |
+| `golang-templates/` | Go 專案模板 (workflows) |
+| `web-templates/` | Web 專案模板 (workflows) |
 | `renovate-preset.json` | Org-level Renovate 設定 preset |
 
 ## 如何引用 Reusable Workflows
@@ -105,6 +107,9 @@ secrets:
 各 repo 的 CodeQL workflow 為**獨立可執行**的 workflow (直接使用 `github/codeql-action`)，集中管理於 `codeqls/<repo-name>.yml`，透過 `sync-codeql.yml` 同步到各 repo 的 `.github/workflows/codeql.yml`。
 
 每個 repo 的 codeql.yml 可依需要自訂：語言 matrix、Go build 指令、額外工具安裝等。詳見 `codeqls/` 目錄下各檔案。
+
+- **Go repos:** 使用 `go` language + `manual` build-mode
+- **Web repos:** 使用 `javascript-typescript` language + `none` build-mode
 
 私有 repo 可設定 `GH_PAT_READ_NICSDP` 以存取 private modules / private repositories；未設定時，CodeQL 仍會執行，但不會傳 `external-repository-token`，也不會啟用 private module access 設定。
 
@@ -221,30 +226,55 @@ secrets:
 
 ## Sync Workflows (設定檔同步)
 
-Sync workflows 由 meta repo 的 `cron.yml` 統一排程觸發 (每週一 00:00 UTC)，使用 matrix 對所有 consumer repos 執行同步 (sync-codeql)。Consumer repos 不需要在自己的 cron.yml 中呼叫這些 workflows。
+Sync workflows 由 meta repo 的 `cron.yml` 統一排程觸發 (每週一 00:00 UTC)，使用 matrix 對 consumer repos 執行同步。Consumer repos 不需要在自己的 repo 中呼叫這些 workflows。
 
-目標 repo 清單定義在 `cron.yml` 頂部的 `env.REPOS`，新增或移除 repo 只需修改該處。
+目標 repo 清單定義在 `cron.yml` 頂部：
 
-### sync-codeql.yml — CodeQL 設定同步
+| 清單 | 說明 | 用於 |
+|------|------|------|
+| `ALL_REPOS` | 所有 DCF repos (含 patroni) | sync-commitlintrc, sync-renovate |
+| `GO_REPOS` | Go repos (不含 web repos、patroni) | sync-golangci |
+| `WEB_REPOS` | Web repos | sync-prettier, sync-eslint-config, sync-vitest-config, sync-knip, sync-lighthouserc |
+| `CODEQL_REPOS` | 有 CodeQL 設定的 repos (不含 patroni) | sync-codeql |
 
-將本 repo 的 `codeqls/<repo_name>.yml` 複製到 consumer repo 的 `.github/workflows/codeql.yml`。
+### All repos
 
-`workflow_call` 模式使用傳入的 `gh_token`；`workflow_dispatch` 手動執行時，若要同步到 private repo，需先在 meta repo 設定 repo-level `GH_PAT_READ_NICSDP`。
+| Workflow | 來源 | 目標 |
+|----------|------|------|
+| `sync-commitlintrc.yml` | `configs/.commitlintrc.yml` | `.commitlintrc.yml` |
+| `sync-renovate.yml` | `configs/renovate.json` | `renovate.json` |
+| `sync-codeql.yml` | `configs/codeqls/<repo>.yml` | `.github/workflows/codeql.yml` |
+
+### Go repos
+
+| Workflow | 來源 | 目標 |
+|----------|------|------|
+| `sync-golangci.yml` | `configs/.golangci.yml` | `.golangci.yml` |
+
+### Web repos
+
+| Workflow | 來源 | 目標 |
+|----------|------|------|
+| `sync-prettier.yml` | `configs/.prettierrc.json` + `configs/.prettierignore` | `.prettierrc.json` + `.prettierignore` |
+| `sync-eslint-config.yml` | `configs/eslint.config.js` | `eslint.config.js` |
+| `sync-vitest-config.yml` | `configs/vitest.config.ts` | `vitest.config.ts` |
+| `sync-knip.yml` | `configs/knip.json` | `knip.json` |
+| `sync-lighthouserc.yml` | `configs/lighthouserc.json` | `lighthouserc.json` |
+
+所有 sync workflows 共用相同模式：
 
 ```yaml
-uses: nics-dp/meta/.github/workflows/sync-codeql.yml@main
+uses: nics-dp/meta/.github/workflows/sync-<name>.yml@main
 permissions:
   contents: write
   pull-requests: write
 with:
-  repo_name: platform  # 必要
+  repo_name: <repo-name>  # 必要，不含 org prefix
 secrets:
   gh_token: ${{ secrets.GH_PAT_READ_NICSDP }}
 ```
 
-| 參數 | 類型 | 必要 | 說明 |
-|------|------|------|------|
-| `repo_name` | string | **是** | 目標 repo 名稱 (不含 org prefix) |
+`workflow_dispatch` 手動執行時，若要同步到 private repo，需先在 meta repo 設定 repo-level `GH_PAT_READ_NICSDP`。
 
 ---
 
@@ -279,7 +309,7 @@ uses: nics-dp/meta/.github/workflows/check-managed-files.yml@main
 
 | 參數 | 類型 | 預設值 | 說明 |
 |------|------|--------|------|
-| `managed_files` | string | `.github/workflows/codeql.yml` | 逗號分隔的受保護檔案路徑 |
+| `managed_files` | string | `.github/workflows/codeql.yml,.commitlintrc.yml,.golangci.yml,renovate.json` | 逗號分隔的受保護檔案路徑 |
 
 ---
 
@@ -309,40 +339,77 @@ secrets:
 
 ---
 
-## 共用設定檔
+## 共用設定檔 (`configs/`)
 
-### codeqls/
+所有 sync 來源設定檔集中管理於 `configs/` 目錄：
 
-各 repo 的 CodeQL workflow 設定，以 `<repo-name>.yml` 命名。透過 `sync-codeql.yml` 同步到各 repo 的 `.github/workflows/codeql.yml`。
+| 檔案 | 同步目標 | 適用 |
+|------|----------|------|
+| `configs/codeqls/<repo>.yml` | `.github/workflows/codeql.yml` | Per-repo |
+| `configs/.commitlintrc.yml` | `.commitlintrc.yml` | All repos |
+| `configs/renovate.json` | `renovate.json` | All repos |
+| `configs/.golangci.yml` | `.golangci.yml` | Go repos |
+| `configs/.prettierrc.json` | `.prettierrc.json` | Web repos |
+| `configs/.prettierignore` | `.prettierignore` | Web repos |
+| `configs/eslint.config.js` | `eslint.config.js` | Web repos |
+| `configs/vitest.config.ts` | `vitest.config.ts` | Web repos |
+| `configs/knip.json` | `knip.json` | Web repos |
+| `configs/lighthouserc.json` | `lighthouserc.json` | Web repos |
 
-## Consumer Repo 典型設定
+---
 
-新增 repo 時，從 `templates/` 複製所需的 workflow 檔案到 `.github/workflows/`：
+## 專案模板
 
-| 模板 | 說明 | 必須修改 |
-|------|------|----------|
-| `ci.yml` | 持續整合 (lint, security, vulncheck, test) | 公開 repo 移除 secrets |
-| `release.yml` | 正式發布 (Go binary + Docker image) | `project_name`, `binary`, `image_name` |
-| `snapshot.yml` | 預覽建置 | 與 release.yml 保持一致 |
-| `codeql.yml` | CodeQL 靜態安全分析 | 公開 repo 移除 secrets |
-| `notify.yml` | Google Chat 通知 | — |
-| `release-please.yml` | 自動版本管理 | — |
+### golang-templates/ — Go 專案
 
-新增 repo 後，還需：
-1. 更新 meta `cron.yml` 的 `env.REPOS` 清單，以納入 sync-codeql
-2. 新增 `codeqls/<repo-name>.yml`，設定該 repo 的 CodeQL workflow
-3. 新增 `renovate.json`，引用 `github>nics-dp/meta:renovate-preset`
+適用於 Go service、CLI、library 專案。詳見 [`golang-templates/.github/README.md`](golang-templates/.github/README.md)。
+
+包含: CI, release, snapshot, codeql, notify, release-please workflows + `.golangci.yml`
+
+### web-templates/ — Web 專案
+
+適用於 React + Vite + TypeScript + Bun 專案。詳見 [`web-templates/.github/README.md`](web-templates/.github/README.md)。
+
+包含: CI (eslint, typecheck, build, audit, vitest, prettier, trivy-license), codeql, notify, release-please workflows + eslint, prettier, vitest, knip, lighthouse configs
+
+---
+
+## Consumer Repo 新增步驟
+
+### Go 專案
+
+1. 從 `golang-templates/.github/` 複製 workflows
+2. 從 `configs/` 複製 `.golangci.yml`、`.commitlintrc.yml`、`renovate.json`
+3. 替換 `TODO` 標記 (`project_name`, `binary`, `image_name`)
+4. 新增 `configs/codeqls/<repo-name>.yml`，設定 CodeQL workflow
+5. 更新 `cron.yml` 的 repo 清單 (`CODEQL_REPOS`, `GO_REPOS`, `ALL_REPOS`)
+6. 確認 repo secrets: `GH_PAT_READ_NICSDP`, `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN`
+
+### Web 專案
+
+1. 從 `web-templates/.github/` 複製 workflows
+2. 從 `configs/` 複製所有 web 設定檔 (`.prettierrc.json`, `.prettierignore`, `eslint.config.js`, `vitest.config.ts`, `knip.json`, `lighthouserc.json`, `.commitlintrc.yml`, `renovate.json`)
+3. 安裝 devDependencies (見 `web-templates/.github/README.md`)
+4. 新增 `configs/codeqls/<repo-name>.yml` (使用 `javascript-typescript` language)
+5. 更新 `cron.yml` 的 repo 清單 (`CODEQL_REPOS`, `WEB_REPOS`, `ALL_REPOS`)
+6. 確認 repo secrets: `GH_PAT_READ_NICSDP`
 
 ---
 
 ## Consumer Repo 前提條件
 
-Consumer repo 需要具備以下條件才能正確使用 meta reusable workflows：
+### Go repos
 
 1. **mise.toml** — 定義 `prepare`, `lint`, `security`, `test`, `vulncheck`, `report` tasks
 2. **coverage.out** — `mise run test` 需產出此檔案 (go-test.yml 預期此路徑)
 3. **Go module** — go.mod 存在且版本正確
-4. **Private module access** — `GH_PAT_READ_NICSDP` secret 已設定 (存取 nics-dp 私有 repos)
+4. **Private module access** — `GH_PAT_READ_NICSDP` secret 已設定
+
+### Web repos
+
+1. **bun.lock** — 使用 Bun 作為 package manager
+2. **package.json scripts** — 需包含 `lint`, `typecheck`, `build`, `test:coverage`, `format:check`
+3. **Private access** — `GH_PAT_READ_NICSDP` secret 已設定 (用於 release-please)
 
 ## 相關文件
 

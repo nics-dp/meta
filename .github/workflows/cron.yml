@@ -10,24 +10,158 @@ on:
 permissions: {}
 
 env:
-  REPOS: '["dcf-platform","dcf-access","dcf-service","dcf-access-cli","dcf-platform-cli","dcf-access-web","dcf-platform-web","libdcf","otel-bundle","test-repo","ZenQuery"]'
+  # All DCF repos (commitlintrc, renovate)
+  ALL_REPOS: '["dcf-platform","dcf-access","dcf-service","dcf-access-cli","dcf-platform-cli","dcf-access-web","dcf-platform-web","libdcf","otel-bundle","test-repo","ZenQuery","patroni"]'
+  # Go repos only (golangci-lint)
+  GO_REPOS: '["dcf-platform","dcf-access","dcf-service","dcf-access-cli","dcf-platform-cli","libdcf","otel-bundle","test-repo","ZenQuery"]'
+  # Web repos only (prettier, eslint, vitest, knip, lighthouserc)
+  WEB_REPOS: '["dcf-access-web","dcf-platform-web"]'
+  # Repos with per-repo CodeQL configs in configs/codeqls/
+  CODEQL_REPOS: '["dcf-platform","dcf-access","dcf-service","dcf-access-cli","dcf-platform-cli","dcf-access-web","dcf-platform-web","libdcf","otel-bundle","test-repo","ZenQuery"]'
 
 jobs:
   setup:
     runs-on: ubuntu-latest
     outputs:
-      repos: ${{ steps.repos.outputs.list }}
+      all_repos: ${{ steps.repos.outputs.all }}
+      go_repos: ${{ steps.repos.outputs.go }}
+      web_repos: ${{ steps.repos.outputs.web }}
+      codeql_repos: ${{ steps.repos.outputs.codeql }}
     steps:
       - id: repos
-        run: echo "list=$REPOS" >> "$GITHUB_OUTPUT"
+        run: |
+          echo "all=$ALL_REPOS" >> "$GITHUB_OUTPUT"
+          echo "go=$GO_REPOS" >> "$GITHUB_OUTPUT"
+          echo "web=$WEB_REPOS" >> "$GITHUB_OUTPUT"
+          echo "codeql=$CODEQL_REPOS" >> "$GITHUB_OUTPUT"
 
   sync-codeql:
     needs: setup
     strategy:
       fail-fast: false
       matrix:
-        repo: ${{ fromJSON(needs.setup.outputs.repos) }}
+        repo: ${{ fromJSON(needs.setup.outputs.codeql_repos) }}
     uses: ./.github/workflows/sync-codeql.yml
+    permissions:
+      contents: write
+      pull-requests: write
+    with:
+      repo_name: ${{ matrix.repo }}
+    secrets:
+      gh_token: ${{ secrets.GH_PAT_READ_NICSDP }}
+
+  sync-commitlintrc:
+    needs: setup
+    strategy:
+      fail-fast: false
+      matrix:
+        repo: ${{ fromJSON(needs.setup.outputs.all_repos) }}
+    uses: ./.github/workflows/sync-commitlintrc.yml
+    permissions:
+      contents: write
+      pull-requests: write
+    with:
+      repo_name: ${{ matrix.repo }}
+    secrets:
+      gh_token: ${{ secrets.GH_PAT_READ_NICSDP }}
+
+  sync-renovate:
+    needs: setup
+    strategy:
+      fail-fast: false
+      matrix:
+        repo: ${{ fromJSON(needs.setup.outputs.all_repos) }}
+    uses: ./.github/workflows/sync-renovate.yml
+    permissions:
+      contents: write
+      pull-requests: write
+    with:
+      repo_name: ${{ matrix.repo }}
+    secrets:
+      gh_token: ${{ secrets.GH_PAT_READ_NICSDP }}
+
+  sync-golangci:
+    needs: setup
+    strategy:
+      fail-fast: false
+      matrix:
+        repo: ${{ fromJSON(needs.setup.outputs.go_repos) }}
+    uses: ./.github/workflows/sync-golangci.yml
+    permissions:
+      contents: write
+      pull-requests: write
+    with:
+      repo_name: ${{ matrix.repo }}
+    secrets:
+      gh_token: ${{ secrets.GH_PAT_READ_NICSDP }}
+
+  sync-prettier:
+    needs: setup
+    strategy:
+      fail-fast: false
+      matrix:
+        repo: ${{ fromJSON(needs.setup.outputs.web_repos) }}
+    uses: ./.github/workflows/sync-prettier.yml
+    permissions:
+      contents: write
+      pull-requests: write
+    with:
+      repo_name: ${{ matrix.repo }}
+    secrets:
+      gh_token: ${{ secrets.GH_PAT_READ_NICSDP }}
+
+  sync-eslint-config:
+    needs: setup
+    strategy:
+      fail-fast: false
+      matrix:
+        repo: ${{ fromJSON(needs.setup.outputs.web_repos) }}
+    uses: ./.github/workflows/sync-eslint-config.yml
+    permissions:
+      contents: write
+      pull-requests: write
+    with:
+      repo_name: ${{ matrix.repo }}
+    secrets:
+      gh_token: ${{ secrets.GH_PAT_READ_NICSDP }}
+
+  sync-vitest-config:
+    needs: setup
+    strategy:
+      fail-fast: false
+      matrix:
+        repo: ${{ fromJSON(needs.setup.outputs.web_repos) }}
+    uses: ./.github/workflows/sync-vitest-config.yml
+    permissions:
+      contents: write
+      pull-requests: write
+    with:
+      repo_name: ${{ matrix.repo }}
+    secrets:
+      gh_token: ${{ secrets.GH_PAT_READ_NICSDP }}
+
+  sync-knip:
+    needs: setup
+    strategy:
+      fail-fast: false
+      matrix:
+        repo: ${{ fromJSON(needs.setup.outputs.web_repos) }}
+    uses: ./.github/workflows/sync-knip.yml
+    permissions:
+      contents: write
+      pull-requests: write
+    with:
+      repo_name: ${{ matrix.repo }}
+    secrets:
+      gh_token: ${{ secrets.GH_PAT_READ_NICSDP }}
+
+  sync-lighthouserc:
+    needs: setup
+    strategy:
+      fail-fast: false
+      matrix:
+        repo: ${{ fromJSON(needs.setup.outputs.web_repos) }}
+    uses: ./.github/workflows/sync-lighthouserc.yml
     permissions:
       contents: write
       pull-requests: write
