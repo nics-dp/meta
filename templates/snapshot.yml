@@ -61,6 +61,7 @@ jobs:
       sbom: false
       provenance: false
       attest: false
+      snapshot: true
       ref: ${{ github.event.workflow_run.head_sha || '' }}
     secrets:
       dockerhub_username: ${{ secrets.DOCKERHUB_USERNAME }}

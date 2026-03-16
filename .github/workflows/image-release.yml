@@ -54,6 +54,11 @@ on:
         type: boolean
         default: true
         description: "Sign container images with cosign (keyless)"
+      snapshot:
+        required: false
+        type: boolean
+        default: false
+        description: "Snapshot mode: use SHA-based tags only (no semver, no latest)"
       ref:
         required: false
         type: string
@@ -116,19 +121,17 @@ jobs:
           ENV_FILE: ${{ inputs.env_file }}
         run: |
           # Only export valid KEY=VALUE lines (shell-safe keys, skip invalid lines)
+          DELIM="ENV_ARGS_EOF_${RANDOM}${RANDOM}"
+          echo "build_args<<${DELIM}" >> "$GITHUB_OUTPUT"
           while IFS= read -r line || [[ -n "$line" ]]; do
             line="${line%$'\r'}"
             [[ -z "$line" || "$line" =~ ^[[:space:]]*# ]] && continue
             if [[ "$line" =~ ^([A-Za-z_][A-Za-z0-9_]*)=(.*) ]]; then
               echo "${BASH_REMATCH[1]}=${BASH_REMATCH[2]}" >> "$GITHUB_ENV"
+              echo "${BASH_REMATCH[1]}=${BASH_REMATCH[2]}" >> "$GITHUB_OUTPUT"
             fi
           done < "$ENV_FILE"
-          DELIM="ENV_$(openssl rand -hex 8)"
-          {
-            echo "build_args<<${DELIM}"
-            grep -v '^\s*#' "$ENV_FILE" | grep -v '^\s*$'
-            echo "${DELIM}"
-          } >> "$GITHUB_OUTPUT"
+          echo "${DELIM}" >> "$GITHUB_OUTPUT"
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@ce360397dd3f832beb865e1373c09c0e9f86d70a # v4.0.0
@@ -144,13 +147,9 @@ jobs:
             ${{ env.REGISTRY_DH }}/${{ env.DH_NAMESPACE }}/${{ env.IMAGE_NAME }}
             ${{ env.REGISTRY_GHCR }}/${{ env.GHCR_NAMESPACE }}/${{ env.IMAGE_NAME }}
           tags: |
-            type=ref,event=branch
-            type=ref,event=pr
-            type=semver,pattern={{raw}}
-            type=semver,pattern=v{{major}}.{{minor}}
-            type=semver,pattern=v{{major}}
+            ${{ inputs.snapshot && format('type=sha,prefix=,format=short{0}type=sha,prefix=,format=long', '\n') || format('type=ref,event=branch{0}type=ref,event=pr{0}type=semver,pattern={{{{raw}}}}{0}type=semver,pattern=v{{{{major}}}}.{{{{minor}}}}{0}type=semver,pattern=v{{{{major}}}}', '\n') }}
           flavor: |
-            latest=auto
+            latest=${{ !inputs.snapshot && 'auto' || 'false' }}
 
       - name: Build and push
         id: build-and-push
