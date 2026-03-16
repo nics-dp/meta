@@ -79,6 +79,20 @@ secrets:
 
 ---
 
+### go-semgrep.yml — Semgrep 靜態分析 (Go)
+
+使用 Semgrep 對 Go 程式碼進行靜態安全掃描。
+
+```yaml
+uses: nics-dp/meta/.github/workflows/go-semgrep.yml@main
+```
+
+| 參數 | 類型 | 預設值 | 說明 |
+|------|------|--------|------|
+| `config` | string | `p/golang` | Semgrep config/ruleset (空格分隔，支援多組) |
+
+---
+
 ### go-test.yml — 單元測試
 
 執行 `mise run test`，可選產出覆蓋率報告。
@@ -234,6 +248,20 @@ uses: nics-dp/meta/.github/workflows/bun-bundle-size.yml@main
 |------|------|--------|------|
 | `task` | string | `bundle-size` | `mise` task 名稱 |
 | `build_command` | string | `""` | 選用，直接覆寫 shell 指令 |
+
+---
+
+### bun-semgrep.yml — Semgrep 靜態分析 (Web)
+
+使用 Semgrep 對 JavaScript/TypeScript 程式碼進行靜態安全掃描。
+
+```yaml
+uses: nics-dp/meta/.github/workflows/bun-semgrep.yml@main
+```
+
+| 參數 | 類型 | 預設值 | 說明 |
+|------|------|--------|------|
+| `config` | string | `p/javascript p/typescript` | Semgrep config/ruleset (空格分隔，支援多組) |
 
 ---
 
@@ -426,6 +454,27 @@ secrets:
 
 ## Utility Workflows
 
+### artifacts-comment.yml — PR Artifacts 留言
+
+列出當前 workflow run 的所有 build artifacts，以 sticky comment 回覆到 PR，提供 [nightly.link](https://nightly.link) 下載連結。
+
+```yaml
+uses: nics-dp/meta/.github/workflows/artifacts-comment.yml@main
+permissions:
+  actions: read
+  pull-requests: write
+```
+
+| 參數 | 類型 | 預設值 | 說明 |
+|------|------|--------|------|
+| `pr_number` | number | `0` | PR 編號 (自動偵測 `pull_request` / `workflow_run` 事件) |
+
+支援兩種情境：
+- **`pull_request` 觸發的 workflow** — 自動偵測 PR 編號
+- **`workflow_run` 觸發的 workflow** (如 snapshot) — 從 `workflow_run.pull_requests` 自動偵測
+
+---
+
 ### notify-gchat.yml — Google Chat 通知
 
 發送 Google Chat 卡片通知。
@@ -510,13 +559,13 @@ secrets:
 
 適用於 Go service、CLI、library 專案。詳見 [`golang-templates/.github/README.md`](golang-templates/.github/README.md)。
 
-包含: CI, release, snapshot, codeql, notify, release-please workflows + `.golangci.yml`
+包含: CI (lint, sec, vulncheck, semgrep, test), release, snapshot, codeql, notify, release-please workflows + `.golangci.yml`
 
 ### web-templates/ — Web 專案
 
 適用於 React + Vite + TypeScript + Bun 專案。包含 workflow templates 與 `mise.toml`。詳見 [`web-templates/.github/README.md`](web-templates/.github/README.md)。
 
-包含: CI (eslint, typecheck, build, audit, vitest, prettier, trivy-license), codeql, notify, release-please workflows + `mise.toml` + eslint, prettier, vitest, knip, lighthouse configs
+包含: CI (eslint, typecheck, build, audit, vitest, prettier, semgrep, trivy-license), codeql, notify, release-please workflows + `mise.toml` + eslint, prettier, vitest, knip, lighthouse configs
 
 ---
 

@@ -7,10 +7,10 @@ All workflows call reusable workflows from `nics-dp/meta`.
 
 | File | Purpose | Triggers |
 |---|---|---|
-| `ci.yml` | Lint, security scan, vulnerability check, test, Dockerfile lint | push, PR, manual |
+| `ci.yml` | Lint, security scan, vulnerability check, Semgrep, test, Dockerfile lint | push, PR, manual |
 | `release-please.yml` | Auto-create Release PR with changelog, then GitHub Release | push to main/release |
 | `release.yml` | Build Go binaries, Docker image, SBOMs, sign artifacts | release created |
-| `snapshot.yml` | Build snapshot artifacts on PR (no publish) | CI success on PR, manual |
+| `snapshot.yml` | Build snapshot artifacts on PR, post artifact links via `artifacts-comment` | CI success on PR, manual |
 | `codeql.yml` | CodeQL security analysis (Go + Actions) | push, PR, weekly, manual |
 | `notify.yml` | Google Chat notifications for PR/push/release/issue/CI events | various |
 
@@ -38,7 +38,7 @@ All workflows call reusable workflows from `nics-dp/meta`.
    **CLI repo** (Go binary only):
    - `ci.yml`: remove `hadolint` and `trivy-iac` jobs, remove `security-events: write`
    - `release.yml`: remove `image-build` and `sbom-image` jobs
-   - `snapshot.yml`: remove `image-build` job, change `notify-pr` needs to `[go-release]`
+   - `snapshot.yml`: remove `image-build` job, change `artifacts-comment` needs to `[go-release]`
 
    **Library** (no binary, no Docker):
    - `ci.yml`: remove `hadolint` and `trivy-iac` jobs, remove `security-events: write`
