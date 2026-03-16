@@ -34,7 +34,7 @@ jobs:
           check-latest: true
       - run: |
           git config --global url."https://${{ secrets.gh_pat }}@github.com/nics-dp".insteadOf "https://github.com/nics-dp"
-        if: env.GH_PAT != null
+        if: env.GH_PAT != ''
       - run: go install golang.org/x/vuln/cmd/govulncheck@master
       - run: go mod tidy
       - run: govulncheck ./...
@@ -52,7 +52,7 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - run: |
           git config --global url."https://${{ secrets.gh_pat }}@github.com/nics-dp".insteadOf "https://github.com/nics-dp"
-        if: env.GH_PAT != null
+        if: env.GH_PAT != ''
       - name: Install Go
         uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v6.3.0
         with:

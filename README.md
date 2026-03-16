@@ -8,7 +8,7 @@ nics-dp 組織的共用設定與 CI/CD 基礎設施 repo。本 repo 不包含可
 |-----------|------|
 | `.github/workflows/` | Reusable GitHub Actions workflows |
 | `codeqls/` | 各 repo 的 CodeQL workflow 設定 (`<repo-name>.yml`) |
-| `templates/` | 新專案模板 (workflows + `.golangci.yml` + `.commitlintrc.yml`) |
+| `templates/` | 新專案模板 (workflow templates) |
 | `renovate-preset.json` | Org-level Renovate 設定 preset |
 
 ## 如何引用 Reusable Workflows
@@ -307,7 +307,6 @@ secrets:
 
 | 模板 | 說明 | 必須修改 |
 |------|------|----------|
-| `.golangci.yml` | 共用 golangci-lint v2 設定 | 直接複製到 repo 根目錄 |
 | `ci.yml` | 持續整合 (lint, security, vulncheck, test) | 公開 repo 移除 secrets |
 | `release.yml` | 正式發布 (Go binary + Docker image) | `project_name`, `binary`, `image_name` |
 | `snapshot.yml` | 預覽建置 | 與 release.yml 保持一致 |
@@ -315,7 +314,6 @@ secrets:
 | `cd.yml` | 自動部署 (Dokploy) | 僅 service repos |
 | `notify.yml` | Google Chat 通知 | — |
 | `release-please.yml` | 自動版本管理 | — |
-| `.commitlintrc.yml` | Commitlint 設定 | 直接複製到 repo 根目錄 |
 
 新增 repo 後，還需：
 1. 更新 meta `cron.yml` 的 `env.REPOS` 清單，以納入 sync-codeql
