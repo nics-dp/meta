@@ -97,7 +97,8 @@ jobs:
         if: matrix.language == 'go' && inputs.go_install_tools != ''
         env:
           GO_INSTALL_TOOLS: ${{ inputs.go_install_tools }}
-        run: $GO_INSTALL_TOOLS
+        run: |
+          bash -lc "$GO_INSTALL_TOOLS"
 
       - name: Manual Go build for CodeQL
         if: matrix.language == 'go'

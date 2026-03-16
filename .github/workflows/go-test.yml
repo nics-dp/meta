@@ -67,7 +67,8 @@ jobs:
       - name: Run unit tests
         env:
           TEST_COMMAND: ${{ inputs.test_command }}
-        run: $TEST_COMMAND
+        run: |
+          bash -lc "$TEST_COMMAND"
 
       - name: Upload coverage artifact
         if: inputs.run_report
@@ -116,7 +117,8 @@ jobs:
       - name: Generate report
         env:
           REPORT_COMMAND: ${{ inputs.report_command }}
-        run: $REPORT_COMMAND
+        run: |
+          bash -lc "$REPORT_COMMAND"
 
       - name: Upload reports
         id: upload-reports

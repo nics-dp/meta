@@ -108,7 +108,17 @@ secrets:
 
 私有 repo 可設定 `GH_PAT_READ_NICSDP` 以存取 private modules / private repositories；未設定時，CodeQL 仍會執行，但不會傳 `external-repository-token`，也不會啟用 private module access 設定。
 
-> **注意:** `.github/workflows/codeql.yml` (reusable workflow) 仍保留但已不被 consumer repos 使用。
+> **注意:** `.github/workflows/codeql.yml` (reusable workflow) 仍保留供特殊場景使用，但建議優先使用 `codeqls/` per-repo configs。
+
+#### codeql.yml reusable workflow 參數
+
+| 參數 | 類型 | 預設值 | 說明 |
+|------|------|--------|------|
+| `languages` | string | `[{"language":"actions","build-mode":"none"},{"language":"go","build-mode":"manual"}]` | JSON array of `{language, build-mode}` objects |
+| `go_build_commands` | string | `go mod download && go build ./...` | Go build 指令 (支援多行) |
+| `go_install_tools` | string | `""` | Build 前安裝工具的指令 (支援多行) |
+| `go_cgo_enabled` | boolean | `false` | 啟用 CGO |
+| `go_install_system_deps` | boolean | `false` | 安裝 `build-essential` 和 `pkg-config` |
 
 ---
 
