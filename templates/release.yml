@@ -35,6 +35,7 @@ jobs:
       project_name: TODO        # TODO: 專案名稱 (例如 dcf-platform)
       binary: "TODO:./cmd/TODO" # TODO: Binary 建置清單 (例如 "platform:./cmd/platform")
       # cgo_enabled: true       # 取消註解以啟用 CGO (service repos 需要)
+      # platforms: linux/amd64,linux/arm64 # 啟用 CGO 時，請同時覆寫 platforms 僅建置 Linux (或調整 go-release workflow 的 runners)
     secrets:
       gh_pat: ${{ secrets.GH_PAT_READ_NICSDP }}
 
