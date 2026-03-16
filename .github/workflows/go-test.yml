@@ -68,7 +68,7 @@ jobs:
         env:
           TEST_COMMAND: ${{ inputs.test_command }}
         run: |
-          bash -lc "$TEST_COMMAND"
+          bash -euo pipefail -lc "$TEST_COMMAND"
 
       - name: Upload coverage artifact
         if: inputs.run_report
@@ -118,7 +118,7 @@ jobs:
         env:
           REPORT_COMMAND: ${{ inputs.report_command }}
         run: |
-          bash -lc "$REPORT_COMMAND"
+          bash -euo pipefail -lc "$REPORT_COMMAND"
 
       - name: Upload reports
         id: upload-reports

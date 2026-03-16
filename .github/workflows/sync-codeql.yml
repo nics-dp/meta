@@ -28,6 +28,15 @@ jobs:
   sync:
     runs-on: ubuntu-latest
     steps:
+      - name: Validate repo_name
+        env:
+          REPO_NAME: ${{ inputs.repo_name }}
+        run: |
+          if [[ ! "$REPO_NAME" =~ ^[a-zA-Z0-9._-]+$ ]]; then
+            echo "::error::Invalid repo_name: must contain only alphanumeric, dot, hyphen, or underscore characters"
+            exit 1
+          fi
+
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           repository: ${{ github.repository_owner }}/${{ inputs.repo_name }}

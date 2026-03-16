@@ -95,7 +95,7 @@ jobs:
         env:
           GO_INSTALL_TOOLS: ${{ inputs.go_install_tools }}
         run: |
-          bash -lc "$GO_INSTALL_TOOLS"
+          bash -euo pipefail -lc "$GO_INSTALL_TOOLS"
 
       - name: Manual Go build for CodeQL
         if: matrix.language == 'go'
@@ -104,7 +104,7 @@ jobs:
           GOOS: linux
           GO_BUILD_COMMANDS: ${{ inputs.go_build_commands }}
         run: |
-          bash -lc "$GO_BUILD_COMMANDS"
+          bash -euo pipefail -lc "$GO_BUILD_COMMANDS"
 
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@fb0994ef1c058010acf1efccff928b0a83b1ed54 # v4.32.6
