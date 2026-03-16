@@ -36,6 +36,8 @@ jobs:
       project_name: TODO        # TODO: 與 release.yml 一致
       binary: "TODO:./cmd/TODO" # TODO: 與 release.yml 一致
       # cgo_enabled: true       # TODO: 與 release.yml 一致
+      #                         # 注意: 若啟用 CGO，請同時在 release.yml / snapshot.yml 覆寫 `platforms`
+      #                         # (或改用僅支援 Linux 的 runners)，以避免 darwin/windows 目標的 CGO cross-compilation 失敗
       snapshot: true
       ref: ${{ github.event.workflow_run.head_sha || '' }}
     secrets:
