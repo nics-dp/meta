@@ -30,7 +30,7 @@ on:
       runs_on:
         required: false
         type: string
-        default: '{"group":"releasers"}'
+        default: '"ubuntu-latest"'
         description: 'Runner as JSON (e.g., ''"ubuntu-latest"'' or ''{"group":"releasers"}'')'
 
 env:

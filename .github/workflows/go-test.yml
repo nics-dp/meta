@@ -93,6 +93,7 @@ jobs:
         with:
           cache: true
           experimental: true
+          log_level: "info"
 
       - name: Prepare environment
         run: mise run prepare

@@ -232,7 +232,7 @@ uses: nics-dp/meta/.github/workflows/bun-lighthouse.yml@main
 | 參數 | 類型 | 預設值 | 說明 |
 |------|------|--------|------|
 | `task` | string | `lighthouse` | `mise` task 名稱 |
-| `build_command` | string | `""` | 選用，直接覆寫 shell 指令 |
+| `command` | string | `""` | 選用，直接覆寫 shell 指令 |
 
 ---
 
@@ -247,7 +247,7 @@ uses: nics-dp/meta/.github/workflows/bun-bundle-size.yml@main
 | 參數 | 類型 | 預設值 | 說明 |
 |------|------|--------|------|
 | `task` | string | `bundle-size` | `mise` task 名稱 |
-| `build_command` | string | `""` | 選用，直接覆寫 shell 指令 |
+| `command` | string | `""` | 選用，直接覆寫 shell 指令 |
 
 ---
 
