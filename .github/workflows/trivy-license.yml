@@ -67,33 +67,54 @@ jobs:
           output: trivy-license.json
           exit-code: "0"
 
-      - name: Write results to summary
+      - name: Generate license summary
+        id: summary
+        env:
+          ARTIFACT_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
+          TOTAL=$(jq '[.Results[]? | .Licenses // [] | length] | add // 0' trivy-license.json)
+
+          # Build summary table
           {
             echo "## License Check"
             echo ""
-            echo '```'
-            cat trivy-license-table.txt
-            echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"
+            if [ "$TOTAL" -eq 0 ]; then
+              echo "No licenses found."
+            else
+              jq -r '
+                [.Results[]? | .Licenses // [] | .[].Name] | group_by(.) |
+                map({name: .[0], count: length}) | sort_by(.name) |
+                ["| License | Count |", "|---------|-------|"] +
+                map("| \(.name) | \(.count) |") +
+                ["| **Total** | **\(map(.count) | add)** |"] |
+                .[]
+              ' trivy-license.json
+            fi
+          } | tee license-summary.md >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Build PR comment body
-        if: github.event_name == 'pull_request'
-        id: comment
-        run: |
+          # Build PR comment body (summary + artifact link)
           {
             echo 'body<<TRIVY_LICENSE_EOF'
-            echo '## License Check'
-            echo ''
-            echo '```'
-            cat trivy-license-table.txt
-            echo '```'
+            cat license-summary.md
+            if [ "$TOTAL" -gt 0 ]; then
+              echo ''
+              echo "Full license table available in the [trivy-license-report artifact](${ARTIFACT_URL})."
+            fi
             echo 'TRIVY_LICENSE_EOF'
           } >> "$GITHUB_OUTPUT"
+
+      - name: Upload license report
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: trivy-license-report
+          path: |
+            trivy-license-table.txt
+            trivy-license.json
+          retention-days: 90
 
       - name: Post sticky PR comment
         if: github.event_name == 'pull_request'
         uses: marocchino/sticky-pull-request-comment@70d2764d1a7d5d9560b100cbea0077fc8f633987 # v3.0.2
         with:
           header: trivy-license
-          message: ${{ steps.comment.outputs.body }}
+          message: ${{ steps.summary.outputs.body }}

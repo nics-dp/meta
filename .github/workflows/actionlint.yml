@@ -7,8 +7,8 @@ on:
       actionlint-version:
         required: false
         type: string
-        default: "latest"
-        description: "actionlint version tag (e.g., v1.7.7) or 'latest'"
+        default: "v1.7.11"
+        description: "actionlint version tag (e.g., v1.7.11)"
 
 permissions:
   contents: read
@@ -35,11 +35,9 @@ jobs:
         if: github.event_name != 'pull_request'
         shell: bash
         env:
+          GH_TOKEN: ${{ github.token }}
           ACTIONLINT_VERSION: ${{ inputs.actionlint-version }}
         run: |
-          if [ "$ACTIONLINT_VERSION" = "latest" ]; then
-            ACTIONLINT_VERSION=$(gh api repos/rhysd/actionlint/releases/latest --jq '.tag_name')
-          fi
           gh release download "$ACTIONLINT_VERSION" -R rhysd/actionlint -p "actionlint_*_linux_amd64.tar.gz" -O actionlint.tar.gz
           tar xzf actionlint.tar.gz actionlint
           failed=false

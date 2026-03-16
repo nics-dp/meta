@@ -1,0 +1,58 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended"
+  ],
+  "schedule": ["before 7am on Monday"],
+  "timezone": "Asia/Taipei",
+  "labels": ["dependencies"],
+  "packageRules": [
+    {
+      "description": "Group Go module updates",
+      "matchManagers": ["gomod"],
+      "groupName": "go modules",
+      "commitMessageTopic": "Go dependencies",
+      "semanticCommitType": "chore",
+      "semanticCommitScope": "go.deps"
+    },
+    {
+      "description": "Group GitHub Actions updates",
+      "matchManagers": ["github-actions"],
+      "groupName": "github actions",
+      "commitMessageTopic": "GitHub Actions dependencies",
+      "semanticCommitType": "chore",
+      "semanticCommitScope": "ci.deps"
+    },
+    {
+      "description": "Group Docker updates",
+      "matchManagers": ["dockerfile"],
+      "groupName": "docker",
+      "commitMessageTopic": "Docker dependencies",
+      "semanticCommitType": "chore",
+      "semanticCommitScope": "docker.deps"
+    },
+    {
+      "description": "Group npm updates",
+      "matchManagers": ["npm"],
+      "groupName": "npm",
+      "commitMessageTopic": "npm dependencies",
+      "semanticCommitType": "chore",
+      "semanticCommitScope": "npm.deps"
+    },
+    {
+      "description": "Automerge patch updates",
+      "matchUpdateTypes": ["patch"],
+      "automerge": true
+    }
+  ],
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "Update actionlint version in reusable workflow",
+      "fileMatch": ["^\\.github/workflows/actionlint\\.yml$"],
+      "matchStrings": ["default:\\s*\"(?<currentValue>v\\d+\\.\\d+\\.\\d+)\"\\s*\\n\\s*description:\\s*\"actionlint version"],
+      "depNameTemplate": "rhysd/actionlint",
+      "datasourceTemplate": "github-releases"
+    }
+  ]
+}
