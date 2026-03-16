@@ -83,8 +83,6 @@ jobs:
           GOOS: linux
         run: |
           go mod download
-          go mod tidy
-          go list ./...
           go build ./...
 
       - name: Perform CodeQL Analysis

@@ -15,9 +15,6 @@ on:
         type: string
         default: |
           go mod download
-          go mod tidy
-          go mod vendor
-          go list ./...
           go build ./...
         description: "Shell commands to build Go code for CodeQL analysis"
       go_install_tools:
