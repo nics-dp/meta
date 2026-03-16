@@ -3,7 +3,7 @@
 # 標準 Notify workflow 模板 (Google Chat)
 #
 # 使用方式: 複製到新 repo 的 .github/workflows/notify.yml
-# 必要 Secrets: GOOGLE_CHAT_WEBHOOK
+# 選用 Secrets: GOOGLE_CHAT_WEBHOOK (未設定時 notify-gchat 會自動跳過)
 
 name: notify
 
