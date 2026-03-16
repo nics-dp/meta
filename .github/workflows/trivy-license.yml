@@ -1,0 +1,120 @@
+# yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
+
+name: License Check
+
+on:
+  workflow_call:
+    inputs:
+      go_private_full:
+        required: false
+        type: boolean
+        default: true
+        description: "Set GOPRIVATE/GONOSUMDB for repos importing nics-dp private modules"
+    secrets:
+      gh_pat:
+        required: false
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  license:
+    name: License Check
+    runs-on: ubuntu-latest
+    env:
+      GH_PAT: ${{ secrets.gh_pat }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Install mise
+        uses: jdx/mise-action@c1ecc8f748cd28cdeabf76dab3cccde4ce692fe4 # v4.0.0
+        with:
+          cache: true
+          experimental: true
+          log_level: "info"
+
+      - name: Prepare environment
+        run: mise run prepare
+
+      - name: Configure private git repository
+        if: env.GH_PAT != ''
+        env:
+          GO_PRIVATE_FULL: ${{ inputs.go_private_full }}
+        run: |
+          if [ "$GO_PRIVATE_FULL" = "true" ]; then
+            echo "GOPRIVATE=github.com/nics-dp" >> "$GITHUB_ENV"
+            echo "GONOSUMDB=github.com/nics-dp" >> "$GITHUB_ENV"
+            git config --global url."https://${GH_PAT}@github.com/".insteadOf "git@github.com:"
+          fi
+          git config --global url."https://${GH_PAT}@github.com/nics-dp".insteadOf "https://github.com/nics-dp"
+
+      - name: Run Trivy license scan (table)
+        uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # 0.35.0
+        with:
+          scan-type: fs
+          scanners: license
+          format: table
+          output: trivy-license-table.txt
+          exit-code: "0"
+
+      - name: Run Trivy license scan (JSON)
+        uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # 0.35.0
+        with:
+          scan-type: fs
+          scanners: license
+          format: json
+          output: trivy-license.json
+          exit-code: "0"
+
+      - name: Generate license summary
+        id: summary
+        env:
+          ARTIFACT_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          TOTAL=$(jq '[.Results[]? | .Licenses // [] | length] | add // 0' trivy-license.json)
+
+          # Build summary table
+          {
+            echo "## License Check"
+            echo ""
+            if [ "$TOTAL" -eq 0 ]; then
+              echo "No licenses found."
+            else
+              jq -r '
+                [.Results[]? | .Licenses // [] | .[].Name] | group_by(.) |
+                map({name: .[0], count: length}) | sort_by(.name) |
+                ["| License | Count |", "|---------|-------|"] +
+                map("| \(.name) | \(.count) |") +
+                ["| **Total** | **\(map(.count) | add)** |"] |
+                .[]
+              ' trivy-license.json
+            fi
+          } | tee license-summary.md >> "$GITHUB_STEP_SUMMARY"
+
+          # Build PR comment body (summary + artifact link)
+          {
+            echo 'body<<TRIVY_LICENSE_EOF'
+            cat license-summary.md
+            if [ "$TOTAL" -gt 0 ]; then
+              echo ''
+              echo "Full license table available in the [workflow run artifacts](${ARTIFACT_URL}#artifacts)."
+            fi
+            echo 'TRIVY_LICENSE_EOF'
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Upload license report
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: trivy-license-report
+          path: |
+            trivy-license-table.txt
+            trivy-license.json
+          retention-days: 90
+
+      - name: Post sticky PR comment
+        if: github.event_name == 'pull_request'
+        uses: marocchino/sticky-pull-request-comment@70d2764d1a7d5d9560b100cbea0077fc8f633987 # v3.0.2
+        with:
+          header: trivy-license
+          message: ${{ steps.summary.outputs.body }}
