@@ -26,6 +26,7 @@ on:
         required: false
         type: boolean
         default: false
+        description: "Enable CGO; when true, you must also override 'platforms' to Linux-only targets (e.g., linux/amd64,linux/arm64) to avoid unsupported cross-compilation for darwin/windows on Linux runners"
       go_env:
         required: false
         type: string
