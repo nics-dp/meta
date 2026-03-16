@@ -45,6 +45,16 @@ jobs:
           fetch-depth: 0
 
       - name: Initialize CodeQL
+        if: env.GH_PAT == ''
+        uses: github/codeql-action/init@fb0994ef1c058010acf1efccff928b0a83b1ed54 # v4.32.6
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build-mode }}
+          dependency-caching: true
+          queries: security-extended,security-and-quality
+
+      - name: Initialize CodeQL with private repo access
+        if: env.GH_PAT != ''
         uses: github/codeql-action/init@fb0994ef1c058010acf1efccff928b0a83b1ed54 # v4.32.6
         with:
           languages: ${{ matrix.language }}
