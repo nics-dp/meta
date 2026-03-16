@@ -10,6 +10,9 @@
     "GOPRIVATE": "github.com/nics-dp",
     "GONOSUMDB": "github.com/nics-dp"
   },
+  "github-actions": {
+    "managerFilePatterns": ["codeqls/**"]
+  },
   "packageRules": [
     {
       "description": "Group Go module updates",
