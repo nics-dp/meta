@@ -13,7 +13,7 @@ on:
         required: true
       GH_PAT_READ_NICSDP:
         required: false
-  workflow_dispatch:
+  workflow_dispatch: # requires repo-level GH_PAT_READ_NICSDP for cross-repo private access
     inputs:
       repo_name:
         description: The repository name, without the org prefix.
@@ -46,6 +46,7 @@ jobs:
         with:
           repository: ${{ github.repository_owner }}/${{ inputs.repo_name }}
           path: ${{ github.repository_owner }}/${{ inputs.repo_name }}
+          # Falls back to github.token on workflow_dispatch, which only works for same-org public repos
           token: ${{ secrets.gh_token || secrets.GH_PAT_READ_NICSDP || github.token }}
 
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2

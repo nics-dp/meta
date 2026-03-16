@@ -60,6 +60,7 @@ jobs:
     uses: nics-dp/meta/.github/workflows/bun-format-check.yml@main
 
   trivy-license:
+    # No gh_pat secret needed: web repos do not access private Go modules
     uses: nics-dp/meta/.github/workflows/trivy-license.yml@main
 
   semgrep:
