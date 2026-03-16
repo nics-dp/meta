@@ -54,6 +54,7 @@ jobs:
     permissions:
       contents: read
       packages: write
+      id-token: write
     with:
       image_name: TODO          # TODO: 與 release.yml 一致
       runs_on: '{"group":"releasers"}'

@@ -115,10 +115,13 @@ jobs:
         env:
           ENV_FILE: ${{ inputs.env_file }}
         run: |
-          # Only export simple KEY=VALUE lines (no multiline, no delimiters)
-          while IFS='=' read -r key value; do
-            [[ -z "$key" || "$key" =~ ^# ]] && continue
-            echo "${key}=${value}" >> "$GITHUB_ENV"
+          # Only export valid KEY=VALUE lines (shell-safe keys, skip invalid lines)
+          while IFS= read -r line || [[ -n "$line" ]]; do
+            line="${line%$'\r'}"
+            [[ -z "$line" || "$line" =~ ^[[:space:]]*# ]] && continue
+            if [[ "$line" =~ ^([A-Za-z_][A-Za-z0-9_]*)=(.*) ]]; then
+              echo "${BASH_REMATCH[1]}=${BASH_REMATCH[2]}" >> "$GITHUB_ENV"
+            fi
           done < "$ENV_FILE"
           DELIM="ENV_$(openssl rand -hex 8)"
           {
