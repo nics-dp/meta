@@ -34,7 +34,9 @@ All workflows call reusable workflows from `nics-dp/meta`, and CI tasks run thro
    cp configs/renovate.json <new-repo>/
    ```
 
-4. Optional configs (copy if enabling the corresponding CI job):
+4. Handle the jobs that are enabled in `ci.yml` by default:
+   - Keep the default jobs: copy the optional configs below so `knip`, `lighthouse`, and `bundle-size` can run.
+   - Slim down the template: remove or comment out those jobs in `.github/workflows/ci.yml` before the first CI run.
    ```
    cp configs/knip.json <new-repo>/
    cp configs/lighthouserc.json <new-repo>/
@@ -65,10 +67,10 @@ All workflows call reusable workflows from `nics-dp/meta`, and CI tasks run thro
    # 必備
    bun add -d prettier prettier-plugin-tailwindcss eslint-plugin-security
 
-   # 推薦 (test)
+   # 必備 (預設 ci.yml 會跑 test)
    bun add -d vitest @testing-library/react @testing-library/jest-dom jsdom @vitest/coverage-v8
 
-   # 可選
+   # 若保留 ci.yml 內預設啟用的 optional jobs，這些也需要安裝
    bun add -d knip @lhci/cli @size-limit/preset-app size-limit
    ```
 
@@ -76,6 +78,7 @@ All workflows call reusable workflows from `nics-dp/meta`, and CI tasks run thro
    ```ts
    import '@testing-library/jest-dom/vitest'
    ```
+   This file is required by the default `vitest.config.ts`.
 
 ## CI Jobs
 
@@ -99,7 +102,9 @@ All workflows call reusable workflows from `nics-dp/meta`, and CI tasks run thro
 | `trivy-license` | `trivy-license.yml` | License compliance |
 | `semgrep` | `bun-semgrep.yml` | Semgrep static analysis (JS/TS) |
 
-### Optional (commented out by default, uncomment if needed)
+### Optional tools
+
+These jobs are currently enabled in the shipped `ci.yml`. If you don't want them, comment them out or remove them before the first CI run.
 
 | Job | Tool | What it checks |
 |---|---|---|
