@@ -11,7 +11,7 @@ on:
     secrets:
       gh_token:
         required: true
-  workflow_dispatch: # allows manual triggering
+  workflow_dispatch: # requires GH_PAT_READ_NICSDP in repo secrets for cross-repo access
     inputs:
       repo_name:
         description: The repository name, without the org prefix.

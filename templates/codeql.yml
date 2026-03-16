@@ -63,9 +63,9 @@ jobs:
           external-repository-token: ${{ env.GH_PAT }}
 
       - name: Configure access to private Go modules
-        if: matrix.language == 'go'
+        if: matrix.language == 'go' && env.GH_PAT != ''
         run: |
-          git config --global url."https://${{ env.GH_PAT }}@github.com".insteadOf "https://github.com"
+          git config --global url."https://${GH_PAT}@github.com".insteadOf "https://github.com"
           echo "GOPRIVATE=github.com/nics-dp" >> "$GITHUB_ENV"
 
       # TODO: 如需安裝額外 Go 工具 (e.g. swag)，在此新增步驟

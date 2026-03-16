@@ -74,6 +74,9 @@ jobs:
             BODY="${BODY}..."
           fi
 
+          # Validate extra_fields JSON, default to empty array on error
+          EXTRA_FIELDS=$(echo "$EXTRA_FIELDS" | jq -c 'if type == "array" then . else [] end' 2>/dev/null || echo '[]')
+
           # Build widgets array: Actor + Repository + extra_fields
           WIDGETS=$(jq -n \
             --arg actor "$ACTOR" \
