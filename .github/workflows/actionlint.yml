@@ -55,4 +55,6 @@ jobs:
               echo '✅ No issues found.'
             fi
           } >> "$GITHUB_STEP_SUMMARY"
-          [ "$failed" = "true" ] && exit 1 || true
+          if [ "$failed" = "true" ]; then
+            exit 1
+          fi
