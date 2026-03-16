@@ -31,6 +31,7 @@ on:
 
 permissions:
   contents: read
+  pull-requests: write
 
 jobs:
   test:
@@ -118,6 +119,7 @@ jobs:
         run: $REPORT_COMMAND
 
       - name: Upload reports
+        id: upload-reports
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
           name: reports
@@ -125,3 +127,28 @@ jobs:
             coverage.html
             coverage.md
             gosec-report.json
+
+      - name: Coverage summary
+        if: github.event_name == 'pull_request'
+        id: coverage-summary
+        run: |
+          TOTAL=$(go tool cover -func=coverage.out | tail -1 | awk '{print $NF}')
+          {
+            echo "## Test Coverage: ${TOTAL}"
+            echo ""
+            echo "📦 [Full Report](${{ steps.upload-reports.outputs.artifact-url }})"
+          } >> "$GITHUB_STEP_SUMMARY"
+          {
+            echo 'message<<EOF'
+            echo "## Test Coverage: ${TOTAL}"
+            echo ""
+            echo "📦 [Full Report](${{ steps.upload-reports.outputs.artifact-url }})"
+            echo 'EOF'
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Post PR comment
+        if: github.event_name == 'pull_request'
+        uses: marocchino/sticky-pull-request-comment@70d2764d1a7d5d9560b100cbea0077fc8f633987 # v3.0.2
+        with:
+          header: go-test-coverage
+          message: ${{ steps.coverage-summary.outputs.message }}
