@@ -1,13 +1,13 @@
 # yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
 #
-# 標準 Web CI workflow 模板
-# 適用於 React + Vite + TypeScript + Bun 專案
+# Web CI workflow template
+# React + Vite + TypeScript + Bun
 #
-# 使用方式: 複製到新 repo 的 .github/workflows/ci.yml
+# All jobs call reusable workflows from nics-dp/meta.
 #
-# 根據專案需求調整:
-# - 推薦 jobs (test, format-check, trivy-license): 建議啟用
-# - 可選 jobs (knip, lighthouse, bundle-size): 依需要取消註解
+# Adjust per project:
+# - Recommended jobs (test, format-check, trivy-license): keep enabled
+# - Optional jobs (knip, lighthouse, bundle-size): remove if not needed
 
 name: ci
 
@@ -35,98 +35,42 @@ jobs:
   commitlint:
     uses: nics-dp/meta/.github/workflows/commitlint.yml@main
 
-  # ─── 必備 ───
+  # --- Required ---
 
   lint:
-    name: ESLint
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: oven-sh/setup-bun@735343b667d3e6f658f44e0a0e05bf0299db72d5 # v2.0.3
-      - run: bun install --frozen-lockfile
-      - run: bun run lint
+    uses: nics-dp/meta/.github/workflows/bun-lint.yml@main
 
   typecheck:
-    name: TypeScript
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: oven-sh/setup-bun@735343b667d3e6f658f44e0a0e05bf0299db72d5 # v2.0.3
-      - run: bun install --frozen-lockfile
-      - run: bun run typecheck
+    uses: nics-dp/meta/.github/workflows/bun-typecheck.yml@main
 
   build:
-    name: Build
     needs: [lint, typecheck]
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: oven-sh/setup-bun@735343b667d3e6f658f44e0a0e05bf0299db72d5 # v2.0.3
-      - run: bun install --frozen-lockfile
-      - run: bun run build
+    uses: nics-dp/meta/.github/workflows/bun-build.yml@main
 
   audit:
-    name: Dependency Audit
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: oven-sh/setup-bun@735343b667d3e6f658f44e0a0e05bf0299db72d5 # v2.0.3
-      - run: bun install --frozen-lockfile
-      - run: bun audit
+    uses: nics-dp/meta/.github/workflows/bun-audit.yml@main
 
-  # ─── 推薦 ───
+  # --- Recommended ---
 
   test:
-    name: Vitest
     needs: [lint, typecheck]
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: oven-sh/setup-bun@735343b667d3e6f658f44e0a0e05bf0299db72d5 # v2.0.3
-      - run: bun install --frozen-lockfile
-      - run: bun run test:coverage
+    uses: nics-dp/meta/.github/workflows/bun-test.yml@main
 
   format-check:
-    name: Prettier
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: oven-sh/setup-bun@735343b667d3e6f658f44e0a0e05bf0299db72d5 # v2.0.3
-      - run: bun install --frozen-lockfile
-      - run: bun run format:check
+    uses: nics-dp/meta/.github/workflows/bun-format-check.yml@main
 
   trivy-license:
     uses: nics-dp/meta/.github/workflows/trivy-license.yml@main
 
-  # ─── 可選 ───
+  # --- Optional ---
 
-  # knip:
-  #   name: Dead Code
-  #   runs-on: ubuntu-latest
-  #   steps:
-  #     - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-  #     - uses: oven-sh/setup-bun@735343b667d3e6f658f44e0a0e05bf0299db72d5 # v2.0.3
-  #     - run: bun install --frozen-lockfile
-  #     - run: bun run knip
+  knip:
+    uses: nics-dp/meta/.github/workflows/bun-knip.yml@main
 
-  # lighthouse:
-  #   name: Lighthouse CI
-  #   needs: [build]
-  #   runs-on: ubuntu-latest
-  #   steps:
-  #     - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-  #     - uses: oven-sh/setup-bun@735343b667d3e6f658f44e0a0e05bf0299db72d5 # v2.0.3
-  #     - run: bun install --frozen-lockfile
-  #     - run: bun run build
-  #     - run: bunx @lhci/cli autorun
+  lighthouse:
+    needs: [build]
+    uses: nics-dp/meta/.github/workflows/bun-lighthouse.yml@main
 
-  # bundle-size:
-  #   name: Bundle Size
-  #   needs: [build]
-  #   runs-on: ubuntu-latest
-  #   steps:
-  #     - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-  #     - uses: oven-sh/setup-bun@735343b667d3e6f658f44e0a0e05bf0299db72d5 # v2.0.3
-  #     - run: bun install --frozen-lockfile
-  #     - run: bun run build
-  #     - run: bunx size-limit
+  bundle-size:
+    needs: [build]
+    uses: nics-dp/meta/.github/workflows/bun-bundle-size.yml@main

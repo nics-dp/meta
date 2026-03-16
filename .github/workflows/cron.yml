@@ -30,10 +30,12 @@ jobs:
     steps:
       - id: repos
         run: |
-          echo "all=$ALL_REPOS" >> "$GITHUB_OUTPUT"
-          echo "go=$GO_REPOS" >> "$GITHUB_OUTPUT"
-          echo "web=$WEB_REPOS" >> "$GITHUB_OUTPUT"
-          echo "codeql=$CODEQL_REPOS" >> "$GITHUB_OUTPUT"
+          {
+            echo "all=$ALL_REPOS"
+            echo "go=$GO_REPOS"
+            echo "web=$WEB_REPOS"
+            echo "codeql=$CODEQL_REPOS"
+          } >> "$GITHUB_OUTPUT"
 
   sync-codeql:
     needs: setup

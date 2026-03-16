@@ -78,28 +78,28 @@ All workflows call reusable workflows from `nics-dp/meta`.
 
 | Job | Tool | What it checks |
 |---|---|---|
-| `check-managed` | meta workflow | Blocks PRs modifying synced files |
-| `commitlint` | meta workflow | Conventional commit messages |
-| `lint` | ESLint + security plugin | Code quality + security patterns |
-| `typecheck` | `tsc --noEmit` | TypeScript type errors |
-| `build` | `vite build` | Build succeeds |
-| `audit` | `bun audit` | Known dependency vulnerabilities |
+| `check-managed` | `check-managed-files.yml` | Blocks PRs modifying synced files |
+| `commitlint` | `commitlint.yml` | Conventional commit messages |
+| `lint` | `bun-lint.yml` | Code quality + security patterns (ESLint) |
+| `typecheck` | `bun-typecheck.yml` | TypeScript type errors (tsc --noEmit) |
+| `build` | `bun-build.yml` | Build succeeds (vite build) |
+| `audit` | `bun-audit.yml` | Known dependency vulnerabilities (bun audit) |
 
 ### Recommended (enabled by default)
 
 | Job | Tool | What it checks |
 |---|---|---|
-| `test` | Vitest | Unit tests + coverage |
-| `format-check` | Prettier | Code formatting consistency |
-| `trivy-license` | Trivy | License compliance |
+| `test` | `bun-test.yml` | Unit tests + coverage (Vitest) |
+| `format-check` | `bun-format-check.yml` | Code formatting consistency (Prettier) |
+| `trivy-license` | `trivy-license.yml` | License compliance |
 
-### Optional (commented out, uncomment to enable)
+### Optional (enabled by default, remove if not needed)
 
 | Job | Tool | What it checks |
 |---|---|---|
-| `knip` | Knip | Unused exports, deps, files |
-| `lighthouse` | Lighthouse CI | Performance, a11y, SEO scores |
-| `bundle-size` | size-limit | JS bundle size regression |
+| `knip` | `bun-knip.yml` | Unused exports, deps, files (Knip) |
+| `lighthouse` | `bun-lighthouse.yml` | Performance, a11y, SEO scores |
+| `bundle-size` | `bun-bundle-size.yml` | JS bundle size regression (size-limit) |
 
 ## CodeQL
 

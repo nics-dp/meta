@@ -102,18 +102,142 @@ secrets:
 
 ---
 
+### bun-lint.yml — ESLint 檢查
+
+執行 `bun run lint` (ESLint + eslint-plugin-security)。
+
+```yaml
+uses: nics-dp/meta/.github/workflows/bun-lint.yml@main
+```
+
+| 參數 | 類型 | 預設值 | 說明 |
+|------|------|--------|------|
+| `command` | string | `bun run lint` | Lint 指令 |
+
+---
+
+### bun-typecheck.yml — TypeScript 型別檢查
+
+執行 `bun run typecheck` (tsc --noEmit)。
+
+```yaml
+uses: nics-dp/meta/.github/workflows/bun-typecheck.yml@main
+```
+
+| 參數 | 類型 | 預設值 | 說明 |
+|------|------|--------|------|
+| `command` | string | `bun run typecheck` | Typecheck 指令 |
+
+---
+
+### bun-build.yml — 建置
+
+執行 `bun run build` (Vite build)。
+
+```yaml
+uses: nics-dp/meta/.github/workflows/bun-build.yml@main
+```
+
+| 參數 | 類型 | 預設值 | 說明 |
+|------|------|--------|------|
+| `command` | string | `bun run build` | Build 指令 |
+
+---
+
+### bun-audit.yml — 依賴漏洞檢查
+
+執行 `bun audit`。
+
+```yaml
+uses: nics-dp/meta/.github/workflows/bun-audit.yml@main
+```
+
+無額外參數。
+
+---
+
+### bun-test.yml — 單元測試
+
+執行 `bun run test:coverage` (Vitest + coverage)。
+
+```yaml
+uses: nics-dp/meta/.github/workflows/bun-test.yml@main
+```
+
+| 參數 | 類型 | 預設值 | 說明 |
+|------|------|--------|------|
+| `command` | string | `bun run test:coverage` | 測試指令 |
+
+---
+
+### bun-format-check.yml — 格式檢查
+
+執行 `bun run format:check` (Prettier)。
+
+```yaml
+uses: nics-dp/meta/.github/workflows/bun-format-check.yml@main
+```
+
+| 參數 | 類型 | 預設值 | 說明 |
+|------|------|--------|------|
+| `command` | string | `bun run format:check` | Format check 指令 |
+
+---
+
+### bun-knip.yml — Dead Code 檢查
+
+執行 `bun run knip` (Knip)。
+
+```yaml
+uses: nics-dp/meta/.github/workflows/bun-knip.yml@main
+```
+
+| 參數 | 類型 | 預設值 | 說明 |
+|------|------|--------|------|
+| `command` | string | `bun run knip` | Knip 指令 |
+
+---
+
+### bun-lighthouse.yml — Lighthouse CI
+
+執行 build 後運行 `@lhci/cli autorun`。
+
+```yaml
+uses: nics-dp/meta/.github/workflows/bun-lighthouse.yml@main
+```
+
+| 參數 | 類型 | 預設值 | 說明 |
+|------|------|--------|------|
+| `build_command` | string | `bun run build` | Build 指令 |
+
+---
+
+### bun-bundle-size.yml — Bundle Size 檢查
+
+執行 build 後運行 `size-limit`。
+
+```yaml
+uses: nics-dp/meta/.github/workflows/bun-bundle-size.yml@main
+```
+
+| 參數 | 類型 | 預設值 | 說明 |
+|------|------|--------|------|
+| `build_command` | string | `bun run build` | Build 指令 |
+
+---
+
 ### codeql.yml — CodeQL 分析 (集中管理)
 
-各 repo 的 CodeQL workflow 為**獨立可執行**的 workflow (直接使用 `github/codeql-action`)，集中管理於 `codeqls/<repo-name>.yml`，透過 `sync-codeql.yml` 同步到各 repo 的 `.github/workflows/codeql.yml`。
+各 repo 的 CodeQL workflow 為**獨立可執行**的 workflow (直接使用 `github/codeql-action`)，集中管理於 `configs/codeqls/<repo-name>.yml`，透過 `sync-codeql.yml` 同步到各 repo 的 `.github/workflows/codeql.yml`。
 
-每個 repo 的 codeql.yml 可依需要自訂：語言 matrix、Go build 指令、額外工具安裝等。詳見 `codeqls/` 目錄下各檔案。
+每個 repo 的 codeql.yml 可依需要自訂：語言 matrix、Go build 指令、額外工具安裝等。詳見 `configs/codeqls/` 目錄下各檔案。
 
 - **Go repos:** 使用 `go` language + `manual` build-mode
 - **Web repos:** 使用 `javascript-typescript` language + `none` build-mode
 
 私有 repo 可設定 `GH_PAT_READ_NICSDP` 以存取 private modules / private repositories；未設定時，CodeQL 仍會執行，但不會傳 `external-repository-token`，也不會啟用 private module access 設定。
 
-> **注意:** `.github/workflows/codeql.yml` (reusable workflow) 仍保留供特殊場景使用，但建議優先使用 `codeqls/` per-repo configs。
+> **注意:** `.github/workflows/codeql.yml` (reusable workflow) 仍保留供特殊場景使用，但建議優先使用 `configs/codeqls/` per-repo configs。
 
 #### codeql.yml reusable workflow 參數
 
