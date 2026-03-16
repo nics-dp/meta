@@ -98,7 +98,7 @@ jobs:
             cat license-summary.md
             if [ "$TOTAL" -gt 0 ]; then
               echo ''
-              echo "Full license table available in the [trivy-license-report artifact](${ARTIFACT_URL})."
+              echo "Full license table available in the [workflow run artifacts](${ARTIFACT_URL}#artifacts)."
             fi
             echo 'TRIVY_LICENSE_EOF'
           } >> "$GITHUB_OUTPUT"
