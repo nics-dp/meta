@@ -85,6 +85,15 @@
       "matchStrings": ["go install github\\.com/swaggo/swag/cmd/swag@(?<currentValue>v\\d+\\.\\d+\\.\\d+)"],
       "depNameTemplate": "swaggo/swag",
       "datasourceTemplate": "github-releases"
+    },
+    {
+      "customType": "regex",
+      "description": "Update semgrep container image version",
+      "fileMatch": ["^\\.github/workflows/(?:go|bun)-semgrep\\.yml$"],
+      "matchStrings": ["image:\\s*semgrep/semgrep:(?<currentValue>\\d+\\.\\d+\\.\\d+)"],
+      "depNameTemplate": "semgrep/semgrep",
+      "datasourceTemplate": "github-releases",
+      "extractVersionTemplate": "^v(?<version>.+)$"
     }
   ]
 }

@@ -70,6 +70,9 @@ jobs:
     secrets:
       gh_pat: ${{ secrets.GH_PAT_READ_NICSDP }}
 
+  go-semgrep:
+    uses: nics-dp/meta/.github/workflows/go-semgrep.yml@main
+
   go-test:
     needs: [go-lint, go-sec]
     uses: nics-dp/meta/.github/workflows/go-test.yml@main

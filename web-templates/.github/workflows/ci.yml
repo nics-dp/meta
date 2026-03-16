@@ -62,6 +62,9 @@ jobs:
   trivy-license:
     uses: nics-dp/meta/.github/workflows/trivy-license.yml@main
 
+  semgrep:
+    uses: nics-dp/meta/.github/workflows/bun-semgrep.yml@main
+
   # --- Optional ---
 
   knip:
