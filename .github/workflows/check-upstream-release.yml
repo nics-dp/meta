@@ -55,7 +55,11 @@ jobs:
           VERSION_VARIABLE: ${{ inputs.version_variable }}
           VERSION_FILE: ${{ inputs.version_file }}
         run: |
-          current=$(grep "^${VERSION_VARIABLE}=" "$VERSION_FILE" | cut -d'=' -f2)
+          current=$(grep -m1 "^${VERSION_VARIABLE}=" "$VERSION_FILE" | cut -d'=' -f2)
+          if [ -z "$current" ]; then
+            echo "::error::Variable ${VERSION_VARIABLE} not found in ${VERSION_FILE}"
+            exit 1
+          fi
           echo "version=$current" >> "$GITHUB_OUTPUT"
           echo "Current: $current"
 
@@ -80,7 +84,9 @@ jobs:
           UPSTREAM_VERSION: ${{ steps.upstream.outputs.version }}
           VERSION_FILE: ${{ inputs.version_file }}
         run: |
-          sed -i "s/^${VERSION_VARIABLE}=.*/${VERSION_VARIABLE}=${UPSTREAM_VERSION}/" "$VERSION_FILE"
+          awk -v var="$VERSION_VARIABLE" -v val="$UPSTREAM_VERSION" \
+            'BEGIN{FS=OFS="="} $1==var{$2=val} 1' "$VERSION_FILE" > "${VERSION_FILE}.tmp" \
+            && mv "${VERSION_FILE}.tmp" "$VERSION_FILE"
           echo "Updated ${VERSION_FILE}:"
           cat "$VERSION_FILE"
 
