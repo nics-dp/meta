@@ -6,10 +6,6 @@
     ":timezone(Asia/Taipei)",
     "schedule:earlyMondays"
   ],
-  "env": {
-    "GOPRIVATE": "github.com/nics-dp",
-    "GONOSUMDB": "github.com/nics-dp"
-  },
   "github-actions": {
     "managerFilePatterns": [".github/workflows/**", "configs/codeqls/**", "golang-templates/**", "web-templates/**"]
   },

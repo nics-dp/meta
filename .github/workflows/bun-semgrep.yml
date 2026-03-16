@@ -26,6 +26,7 @@ jobs:
 
       - name: Run semgrep
         id: semgrep
+        shell: bash
         env:
           CONFIG: ${{ inputs.config }}
         run: |

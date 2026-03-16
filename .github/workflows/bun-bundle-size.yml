@@ -10,7 +10,7 @@ on:
         type: string
         default: "bundle-size"
         description: "mise task to run"
-      build_command:
+      command:
         required: false
         type: string
         default: ""
@@ -37,7 +37,7 @@ jobs:
       - name: Run bundle size check
         env:
           TASK: ${{ inputs.task }}
-          COMMAND: ${{ inputs.build_command }}
+          COMMAND: ${{ inputs.command }}
         run: |
           if [ -n "$COMMAND" ]; then
             bash -euo pipefail -lc "$COMMAND"
