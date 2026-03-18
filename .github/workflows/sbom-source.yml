@@ -80,7 +80,7 @@ jobs:
         uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # 0.35.0
         with:
           scan-type: sbom
-          input: sbom-source.cdx.json
+          scan-ref: sbom-source.cdx.json
           format: sarif
           output: trivy-source.sarif
 
@@ -95,7 +95,7 @@ jobs:
         uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # 0.35.0
         with:
           scan-type: sbom
-          input: sbom-source.cdx.json
+          scan-ref: sbom-source.cdx.json
           format: json
           output: trivy-source.json
 
