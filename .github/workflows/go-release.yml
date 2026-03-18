@@ -130,9 +130,7 @@ jobs:
     needs: prepare
     runs-on: ${{ fromJSON(inputs.runs_on) }}
     permissions:
-      actions: read
       contents: read
-      pull-requests: write
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.prepare.outputs.matrix) }}

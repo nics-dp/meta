@@ -123,7 +123,7 @@ image-build ─┼──► artifacts-comment
 **Notes:**
 - `workflow_run` execution only proceeds for successful same-repo pull requests; manual dispatch bypasses that gate.
 - The shipped template pins snapshot builds to `runs_on: '{"group":"releasers"}'`.
-- `go-release` needs `actions: read` and `pull-requests: write`; `artifacts-comment` needs `actions: read`, `pull-requests: write`, and `issues: write`.
+- `go-release` uses `contents: write` and `id-token: write`; `artifacts-comment` needs `actions: read`, `pull-requests: write`, and `issues: write`.
 
 ---
 

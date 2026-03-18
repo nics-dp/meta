@@ -34,8 +34,6 @@ jobs:
     permissions:
       contents: write
       id-token: write
-      actions: read # 讓下游 comment / artifact 流程可讀取 action metadata
-      pull-requests: write # snapshot/reusable workflow 需要回寫 PR
     with:
       project_name: TODO        # TODO: 與 release.yml 一致
       binary: "TODO:./cmd/TODO" # TODO: 與 release.yml 一致
