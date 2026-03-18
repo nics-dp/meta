@@ -39,7 +39,7 @@ jobs:
       # platforms: linux/amd64,linux/arm64 # 啟用 CGO 時，請同時覆寫 platforms 僅建置 Linux (或調整 go-release workflow 的 runners)
       runs_on: '{"group":"releasers"}' # TODO: 若無 self-hosted releasers runner，改回 '"ubuntu-latest"'
     secrets:
-      gh_pat: ${{ secrets.GH_PAT_RELEASE_NICSDP }} # 供 release 時讀取 private modules
+      gh_pat: ${{ secrets.GH_PAT_RELEASE_NICSDP }}
 
   sbom-source:
     needs: [go-release]
