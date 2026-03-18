@@ -95,7 +95,7 @@ jobs:
         uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # 0.35.0
         with:
           scan-type: sbom
-          input: enriched-image.cdx.json
+          input: sbom-image.cdx.json
           format: sarif
           output: trivy-image.sarif
 
@@ -110,7 +110,7 @@ jobs:
         uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # 0.35.0
         with:
           scan-type: sbom
-          input: enriched-image.cdx.json
+          input: sbom-image.cdx.json
           format: json
           output: trivy-image.json
 
@@ -118,7 +118,7 @@ jobs:
         id: grype-sarif
         uses: anchore/scan-action@7037fa011853d5a11690026fb85feee79f4c946c # v7.3.2
         with:
-          sbom: enriched-image.cdx.json
+          sbom: sbom-image.cdx.json
           output-format: sarif
 
       - name: Upload Grype SARIF to GitHub Security tab
@@ -132,7 +132,7 @@ jobs:
         id: grype-json
         uses: anchore/scan-action@7037fa011853d5a11690026fb85feee79f4c946c # v7.3.2
         with:
-          sbom: enriched-image.cdx.json
+          sbom: sbom-image.cdx.json
           output-format: json
 
       - name: Prepare release assets
