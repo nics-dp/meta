@@ -41,6 +41,7 @@ jobs:
   sbom-image:
     runs-on: ${{ fromJSON(inputs.runs_on) }}
     permissions:
+      actions: read
       contents: write
       packages: read
       security-events: write
@@ -72,7 +73,7 @@ jobs:
             echo "version_tag=${TAG}" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Generate SBOM from image (CycloneDX JSON 1.6)
+      - name: Generate SBOM from image (CycloneDX JSON 1.5)
         uses: anchore/sbom-action@57aae528053a48a3f6235f2d9461b05fbcb7366d # v0.23.1
         with:
           image: ${{ env.REGISTRY_GHCR }}/${{ env.GHCR_NAMESPACE }}/${{ inputs.image_name }}@${{ inputs.digest }}
@@ -95,9 +96,15 @@ jobs:
         uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # 0.35.0
         with:
           scan-type: sbom
-          input: enriched-image.cdx.json
+          scan-ref: sbom-image.cdx.json
           format: sarif
           output: trivy-image.sarif
+
+      - name: Fix Trivy SARIF empty artifact locations
+        run: |
+          jq '(.runs[].results[].locations[].physicalLocation.artifactLocation | select(.uri == "")) .uri = "sbom-image.cdx.json"' \
+            trivy-image.sarif > trivy-image-fixed.sarif
+          mv trivy-image-fixed.sarif trivy-image.sarif
 
       - name: Upload Trivy SARIF to GitHub Security tab
         if: always()
@@ -110,15 +117,16 @@ jobs:
         uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # 0.35.0
         with:
           scan-type: sbom
-          input: enriched-image.cdx.json
+          scan-ref: sbom-image.cdx.json
           format: json
           output: trivy-image.json
 
       - name: Scan SBOM with Grype (SARIF)
+        if: always()
         id: grype-sarif
         uses: anchore/scan-action@7037fa011853d5a11690026fb85feee79f4c946c # v7.3.2
         with:
-          sbom: enriched-image.cdx.json
+          sbom: sbom-image.cdx.json
           output-format: sarif
 
       - name: Upload Grype SARIF to GitHub Security tab
@@ -132,7 +140,7 @@ jobs:
         id: grype-json
         uses: anchore/scan-action@7037fa011853d5a11690026fb85feee79f4c946c # v7.3.2
         with:
-          sbom: enriched-image.cdx.json
+          sbom: sbom-image.cdx.json
           output-format: json
 
       - name: Prepare release assets

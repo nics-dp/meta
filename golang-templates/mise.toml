@@ -1,8 +1,8 @@
 [tools]
 go = "latest"
 golangci-lint = "latest"
-gosec = "latest"
-govulncheck = "latest"
+"aqua:securego/gosec" = "latest"
+"go:golang.org/x/vuln/cmd/govulncheck" = "latest"
 
 [tasks.prepare]
 description = "Download Go module dependencies"
