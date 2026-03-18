@@ -34,6 +34,7 @@ jobs:
   sbom-source:
     runs-on: ${{ fromJSON(inputs.runs_on) }}
     permissions:
+      actions: read
       contents: write
       security-events: write
     steps:
