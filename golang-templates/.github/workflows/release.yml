@@ -65,7 +65,7 @@ jobs:
     secrets:
       dockerhub_username: ${{ secrets.DOCKERHUB_USERNAME }}
       dockerhub_token: ${{ secrets.DOCKERHUB_TOKEN }}
-      gh_pat: ${{ secrets.GH_PAT_READ_NICSDP }}
+      gh_pat: ${{ secrets.GH_PAT_RELEASE_NICSDP }}
 
   sbom-image:
     needs: [image-build]
