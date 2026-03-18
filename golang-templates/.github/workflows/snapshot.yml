@@ -31,7 +31,8 @@ jobs:
        github.event.workflow_run.head_repository.full_name == github.repository)
     uses: nics-dp/meta/.github/workflows/go-release.yml@main
     permissions:
-      contents: read
+      contents: write
+      id-token: write
     with:
       project_name: TODO        # TODO: 與 release.yml 一致
       binary: "TODO:./cmd/TODO" # TODO: 與 release.yml 一致
