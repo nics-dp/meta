@@ -8,6 +8,7 @@
 # - Service repo (Go binary + Docker image): 保留 go-release + image-build jobs
 # - CLI repo (Go binary only): 移除 image-build job，移除 cgo_enabled
 # - Docker-only repo: 移除 go-release job，以及所有相依 go-release 的 jobs（例如 sbom-source）
+# - 若啟用 CGO，請同時把 platforms 覆寫為僅 Linux 目標，或改用支援該目標的 runners
 #
 # 必須修改的參數 (標記為 TODO):
 # - project_name: 專案名稱
@@ -30,21 +31,23 @@ jobs:
     uses: nics-dp/meta/.github/workflows/go-release.yml@main
     permissions:
       contents: write
-      id-token: write
+      id-token: write # cosign keyless signing
     with:
       project_name: TODO        # TODO: 專案名稱 (例如 dcf-platform)
       binary: "TODO:./cmd/TODO" # TODO: Binary 建置清單 (例如 "platform:./cmd/platform")
       # cgo_enabled: true       # 取消註解以啟用 CGO (service repos 需要)
       # platforms: linux/amd64,linux/arm64 # 啟用 CGO 時，請同時覆寫 platforms 僅建置 Linux (或調整 go-release workflow 的 runners)
+      runs_on: '{"group":"releasers"}' # TODO: 若無 self-hosted releasers runner，改回 '"ubuntu-latest"'
     secrets:
-      gh_pat: ${{ secrets.GH_PAT_READ_NICSDP }}
+      gh_pat: ${{ secrets.GH_PAT_RELEASE_NICSDP }} # 供 release 時讀取 private modules
 
   sbom-source:
     needs: [go-release]
     uses: nics-dp/meta/.github/workflows/sbom-source.yml@main
     permissions:
-      contents: write
-      security-events: write
+      actions: read # 讓 SBOM workflow 可讀取 action metadata / artifacts
+      contents: write # 上傳 GitHub Release assets
+      security-events: write # 上傳 Trivy / Grype SARIF 到 Security tab
     with:
       project_name: TODO        # TODO: 與 go-release 的 project_name 一致
 
@@ -55,10 +58,10 @@ jobs:
       contents: read
       packages: write
       attestations: write
-      id-token: write
+      id-token: write # cosign keyless signing / attestations
     with:
       image_name: TODO          # TODO: Docker image 名稱 (例如 dcf-platform)
-      runs_on: '{"group":"releasers"}'
+      runs_on: '{"group":"releasers"}' # TODO: 若無 self-hosted releasers runner，改回 '"ubuntu-latest"'
     secrets:
       dockerhub_username: ${{ secrets.DOCKERHUB_USERNAME }}
       dockerhub_token: ${{ secrets.DOCKERHUB_TOKEN }}
@@ -68,9 +71,10 @@ jobs:
     needs: [image-build]
     uses: nics-dp/meta/.github/workflows/sbom-image.yml@main
     permissions:
-      contents: write
-      packages: read
-      security-events: write
+      actions: read # 讓 SBOM workflow 可讀取 action metadata / artifacts
+      contents: write # 上傳 GitHub Release assets
+      packages: read # 從 GHCR 拉取 image 產生 SBOM
+      security-events: write # 上傳 Trivy / Grype SARIF 到 Security tab
     with:
       project_name: TODO        # TODO: 與 go-release 的 project_name 一致
       image_name: TODO          # TODO: 與 image-build 的 image_name 一致

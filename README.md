@@ -390,8 +390,9 @@ with:
   project_name: dcf-platform
   binary: "platform:./cmd/platform"
   cgo_enabled: true
+  runs_on: '{"group":"releasers"}'  # 選用
 secrets:
-  gh_pat: ${{ secrets.GH_PAT_READ_NICSDP }}
+  gh_pat: ${{ secrets.GH_PAT_RELEASE_NICSDP }}  # 選用；若需要存取私有模組，通常沿用 release PAT
 
 # 多 binary
 with:
@@ -404,19 +405,19 @@ with:
 | `project_name` | string | — | **是** | 專案名稱 (影響 archive 命名) |
 | `binary` | string | — | **是** | Binary 建置清單 (`name:path,...`) |
 | `platforms` | string | `linux/amd64,linux/arm64,darwin/amd64,darwin/arm64,windows/amd64` | 否 | 目標平台 |
-| `go_version` | string | `stable` | 否 | Go 版本 (由 mise.toml 決定，通常不需覆寫) |
-| `cgo_enabled` | boolean | `false` | 否 | 啟用 CGO |
+| `go_version` | string | `stable` | 否 | Go 版本 (`actions/setup-go` 使用的版本字串) |
+| `cgo_enabled` | boolean | `false` | 否 | 啟用 CGO；啟用時建議同時把 `platforms` 覆寫為僅 Linux 目標 |
 | `go_env` | string | `GOEXPERIMENT=jsonv2,simd,runtimesecret,goroutineleakprofile` | 否 | 建置環境變數 |
 | `ldflags` | string | `""` | 否 | 自訂 ldflags (預設注入 version/commit/date) |
 | `extra_build_flags` | string | `-trimpath` | 否 | 額外 go build flags |
 | `go_private_full` | boolean | `true` | 否 | 設定 GOPRIVATE/GONOSUMDB |
 | `notarize` | boolean | `false` | 否 | macOS notarize (需 quill secrets) |
-| `snapshot` | boolean | `false` | 否 | 預覽建置 (不上傳 Release) |
+| `snapshot` | boolean | `false` | 否 | 預覽建置模式；版本會改用 `0.0.0-snapshot+<sha>`，不上傳 GitHub Release |
 | `ref` | string | `""` | 否 | Git ref (預設使用事件 ref) |
-| `runs_on` | string | `"ubuntu-latest"` | 否 | Runner (JSON 格式) |
+| `runs_on` | string | `"ubuntu-latest"` | 否 | Runner (JSON 格式，經 `fromJSON()` 解析) |
 
-**必要 Secrets:**
-- `gh_pat` — 存取私有模組
+**選用 Secrets:**
+- `gh_pat` — 存取私有模組；consumer repo 的 `release.yml` 通常傳 `GH_PAT_RELEASE_NICSDP`
 - macOS notarize (當 `notarize: true`): `quill_sign_p12`, `quill_sign_password`, `quill_notary_key`, `quill_notary_key_id`, `quill_notary_issuer`
 
 ---
@@ -476,7 +477,7 @@ secrets:
 ```yaml
 uses: nics-dp/meta/.github/workflows/release-please.yml@main
 secrets:
-  gh_pat: ${{ secrets.GH_PAT_READ_NICSDP }}  # 必要，GITHUB_TOKEN 不會觸發下游 workflows
+  gh_pat: ${{ secrets.GH_PAT_RELEASE_NICSDP }}  # 必要，GITHUB_TOKEN 不會觸發下游 workflows
 ```
 
 | 參數 | 類型 | 預設值 | 必要 | 說明 |
@@ -491,11 +492,12 @@ secrets:
 
 ### sbom-source.yml — Source Code SBOM
 
-產出 CycloneDX 1.6 SBOM + parlay 增強 + Trivy/Grype 漏洞掃描，上傳至 GitHub Release + Security tab + Dependency Graph。
+產出 CycloneDX 1.6 SBOM + parlay 增強 + Trivy/Grype 漏洞掃描，上傳至 GitHub Release 與 GitHub Security tab。非 snapshot 模式時，`anchore/sbom-action` 也會提交 dependency snapshot。
 
 ```yaml
 uses: nics-dp/meta/.github/workflows/sbom-source.yml@main
 permissions:
+  actions: read
   contents: write
   security-events: write
 with:
@@ -514,11 +516,12 @@ with:
 
 ### sbom-image.yml — Container Image SBOM
 
-對 container image 產出 CycloneDX 1.6 SBOM + Trivy/Grype 漏洞掃描，上傳至 GitHub Release + Security tab。
+對 container image 產出 CycloneDX 1.6 SBOM + Trivy/Grype 漏洞掃描，上傳至 GitHub Release 與 GitHub Security tab。
 
 ```yaml
 uses: nics-dp/meta/.github/workflows/sbom-image.yml@main
 permissions:
+  actions: read
   contents: write
   packages: read
   security-events: write
@@ -614,6 +617,7 @@ secrets:
 uses: nics-dp/meta/.github/workflows/artifacts-comment.yml@main
 permissions:
   actions: read
+  issues: write
   pull-requests: write
 ```
 
@@ -621,7 +625,7 @@ permissions:
 |------|------|--------|------|
 | `pr_number` | number | `0` | PR 編號 (自動偵測 `pull_request` / `workflow_run` 事件) |
 
-支援兩種情境：
+會在 PR 上建立或更新同一則 comment，支援兩種情境：
 - **`pull_request` 觸發的 workflow** — 自動偵測 PR 編號
 - **`workflow_run` 觸發的 workflow** (如 snapshot) — 從 `workflow_run.pull_requests` 自動偵測
 
@@ -717,7 +721,10 @@ secrets:
 3. 替換 `TODO` 標記 (`project_name`, `binary`, `image_name`)
 4. 新增 `configs/codeqls/<repo-name>.yml`，設定 CodeQL workflow
 5. 更新 `cron.yml` 的 repo 清單 (`CODEQL_REPOS`, `GO_REPOS`, `ALL_REPOS`, `RENOVATE_SYNC_REPOS`)
-6. 確認 repo secrets: `GH_PAT_READ_NICSDP`, `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN`
+6. 確認 repo secrets:
+   - `GH_PAT_READ_NICSDP` (私有 Go modules / snapshot / CodeQL 用)
+   - `GH_PAT_RELEASE_NICSDP` (release-please / release 用)
+   - `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN` (僅 Docker image repos 需要)
 
 ### Web 專案
 
@@ -726,7 +733,7 @@ secrets:
 3. 安裝 devDependencies (見 `web-templates/.github/README.md`)
 4. 新增 `configs/codeqls/<repo-name>.yml` (使用 `javascript-typescript` language)
 5. 更新 `cron.yml` 的 repo 清單 (`CODEQL_REPOS`, `WEB_REPOS`, `ALL_REPOS`, `RENOVATE_SYNC_REPOS`)
-6. 確認 repo secrets: `GH_PAT_READ_NICSDP`
+6. 確認 repo secrets: `GH_PAT_RELEASE_NICSDP`
 
 ---
 
@@ -737,14 +744,14 @@ secrets:
 1. **mise.toml** — 定義 `prepare`, `lint`, `security`, `test`, `vulncheck`, `report` tasks (建議直接使用 `golang-templates/mise.toml`)
 2. **coverage.out** — `mise run test` 需產出此檔案 (go-test.yml 預期此路徑)
 3. **Go module** — go.mod 存在且版本正確
-4. **Private module access** — `GH_PAT_READ_NICSDP` secret 已設定
+4. **Private module access** — 若 repo 會引用私有 `nics-dp` modules，需設定 `GH_PAT_READ_NICSDP`
 
 ### Web repos
 
 1. **mise.toml** — 建議直接使用 `web-templates/mise.toml`
 2. **bun.lock** — 使用 Bun 作為 package manager
 3. **package.json scripts** — 需包含 `lint`, `typecheck`, `build`, `test:coverage`, `format:check`
-4. **Private access** — `GH_PAT_READ_NICSDP` secret 已設定 (用於 release-please)
+4. **Release token** — `GH_PAT_RELEASE_NICSDP` secret 已設定 (供 release-please 建立 release/tag 並觸發下游 workflows)
 
 ## 相關文件
 

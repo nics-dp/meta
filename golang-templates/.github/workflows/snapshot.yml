@@ -9,6 +9,7 @@
 # - Service repo: 保留 go-release + image-build jobs
 # - CLI repo: 移除 image-build job
 # - Docker-only repo: 移除 go-release job
+# - 若啟用 CGO，請同時把 platforms 覆寫為僅 Linux 目標，或改用支援該目標的 runners
 
 name: snapshot
 
@@ -31,17 +32,21 @@ jobs:
        github.event.workflow_run.head_repository.full_name == github.repository)
     uses: nics-dp/meta/.github/workflows/go-release.yml@main
     permissions:
-      contents: read
+      contents: write
+      id-token: write
+      actions: read # 讓下游 comment / artifact 流程可讀取 action metadata
+      pull-requests: write # snapshot/reusable workflow 需要回寫 PR
     with:
       project_name: TODO        # TODO: 與 release.yml 一致
       binary: "TODO:./cmd/TODO" # TODO: 與 release.yml 一致
       # cgo_enabled: true       # TODO: 與 release.yml 一致
       #                         # 注意: 若啟用 CGO，請同時在 release.yml / snapshot.yml 覆寫 `platforms`
       #                         # (或改用僅支援 Linux 的 runners)，以避免 darwin/windows 目標的 CGO cross-compilation 失敗
+      runs_on: '{"group":"releasers"}' # TODO: 若無 self-hosted releasers runner，改回 '"ubuntu-latest"'
       snapshot: true
       ref: ${{ github.event.workflow_run.head_sha || '' }}
     secrets:
-      gh_pat: ${{ secrets.GH_PAT_READ_NICSDP }}
+      gh_pat: ${{ secrets.GH_PAT_READ_NICSDP }} # snapshot 讀取 private modules 用
 
   # 僅 service/Docker repos 需要，CLI repos 請移除此 job
   image-build:
@@ -57,10 +62,10 @@ jobs:
       id-token: write
     with:
       image_name: TODO          # TODO: 與 release.yml 一致
-      runs_on: '{"group":"releasers"}'
-      sbom: false
-      provenance: false
-      attest: false
+      runs_on: '{"group":"releasers"}' # TODO: 若無 self-hosted releasers runner，改回 '"ubuntu-latest"'
+      sbom: false # snapshot 不額外產出 BuildKit SBOM
+      provenance: false # snapshot 不產生 provenance attestation
+      attest: false # snapshot 不產生 artifact attestation
       snapshot: true
       ref: ${{ github.event.workflow_run.head_sha || '' }}
     secrets:
@@ -68,11 +73,12 @@ jobs:
       dockerhub_token: ${{ secrets.DOCKERHUB_TOKEN }}
       gh_pat: ${{ secrets.GH_PAT_READ_NICSDP }}
 
-  # 將 artifact 連結回報到 PR，調整 needs 符合專案類型
+  # 將 artifact 連結回報到 PR；CLI repos 請把 needs 改為 [go-release]
   artifacts-comment:
     if: github.event.workflow_run.event == 'pull_request'
     needs: [go-release, image-build] # TODO: CLI repos 改為 [go-release]
     uses: nics-dp/meta/.github/workflows/artifacts-comment.yml@main
     permissions:
-      actions: read
-      pull-requests: write
+      actions: read # 讀取 workflow artifacts
+      pull-requests: write # 更新 PR comment
+      issues: write # sticky comment action 需要
