@@ -100,6 +100,12 @@ jobs:
           format: sarif
           output: trivy-image.sarif
 
+      - name: Fix Trivy SARIF empty artifact locations
+        run: |
+          jq '(.runs[].results[].locations[].physicalLocation.artifactLocation | select(.uri == "")) .uri = "sbom-image.cdx.json"' \
+            trivy-image.sarif > trivy-image-fixed.sarif
+          mv trivy-image-fixed.sarif trivy-image.sarif
+
       - name: Upload Trivy SARIF to GitHub Security tab
         if: always()
         uses: github/codeql-action/upload-sarif@fb0994ef1c058010acf1efccff928b0a83b1ed54 # v4.32.6
@@ -116,6 +122,7 @@ jobs:
           output: trivy-image.json
 
       - name: Scan SBOM with Grype (SARIF)
+        if: always()
         id: grype-sarif
         uses: anchore/scan-action@7037fa011853d5a11690026fb85feee79f4c946c # v7.3.2
         with:
