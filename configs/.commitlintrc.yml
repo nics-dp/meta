@@ -23,6 +23,7 @@ rules:
       - ci.deps
       - docker.deps
       - npm.deps
+      - ci
       - ""
   subject-case:
     - 2
