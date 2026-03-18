@@ -41,6 +41,7 @@ jobs:
   sbom-image:
     runs-on: ${{ fromJSON(inputs.runs_on) }}
     permissions:
+      actions: read
       contents: write
       packages: read
       security-events: write
