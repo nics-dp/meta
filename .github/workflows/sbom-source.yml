@@ -60,7 +60,7 @@ jobs:
         uses: anchore/sbom-action@57aae528053a48a3f6235f2d9461b05fbcb7366d # v0.23.1
         with:
           path: ${{ inputs.scan_path }}
-          format: cyclonedx-json@1.6
+          format: cyclonedx-json
           output-file: sbom-source.cdx.json
           dependency-snapshot: ${{ !inputs.snapshot }}
           upload-artifact: false
