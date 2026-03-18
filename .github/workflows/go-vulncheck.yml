@@ -89,6 +89,14 @@ jobs:
 
             </details>
 
+      - name: Revoke private git repository access
+        if: always() && env.HAS_GH_PAT == 'true'
+        env:
+          GH_PAT: ${{ secrets.gh_pat }}
+        run: |
+          git config --global --remove-section "url.https://${GH_PAT}@github.com/" 2>/dev/null || true
+          git config --global --remove-section "url.https://${GH_PAT}@github.com/nics-dp" 2>/dev/null || true
+
       - name: Fail if vulnerabilities found
         if: always() && steps.vulncheck.outputs.exit_code != '0'
         run: exit 1

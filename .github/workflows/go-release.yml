@@ -130,7 +130,9 @@ jobs:
     needs: prepare
     runs-on: ${{ fromJSON(inputs.runs_on) }}
     permissions:
+      actions: read
       contents: read
+      pull-requests: write
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.prepare.outputs.matrix) }}
@@ -256,6 +258,14 @@ jobs:
           name: build-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.goarm && format('-v{0}', matrix.goarm) || '' }}
           path: ${{ steps.archive.outputs.file }}
           retention-days: ${{ inputs.snapshot && 7 || 30 }}
+
+      - name: Revoke private git repository access
+        if: always() && env.HAS_GH_PAT == 'true'
+        env:
+          GH_PAT: ${{ secrets.gh_pat }}
+        run: |
+          git config --global --remove-section "url.https://${GH_PAT}@github.com/" 2>/dev/null || true
+          git config --global --remove-section "url.https://${GH_PAT}@github.com/nics-dp" 2>/dev/null || true
 
   release:
     needs: [prepare, build]

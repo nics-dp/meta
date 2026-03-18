@@ -119,3 +119,11 @@ jobs:
         with:
           header: trivy-license
           message: ${{ steps.summary.outputs.body }}
+
+      - name: Revoke private git repository access
+        if: always() && env.HAS_GH_PAT == 'true'
+        env:
+          GH_PAT: ${{ secrets.gh_pat }}
+        run: |
+          git config --global --remove-section "url.https://${GH_PAT}@github.com/" 2>/dev/null || true
+          git config --global --remove-section "url.https://${GH_PAT}@github.com/nics-dp" 2>/dev/null || true
