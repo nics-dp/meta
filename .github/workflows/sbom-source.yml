@@ -56,11 +56,11 @@ jobs:
             echo "version_tag=${TAG}" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Generate SBOM (CycloneDX JSON 1.6)
+      - name: Generate SBOM (CycloneDX JSON 1.5)
         uses: anchore/sbom-action@57aae528053a48a3f6235f2d9461b05fbcb7366d # v0.23.1
         with:
           path: ${{ inputs.scan_path }}
-          format: cyclonedx-json@1.6
+          format: cyclonedx-json@1.5
           output-file: sbom-source.cdx.json
           dependency-snapshot: ${{ !inputs.snapshot }}
           upload-artifact: false
