@@ -8,7 +8,7 @@ golangci-lint = "latest"
 # Dockerfile lint
 hadolint = "latest"
 
-# SBOM generatation
+# SBOM generation
 syft = "latest"
 "go:github.com/snyk/parlay" = "latest"
 
