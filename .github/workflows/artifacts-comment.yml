@@ -46,7 +46,7 @@ jobs:
               github.rest.actions.listWorkflowRunArtifacts,
               {owner, repo, run_id: context.runId},
               (response) => response.data.artifacts || []
-            )).filter(art => art?.id && art?.name);
+            )).filter(art => art?.id && art?.name && art.name.trim() !== 'undefined');
 
             if (!artifacts.length) {
               core.info('No valid artifacts found, skipping comment');
