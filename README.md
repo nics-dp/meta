@@ -164,9 +164,12 @@ PR-only，使用 wagoid/commitlint-github-action 驗證 conventional commits。
 
 ```yaml
 uses: nics-dp/meta/.github/workflows/commitlint.yml@main
+permissions:
+  contents: read
+  pull-requests: read
 ```
 
-無需額外輸入參數。
+無需額外輸入參數。呼叫端須授予 `contents: read` 與 `pull-requests: read` 權限。
 
 ---
 

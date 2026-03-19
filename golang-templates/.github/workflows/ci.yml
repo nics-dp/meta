@@ -38,6 +38,7 @@ jobs:
     uses: nics-dp/meta/.github/workflows/commitlint.yml@main
     permissions:
       contents: read
+      pull-requests: read
 
   # 僅 Service/Docker repos 需要 (有 Dockerfile 的 repos)
   hadolint:
