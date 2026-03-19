@@ -42,14 +42,14 @@ jobs:
             }
 
             // List artifacts for current workflow run
-            const artifacts = await github.paginate(
+            const artifacts = (await github.paginate(
               github.rest.actions.listWorkflowRunArtifacts,
               {owner, repo, run_id: context.runId},
-              (response) => response.data.artifacts
-            );
+              (response) => response.data.artifacts || []
+            )).filter(art => art?.id && art?.name);
 
             if (!artifacts.length) {
-              core.info('No artifacts found, skipping comment');
+              core.info('No valid artifacts found, skipping comment');
               return;
             }
 
