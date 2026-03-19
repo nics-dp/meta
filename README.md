@@ -616,6 +616,7 @@ uses: nics-dp/meta/.github/workflows/artifacts-comment.yml@main
 permissions:
   actions: read
   issues: write
+  pull-requests: write
 ```
 
 | 參數 | 類型 | 預設值 | 說明 |

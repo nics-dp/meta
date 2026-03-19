@@ -78,3 +78,4 @@ jobs:
     permissions:
       actions: read # 讀取 workflow artifacts
       issues: write # 更新 PR comment
+      pull-requests: write # 寫入 PR comment (issues API 需要此權限)
