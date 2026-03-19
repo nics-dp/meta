@@ -34,8 +34,8 @@ jobs:
           experimental: true
           log_level: "info"
 
-      - name: Prepare environment
-        run: mise run prepare
+      - name: Initialize environment
+        run: mise run init
 
       - name: Configure private git repository
         if: env.HAS_GH_PAT == 'true'

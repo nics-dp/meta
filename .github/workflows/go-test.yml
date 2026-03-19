@@ -13,18 +13,13 @@ on:
       test_command:
         required: false
         type: string
-        default: "mise run test"
+        default: "mise run ci:test"
         description: "Command to run unit tests (must produce coverage.out)"
       run_report:
         required: false
         type: boolean
         default: false
         description: "Whether to run the report job after tests"
-      report_command:
-        required: false
-        type: string
-        default: "mise run report"
-        description: "Command to generate coverage report"
     secrets:
       gh_pat:
         required: false
@@ -49,8 +44,8 @@ jobs:
           experimental: true
           log_level: "info"
 
-      - name: Prepare environment
-        run: mise run prepare
+      - name: Initialize environment
+        run: mise run init
 
       - name: Configure private git repository
         if: env.HAS_GH_PAT == 'true'
@@ -104,8 +99,8 @@ jobs:
           experimental: true
           log_level: "info"
 
-      - name: Prepare environment
-        run: mise run prepare
+      - name: Initialize environment
+        run: mise run init
 
       - name: Configure private git repository
         if: env.HAS_GH_PAT == 'true'
@@ -126,10 +121,9 @@ jobs:
           name: coverage-data
 
       - name: Generate report
-        env:
-          REPORT_COMMAND: ${{ inputs.report_command }}
         run: |
-          bash -euo pipefail -lc "$REPORT_COMMAND"
+          go tool cover -html=coverage.out -o coverage.html
+          go tool cover -func=coverage.out > coverage.md
 
       - name: Upload reports
         id: upload-reports

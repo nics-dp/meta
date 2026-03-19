@@ -34,8 +34,8 @@ jobs:
           experimental: true
           log_level: "info"
 
-      - name: Prepare environment
-        run: mise run prepare
+      - name: Initialize environment
+        run: mise run init
 
       - name: Configure private git repository
         if: env.HAS_GH_PAT == 'true'
@@ -53,7 +53,7 @@ jobs:
       - name: Run govulncheck
         id: vulncheck
         run: |
-          mise run vulncheck 2>&1 | tee vulncheck-output.txt
+          mise run ci:go-vulncheck 2>&1 | tee vulncheck-output.txt
           echo "exit_code=${PIPESTATUS[0]}" >> "$GITHUB_OUTPUT"
 
       - name: Write summary

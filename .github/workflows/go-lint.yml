@@ -35,8 +35,8 @@ jobs:
           experimental: true
           log_level: "info"
 
-      - name: Prepare environment
-        run: mise run prepare
+      - name: Initialize environment
+        run: mise run init
 
       - name: Configure private git repository
         if: env.HAS_GH_PAT == 'true'
@@ -62,7 +62,7 @@ jobs:
 
       - name: Run lint
         if: github.event_name != 'pull_request'
-        run: mise run lint
+        run: mise run ci:go-lint
 
       - name: Revoke private git repository access
         if: always() && env.HAS_GH_PAT == 'true'

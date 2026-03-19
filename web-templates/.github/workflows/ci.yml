@@ -28,6 +28,7 @@ permissions:
   contents: read
   checks: write
   pull-requests: write
+  security-events: write
 
 jobs:
   check-managed:
@@ -66,6 +67,14 @@ jobs:
 
   semgrep:
     uses: nics-dp/meta/.github/workflows/bun-semgrep.yml@main
+
+  # --- Docker/Service repos only (repos with Dockerfile) ---
+
+  hadolint:
+    uses: nics-dp/meta/.github/workflows/hadolint.yml@main
+
+  trivy-iac:
+    uses: nics-dp/meta/.github/workflows/trivy-iac.yml@main
 
   # --- Optional ---
 
