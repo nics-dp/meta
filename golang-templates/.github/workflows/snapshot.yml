@@ -32,9 +32,10 @@ jobs:
        github.event.workflow_run.head_repository.full_name == github.repository)
     uses: nics-dp/meta/.github/workflows/go-release.yml@main
     permissions:
-      contents: read
+      contents: write
+      id-token: write
     with:
-      project_name: TODO        # TODO: 與 release.yml 一致
+      project_name: TODO # TODO: 與 release.yml 一致
       binary: "TODO:./cmd/TODO" # TODO: 與 release.yml 一致
       # cgo_enabled: true       # TODO: 與 release.yml 一致
       #                         # 注意: 若啟用 CGO，請同時在 release.yml / snapshot.yml 覆寫 `platforms`
@@ -57,7 +58,7 @@ jobs:
       contents: read
       packages: write
     with:
-      image_name: TODO          # TODO: 與 release.yml 一致
+      image_name: TODO # TODO: 與 release.yml 一致
       runs_on: '{"group":"releasers"}' # TODO: 若無 self-hosted releasers runner，改回 '"ubuntu-latest"'
       sbom: false # snapshot 不額外產出 BuildKit SBOM
       provenance: false # snapshot 不產生 provenance attestation
