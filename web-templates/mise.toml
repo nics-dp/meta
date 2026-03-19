@@ -1,37 +1,111 @@
 [tools]
+# Bun related
 bun = "latest"
 
-[tasks.prepare]
-description = "Install dependencies for CI and local development"
-run = "bun install --frozen-lockfile"
+# Dockerfile lint
+hadolint = "latest"
 
-[tasks.lint]
-description = "Run ESLint"
-run = "bun run lint"
+# SBOM generatation
+syft = "latest"
+"go:github.com/snyk/parlay" = "latest"
 
-[tasks.typecheck]
-description = "Run TypeScript type checking"
-run = "bun run typecheck"
+# Deps vuln scanning
+trivy = "latest"
+grype = "latest"
 
+# Static scanning
+"pipx:semgrep" = "latest"
+codeql = { version = "latest", bin_path = "codeql", platforms = """
+[linux-x64]
+asset_pattern = "codeql-linux64.zip"
+
+[macos-arm64]
+asset_pattern = "codeql-osx64.zip"
+
+[macos-x64]
+asset_pattern = "codeql-osx64.zip"
+
+[windows-x64]
+asset_pattern = "codeql-win64.zip"
+""" }
+
+# Docker Operation
+docker-cli = "latest"
+docker-compose = "latest"
+"github:docker/buildx" = { version = "latest", bin = "buildx" }
+
+# MISC
+gum = "latest"
+
+# ------------------------------------------------------------------------------
+[env]  # env for mise tasks
+_.file = ".env"
+
+[shell_alias]
+# Docker Aliases - All Docker commands start with "d" AND Docker Compose commands start with "dc"
+dstop = "docker stop $(sudo docker ps -a -q)"  # usage: dstop container_name
+dstopall = "docker stop $(sudo docker ps -aq)"  # stop all containers
+drm = "docker rm $(sudo docker ps -a -q)"  # usage: drm container_name
+dprunevol = "docker volume prune"  # remove unused volumes
+dprunesys = "docker system prune -a"  # remove unsed docker data
+ddelimages = "docker rmi $(sudo docker images -q)"  # remove unused docker images
+derase = "dstopcont ; drmcont ; ddelimages ; dvolprune ; dsysprune"  # WARNING: removes everything!
+dprune = "ddelimages ; dprunevol ; dprunesys"  # remove unused data, volumes, and images (perfect for safe clean up)
+dexec = "docker exec -ti"  # usage: dexec container_name (to access container terminal)
+dps = "docker ps -a"  # running docker processes
+dpss = '{% raw %}docker ps -a --format "table {{.Names}}\t{{.State}}\t{{.Status}}\t{{.Image}}" | (sed -u 1q; sort){% endraw %}'  # running docker processes as nicer table
+ddf = "docker system df"  # docker data usage (/var/lib/docker)
+dlogs = 'docker logs -tf --tail="50" '  # usage: dlogs container_name
+
+dcrun = "docker compose"
+dclogs = 'dcrun logs -tf --tail="50" '  # usage: dclogs container_name
+dcup = "dcrun up -d --build --remove-orphans"  # up the stack
+dcdown = "dcrun down --remove-orphans"  # down the stack
+dcrec = "dcrun up -d --force-recreate --remove-orphans"  # usage: dcrec container_name
+dcstop = "dcrun stop"  # usage: dcstop container_name
+dcrestart = "dcrun restart "  # usage: dcrestart container_name
+dcstart = "dcrun start "  # usage: dcstart container_name
+dcpull = "dcrun pull"  # usage: dcpull to pull all new images or dcpull container_name
+
+# ------------------------------------------------------------------------------
+# ==============================================================================
+#  Compile Ruler
+# ==============================================================================
+[tasks.ruler]  # command: mise run ruler
+description = "Compile ruler to AGENTS.md and CLAUDE.md"
+run = "bunx @intellectronica/ruler apply"
+
+# ==============================================================================
+#  Git Submodules
+# ==============================================================================
+
+[tasks."gs:clone"]
+description = "Clone git submodules"
+raw = true
+run = "git submodule update --init --recursive"
+
+[tasks."gs:update"]
+description = "Update git submodules"
+raw = true
+run = "git submodule update --remote --merge"
+
+# ==============================================================================
+#  Env init Tasks
+# ==============================================================================
+[tasks.init]
+description = "Initialize Environment"
+run = [
+  { task = "ruler" },
+  { task = "gs:clone" },
+  "bun install --frozen-lockfile"
+]
+
+# ==============================================================================
+#  Bun Tasks
+# ==============================================================================
 [tasks.build]
 description = "Build the web app"
 run = "bun run build"
-
-[tasks.audit]
-description = "Run dependency audit"
-run = "bun audit"
-
-[tasks.test]
-description = "Run Vitest with coverage"
-run = "bun run test:coverage"
-
-[tasks.format-check]
-description = "Run Prettier format check"
-run = "bun run format:check"
-
-[tasks.knip]
-description = "Run Knip dead code analysis"
-run = "bun run knip"
 
 [tasks.lighthouse]
 description = "Run Lighthouse CI"
@@ -46,3 +120,118 @@ run = """
 bun run build
 bunx size-limit
 """
+
+# ==============================================================================
+#  Misc Tasks
+# ==============================================================================
+
+[tasks.clean]
+description = "Cleanup leftovers"
+run = '''
+echo "Cleaning..."
+rm -rf dist
+rm -rf coverage
+rm -rf node_modules/.cache
+echo "Clean completed!"
+'''
+
+# ==============================================================================
+#  CI Tasks
+# ==============================================================================
+[tasks."ci:commitlint"]
+description = "Run commitlint on recent commits"
+raw = true
+run = "bunx commitlint --from HEAD~1 --to HEAD"
+
+[tasks."ci:hadolint"]
+description = "Lint Dockerfiles with hadolint"
+raw = true
+run = "hadolint Dockerfile*"
+
+[tasks."ci:trivy-iac"]
+description = "Run Trivy IaC scan on Dockerfiles and compose files"
+raw = true
+run = "trivy config --exit-code 0 ."
+
+[tasks."ci:trivy-license"]
+description = "Run Trivy license compliance check"
+raw = true
+run = "trivy fs --scanners license --exit-code 0 ."
+
+[tasks."ci:lint"]
+description = "Run ESLint"
+raw = true
+run = "bun run lint"
+
+[tasks."ci:typecheck"]
+description = "Run TypeScript type checking"
+raw = true
+run = "bun run typecheck"
+
+[tasks."ci:audit"]
+description = "Run dependency audit"
+raw = true
+run = "bun audit"
+
+[tasks."ci:format-check"]
+description = "Run Prettier format check"
+raw = true
+run = "bun run format:check"
+
+[tasks."ci:knip"]
+description = "Run Knip dead code analysis"
+raw = true
+run = "bun run knip"
+
+[tasks."ci:semgrep"]
+description = "Run semgrep static analysis for JS/TS"
+raw = true
+run = "semgrep scan --error --enable-nosem --config p/javascript --config p/typescript ."
+
+[tasks."ci:test"]
+description = "Run unit tests with coverage"
+run = "bun run test:coverage"
+
+[tasks.ci]
+description = "Run all CI checks"
+depends = [
+  "ci:commitlint",
+  "ci:hadolint",
+  "ci:trivy-iac",
+  "ci:trivy-license",
+  "ci:lint",
+  "ci:typecheck",
+  "ci:format-check",
+  "ci:knip",
+  "ci:semgrep",
+  "ci:test",
+]
+
+# ==============================================================================
+#  SBOM Tasks
+# ==============================================================================
+
+[tasks.sbom]
+description = "Run full SBOM pipeline (generate, enrich, scan)"
+depends = ["sbom:trivy", "sbom:grype"]
+
+[tasks."sbom:source"]
+description = "Generate CycloneDX SBOM for source"
+run = "syft scan . -o cyclonedx-json=sbom-source.cdx.json"
+
+[tasks."sbom:enrich"]
+description = "Enrich SBOM with ecosystem metadata"
+depends = ["sbom:source"]
+run = "parlay ecosystems enrich sbom-source.cdx.json > enriched-source.cdx.json"
+
+[tasks."sbom:trivy"]
+description = "Scan SBOM for vulnerabilities with Trivy"
+raw = true
+depends = ["sbom:enrich"]
+run = "trivy sbom enriched-source.cdx.json"
+
+[tasks."sbom:grype"]
+description = "Scan SBOM for vulnerabilities with Grype"
+raw = true
+depends = ["sbom:enrich"]
+run = "grype sbom:enriched-source.cdx.json"
