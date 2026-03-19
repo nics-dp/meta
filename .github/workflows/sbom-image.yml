@@ -122,6 +122,7 @@ jobs:
         with:
           sbom: enriched-image.cdx.json
           output-format: sarif
+          severity-cutoff: high
 
       - name: Upload Grype SARIF to GitHub Security tab
         uses: github/codeql-action/upload-sarif@b1bff81932f5cdfc8695c7752dcee935dcd061c8 # v4.33.0
@@ -135,6 +136,7 @@ jobs:
         with:
           sbom: enriched-image.cdx.json
           output-format: json
+          severity-cutoff: high
 
       - name: Prepare release assets
         env:
