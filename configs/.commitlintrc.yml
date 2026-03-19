@@ -17,13 +17,7 @@ rules:
       - chore
       - revert
   scope-enum:
-    - 2
-    - always
-    - - go.deps
-      - ci.deps
-      - docker.deps
-      - npm.deps
-      - ""
+    - 0
   subject-case:
     - 2
     - always
