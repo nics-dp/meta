@@ -87,9 +87,9 @@ image-build ──► sbom-image    (Service repos only)
 | Job | Meta Workflow | Description |
 |-----|---------------|-------------|
 | go-release | `go-release.yml` | Multi-platform Go binary build, optional CGO/Linux-only override, cosign signing |
-| sbom-source | `sbom-source.yml` | Source SBOM (CycloneDX 1.6) + vulnerability scan (Trivy + Grype) + Security tab upload |
+| sbom-source | `sbom-source.yml` | Source SBOM (CycloneDX 1.6) + vulnerability scan (Trivy + Grype) + Security tab upload. Needs `actions: read` |
 | image-build | `image-release.yml` | Docker image build + push on `{"group":"releasers"}` (Service repos only) |
-| sbom-image | `sbom-image.yml` | Image SBOM + vulnerability scan + Security tab upload (Service repos only) |
+| sbom-image | `sbom-image.yml` | Image SBOM + vulnerability scan + Security tab upload (Service repos only). Needs `actions: read` |
 
 **Notes:**
 - The shipped template pins release builds to `runs_on: '{"group":"releasers"}'`.
