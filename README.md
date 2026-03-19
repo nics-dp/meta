@@ -497,7 +497,6 @@ secrets:
 ```yaml
 uses: nics-dp/meta/.github/workflows/sbom-source.yml@main
 permissions:
-  actions: read
   contents: write
   security-events: write
 with:
@@ -521,7 +520,6 @@ with:
 ```yaml
 uses: nics-dp/meta/.github/workflows/sbom-image.yml@main
 permissions:
-  actions: read
   contents: write
   packages: read
   security-events: write
@@ -594,9 +592,6 @@ Sync workflows 由 meta repo 的 `cron.yml` 統一排程觸發 (每週一 00:00 
 
 ```yaml
 uses: nics-dp/meta/.github/workflows/sync-<name>.yml@main
-permissions:
-  contents: write
-  pull-requests: write
 with:
   repo_name: <repo-name>  # 必要，不含 org prefix
 secrets:
@@ -618,7 +613,6 @@ uses: nics-dp/meta/.github/workflows/artifacts-comment.yml@main
 permissions:
   actions: read
   issues: write
-  pull-requests: write
 ```
 
 | 參數 | 類型 | 預設值 | 說明 |
@@ -657,9 +651,6 @@ secrets:
 
 ```yaml
 uses: nics-dp/meta/.github/workflows/check-upstream-release.yml@main
-permissions:
-  contents: write
-  pull-requests: write
 with:
   upstream_repo: patroni/patroni     # 必要
   version_file: Dockerfile.env       # 必要
