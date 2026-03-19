@@ -23,7 +23,7 @@ jobs:
     name: License Check
     runs-on: ubuntu-latest
     env:
-      GH_PAT: ${{ secrets.gh_pat }}
+      HAS_GH_PAT: ${{ secrets.gh_pat != '' }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
@@ -38,8 +38,9 @@ jobs:
         run: mise run prepare
 
       - name: Configure private git repository
-        if: env.GH_PAT != ''
+        if: env.HAS_GH_PAT == 'true'
         env:
+          GH_PAT: ${{ secrets.gh_pat }}
           GO_PRIVATE_FULL: ${{ inputs.go_private_full }}
         run: |
           if [ "$GO_PRIVATE_FULL" = "true" ]; then
@@ -118,3 +119,11 @@ jobs:
         with:
           header: trivy-license
           message: ${{ steps.summary.outputs.body }}
+
+      - name: Revoke private git repository access
+        if: always() && env.HAS_GH_PAT == 'true'
+        env:
+          GH_PAT: ${{ secrets.gh_pat }}
+        run: |
+          git config --global --remove-section "url.https://${GH_PAT}@github.com/" 2>/dev/null || true
+          git config --global --remove-section "url.https://${GH_PAT}@github.com/nics-dp" 2>/dev/null || true
