@@ -13,12 +13,10 @@ on:
   push:
     branches: [main, "release/**"]
 
-permissions:
-  contents: write
-  pull-requests: write
+permissions: {}
 
 jobs:
   release-please:
     uses: nics-dp/meta/.github/workflows/release-please.yml@main
     secrets:
-      gh_pat: ${{ secrets.GH_PAT_READ_NICSDP }}
+      gh_pat: ${{ secrets.GH_PAT_RELEASE_NICSDP }}

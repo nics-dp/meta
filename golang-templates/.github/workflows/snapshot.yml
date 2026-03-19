@@ -32,8 +32,7 @@ jobs:
        github.event.workflow_run.head_repository.full_name == github.repository)
     uses: nics-dp/meta/.github/workflows/go-release.yml@main
     permissions:
-      contents: write
-      id-token: write
+      contents: read
     with:
       project_name: TODO        # TODO: 與 release.yml 一致
       binary: "TODO:./cmd/TODO" # TODO: 與 release.yml 一致
@@ -57,7 +56,6 @@ jobs:
     permissions:
       contents: read
       packages: write
-      id-token: write
     with:
       image_name: TODO          # TODO: 與 release.yml 一致
       runs_on: '{"group":"releasers"}' # TODO: 若無 self-hosted releasers runner，改回 '"ubuntu-latest"'
@@ -78,5 +76,4 @@ jobs:
     uses: nics-dp/meta/.github/workflows/artifacts-comment.yml@main
     permissions:
       actions: read # 讀取 workflow artifacts
-      pull-requests: write # 更新 PR comment
-      issues: write # sticky comment action 需要
+      issues: write # 更新 PR comment

@@ -39,13 +39,12 @@ jobs:
       # platforms: linux/amd64,linux/arm64 # 啟用 CGO 時，請同時覆寫 platforms 僅建置 Linux (或調整 go-release workflow 的 runners)
       runs_on: '{"group":"releasers"}' # TODO: 若無 self-hosted releasers runner，改回 '"ubuntu-latest"'
     secrets:
-      gh_pat: ${{ secrets.GH_PAT_RELEASE_NICSDP }} # 供 release 時讀取 private modules
+      gh_pat: ${{ secrets.GH_PAT_READ_NICSDP }} # 供 release 時讀取 private modules
 
   sbom-source:
     needs: [go-release]
     uses: nics-dp/meta/.github/workflows/sbom-source.yml@main
     permissions:
-      actions: read # 讓 SBOM workflow 可讀取 action metadata / artifacts
       contents: write # 上傳 GitHub Release assets
       security-events: write # 上傳 Trivy / Grype SARIF 到 Security tab
     with:
@@ -71,7 +70,6 @@ jobs:
     needs: [image-build]
     uses: nics-dp/meta/.github/workflows/sbom-image.yml@main
     permissions:
-      actions: read # 讓 SBOM workflow 可讀取 action metadata / artifacts
       contents: write # 上傳 GitHub Release assets
       packages: read # 從 GHCR 拉取 image 產生 SBOM
       security-events: write # 上傳 Trivy / Grype SARIF 到 Security tab

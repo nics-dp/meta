@@ -67,7 +67,7 @@ These jobs are enabled in the shipped `ci.yml`. Remove or comment out any that d
 | Job | Meta Workflow | Description |
 |-----|---------------|-------------|
 | hadolint | `hadolint.yml` | Dockerfile linting (Docker/service repos only) |
-| trivy-iac | `trivy-iac.yml` | IaC security scanning for Dockerfiles + compose (Docker/service repos only, needs `security-events: write`) |
+| trivy-iac | `trivy-iac.yml` | IaC security scanning for Dockerfiles + compose (Docker/service repos only) |
 | knip | `bun-knip.yml` | Runs `mise run ci:knip` |
 | lighthouse | `bun-lighthouse.yml` | Runs `mise run lighthouse` (depends on build) |
 | bundle-size | `bun-bundle-size.yml` | Disabled by default; enable after adding repo-specific `size-limit` config |
@@ -146,7 +146,7 @@ Sends GitHub event notifications to Google Chat.
    cp configs/renovate.json <new-repo>/
    ```
 
-4. If the project does **not** have a Dockerfile, remove `hadolint` and `trivy-iac` from `ci.yml` and remove the `security-events: write` permission.
+4. If the project does **not** have a Dockerfile, remove `hadolint` and `trivy-iac` from `ci.yml`.
 
 5. Handle the jobs that are enabled in `ci.yml` by default:
    - Keep the default optional jobs: copy the optional configs below so `knip` and `lighthouse` can run.

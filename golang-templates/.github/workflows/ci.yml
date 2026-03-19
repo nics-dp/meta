@@ -26,55 +26,79 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-# 根據專案類型調整:
-# - Service/Docker repo (有 hadolint + trivy-iac): 需要 security-events: write
-# - CLI repo / Library (無 trivy-iac): 移除 security-events: write
-permissions:
-  contents: read
-  checks: write
-  pull-requests: write
-  security-events: write
+permissions: {}
 
 jobs:
   check-managed:
     uses: nics-dp/meta/.github/workflows/check-managed-files.yml@main
+    permissions:
+      pull-requests: read
 
   commitlint:
     uses: nics-dp/meta/.github/workflows/commitlint.yml@main
+    permissions:
+      contents: read
 
   # 僅 Service/Docker repos 需要 (有 Dockerfile 的 repos)
   hadolint:
     uses: nics-dp/meta/.github/workflows/hadolint.yml@main
+    permissions:
+      contents: read
+      checks: write
+      pull-requests: write
 
   # 僅 Service/Docker repos 需要 (有 Dockerfile 的 repos)
   trivy-iac:
     uses: nics-dp/meta/.github/workflows/trivy-iac.yml@main
+    permissions:
+      contents: read
+      pull-requests: write
+      security-events: write
 
   trivy-license:
     uses: nics-dp/meta/.github/workflows/trivy-license.yml@main
+    permissions:
+      contents: read
+      pull-requests: write
     secrets:
       gh_pat: ${{ secrets.GH_PAT_READ_NICSDP }}
 
   go-lint:
     uses: nics-dp/meta/.github/workflows/go-lint.yml@main
+    permissions:
+      contents: read
+      checks: write
+      pull-requests: write
     secrets:
       gh_pat: ${{ secrets.GH_PAT_READ_NICSDP }}
 
   go-sec:
     uses: nics-dp/meta/.github/workflows/go-sec.yml@main
+    permissions:
+      contents: read
+      pull-requests: write
     secrets:
       gh_pat: ${{ secrets.GH_PAT_READ_NICSDP }}
 
   go-vulncheck:
     uses: nics-dp/meta/.github/workflows/go-vulncheck.yml@main
+    permissions:
+      contents: read
+      pull-requests: write
     secrets:
       gh_pat: ${{ secrets.GH_PAT_READ_NICSDP }}
 
   go-semgrep:
     uses: nics-dp/meta/.github/workflows/go-semgrep.yml@main
+    permissions:
+      contents: read
+      pull-requests: write
 
   go-test:
     needs: [go-lint, go-sec]
     uses: nics-dp/meta/.github/workflows/go-test.yml@main
+    permissions:
+      contents: read
+      pull-requests: write
     secrets:
       gh_pat: ${{ secrets.GH_PAT_READ_NICSDP }}

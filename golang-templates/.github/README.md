@@ -93,8 +93,8 @@ image-build ──► sbom-image    (Service repos only)
 
 **Notes:**
 - The shipped template pins release builds to `runs_on: '{"group":"releasers"}'`.
-- `sbom-source` and `sbom-image` require `actions: read` in addition to `contents: write` / `security-events: write`.
-- `go-release` receives `GH_PAT_RELEASE_NICSDP` in the template so release jobs can both read private modules and create downstream release activity.
+- `go-release` receives `GH_PAT_READ_NICSDP` in the template so release jobs can read private modules during builds.
+- `release-please.yml` uses `GH_PAT_RELEASE_NICSDP` because release creation must trigger downstream workflows.
 
 ---
 
@@ -123,7 +123,7 @@ image-build ─┼──► artifacts-comment
 **Notes:**
 - `workflow_run` execution only proceeds for successful same-repo pull requests; manual dispatch bypasses that gate.
 - The shipped template pins snapshot builds to `runs_on: '{"group":"releasers"}'`.
-- `go-release` uses `contents: write` and `id-token: write`; `artifacts-comment` needs `actions: read`, `pull-requests: write`, and `issues: write`.
+- In snapshot mode, `go-release` only needs `contents: read`; `artifacts-comment` only needs `actions: read` and `issues: write`.
 
 ---
 
@@ -144,6 +144,7 @@ GitHub CodeQL static security analysis. Managed centrally via `configs/codeqls/<
 **Features:**
 - Uses `security-extended` and `security-and-quality` query suites
 - Supports private repo access via `external-repository-token`
+- Narrows PAT-backed git access to `github.com/nics-dp` instead of rewriting all GitHub HTTPS fetches
 
 ---
 
@@ -184,12 +185,12 @@ Sends GitHub event notifications to Google Chat.
    **Service repo** (Go binary + Docker image): use all workflows as-is.
 
    **CLI repo** (Go binary only):
-   - `ci.yml`: remove `hadolint` and `trivy-iac` jobs, remove `security-events: write`
+   - `ci.yml`: remove `hadolint` and `trivy-iac` jobs
    - `release.yml`: remove `image-build` and `sbom-image` jobs
    - `snapshot.yml`: remove `image-build` job, change `artifacts-comment` needs to `[go-release]`
 
    **Library** (no binary, no Docker):
-   - `ci.yml`: remove `hadolint` and `trivy-iac` jobs, remove `security-events: write`
+   - `ci.yml`: remove `hadolint` and `trivy-iac` jobs
    - Remove `release.yml` and `snapshot.yml` entirely
 
 5. Configure repo secrets as needed:
