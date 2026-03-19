@@ -46,7 +46,10 @@ jobs:
               github.rest.actions.listWorkflowRunArtifacts,
               {owner, repo, run_id: context.runId},
               (response) => response.data.artifacts || []
-            )).filter(art => art?.id && art?.name && art.name.trim() !== 'undefined');
+            )).filter(art => {
+              const name = typeof art?.name === 'string' ? art.name.trim() : '';
+              return art?.id && name && name !== 'undefined';
+            });
 
             if (!artifacts.length) {
               core.info('No valid artifacts found, skipping comment');
