@@ -6,9 +6,10 @@
 # All jobs call reusable workflows from nics-dp/meta.
 #
 # Adjust per project:
-# - Recommended jobs (test, format-check, trivy-license): keep enabled
-# - Optional jobs (knip, lighthouse): remove if not needed
-# - Bundle size is disabled by default until the repo adds its own size-limit config
+# - Recommended jobs (test, format-check, trivy-license, semgrep): keep enabled
+# - If the repo has no Dockerfile, remove hadolint + trivy-iac before the first CI run
+# - Optional jobs (knip, lighthouse) can be removed if not needed
+# - Bundle size is commented out by default until the repo adds its own size-limit config
 
 name: ci
 

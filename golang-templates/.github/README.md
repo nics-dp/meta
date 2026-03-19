@@ -9,7 +9,7 @@ All workflows call reusable workflows from `nics-dp/meta`.
 |---|---|---|
 | `ci.yml` | Managed file check, commitlint, hadolint, trivy-iac, trivy-license, lint, security scan, vulnerability check, Semgrep, test | push, PR, manual |
 | `release-please.yml` | Auto-create Release PR with changelog, then GitHub Release | push to main/release |
-| `release.yml` | Build Go binaries, Docker image, SBOMs, sign artifacts | push tag v*, manual |
+| `release.yml` | Build Go binaries, Docker image, SBOMs, sign artifacts | release created, manual |
 | `snapshot.yml` | Build snapshot artifacts on PR, post artifact links via `artifacts-comment` | CI success on PR, manual |
 | `codeql.yml` | CodeQL security analysis (Go + Actions) | push, PR, weekly, manual |
 | `notify.yml` | Google Chat notifications for PR/push/release/issue/CI events | various |
@@ -65,16 +65,16 @@ Auto-creates Release PRs with changelog based on conventional commits. After mer
 1. Detect conventional commits, calculate next semver version
 2. Create/update Release PR (with auto-generated changelog)
 3. After Release PR merge, create GitHub Release + tag
-4. Tag push triggers release.yml
+4. Release creation triggers release.yml
 
 ---
 
 ### release.yml — Production Release
 
-Builds Go binaries (multi-platform cross-compilation), Docker images, and uploads to GitHub Release with cosign signatures.
+Builds Go binaries (multi-platform cross-compilation), Docker images, and uploads release assets with cosign signatures.
 
 **Triggers:**
-- Push tag `v*`
+- Release created (`release: types: [created]`)
 - Manual (`workflow_dispatch`)
 
 **Jobs:**
@@ -93,7 +93,7 @@ image-build ──► sbom-image    (Service repos only)
 
 **Notes:**
 - The shipped template pins release builds to `runs_on: '{"group":"releasers"}'`.
-- `go-release` receives `GH_PAT_READ_NICSDP` in the template so release jobs can read private modules during builds.
+- `go-release` and `image-build` receive `GH_PAT_READ_NICSDP` in the template so release jobs can read private modules during builds.
 - `release-please.yml` uses `GH_PAT_RELEASE_NICSDP` because release creation must trigger downstream workflows.
 
 ---
@@ -194,15 +194,15 @@ Sends GitHub event notifications to Google Chat.
    - Remove `release.yml` and `snapshot.yml` entirely
 
 5. Configure repo secrets as needed:
-   - `GH_PAT_READ_NICSDP` for private repos importing `nics-dp` modules, snapshot builds, or private-module CodeQL access
-   - `GH_PAT_RELEASE_NICSDP` for `release-please.yml`, `release.yml`, and release-time private module access
+   - `GH_PAT_READ_NICSDP` for private repos importing `nics-dp` modules, release/snapshot builds, or private-module CodeQL access
+   - `GH_PAT_RELEASE_NICSDP` for `release-please.yml`
 
 ## Required Secrets
 
 | Secret | Used by | Required |
 |---|---|---|
-| `GH_PAT_READ_NICSDP` | ci, snapshot, codeql | Private repos / private module access |
-| `GH_PAT_RELEASE_NICSDP` | release-please, release | All repos (triggers downstream workflows) |
+| `GH_PAT_READ_NICSDP` | ci, release, snapshot, codeql | Private repos / private module access |
+| `GH_PAT_RELEASE_NICSDP` | release-please | All repos (triggers downstream workflows) |
 | `DOCKERHUB_USERNAME` | release, snapshot | Docker image repos |
 | `DOCKERHUB_TOKEN` | release, snapshot | Docker image repos |
 | `GOOGLE_CHAT_WEBHOOK` | notify | Optional |

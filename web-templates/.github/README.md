@@ -62,7 +62,7 @@ typecheck ─────┘      │
 
 #### Optional
 
-These jobs are enabled in the shipped `ci.yml`. Remove or comment out any that don't apply to your project before the first CI run.
+These jobs are enabled in the shipped `ci.yml` unless otherwise noted. Remove or comment out any that don't apply to your project before the first CI run.
 
 | Job | Meta Workflow | Description |
 |-----|---------------|-------------|
@@ -70,7 +70,7 @@ These jobs are enabled in the shipped `ci.yml`. Remove or comment out any that d
 | trivy-iac | `trivy-iac.yml` | IaC security scanning for Dockerfiles + compose (Docker/service repos only) |
 | knip | `bun-knip.yml` | Runs `mise run ci:knip` |
 | lighthouse | `bun-lighthouse.yml` | Runs `mise run lighthouse` (depends on build) |
-| bundle-size | `bun-bundle-size.yml` | Disabled by default; enable after adding repo-specific `size-limit` config |
+| bundle-size | `bun-bundle-size.yml` | Commented out by default; enable only after adding repo-specific `size-limit` config |
 
 ---
 
@@ -85,6 +85,8 @@ Auto-creates Release PRs with changelog based on conventional commits. After mer
 1. Detect conventional commits, calculate next semver version
 2. Create/update Release PR (with auto-generated changelog)
 3. After Release PR merge, create GitHub Release + tag
+
+**Note:** `release-please.yml` requires `GH_PAT_RELEASE_NICSDP`; `GITHUB_TOKEN` alone will not trigger downstream workflows.
 
 ---
 
@@ -151,7 +153,7 @@ Sends GitHub event notifications to Google Chat.
 5. Handle the jobs that are enabled in `ci.yml` by default:
    - Keep the default optional jobs: copy the optional configs below so `knip` and `lighthouse` can run.
    - Enable `bundle-size` only after adding your own `size-limit` configuration.
-   - Slim down the template: remove or comment out optional jobs in `.github/workflows/ci.yml` before the first CI run.
+   - Slim down the template: remove or comment out `knip` / `lighthouse` if the repo does not need them before the first CI run.
    ```
    cp configs/knip.json <new-repo>/
    cp configs/lighthouserc.json <new-repo>/

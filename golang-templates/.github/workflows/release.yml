@@ -9,6 +9,7 @@
 # - CLI repo (Go binary only): 移除 image-build job，移除 cgo_enabled
 # - Docker-only repo: 移除 go-release job，以及所有相依 go-release 的 jobs（例如 sbom-source）
 # - 若啟用 CGO，請同時把 platforms 覆寫為僅 Linux 目標，或改用支援該目標的 runners
+# - release-please 建立 Release 後才會觸發此 workflow；不要改成 tag push
 #
 # 必須修改的參數 (標記為 TODO):
 # - project_name: 專案名稱
@@ -39,7 +40,7 @@ jobs:
       # platforms: linux/amd64,linux/arm64 # 啟用 CGO 時，請同時覆寫 platforms 僅建置 Linux (或調整 go-release workflow 的 runners)
       runs_on: '{"group":"releasers"}' # TODO: 若無 self-hosted releasers runner，改回 '"ubuntu-latest"'
     secrets:
-      gh_pat: ${{ secrets.GH_PAT_READ_NICSDP }} # 供 release 時讀取 private modules
+      gh_pat: ${{ secrets.GH_PAT_READ_NICSDP }} # 供 release 時讀取 private modules；不是 release-please PAT
 
   sbom-source:
     needs: [go-release]

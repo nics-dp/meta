@@ -4,9 +4,11 @@
 
 ## Required Before First CI
 
+- 若 repo 沒有 Dockerfile，先從 `.github/workflows/ci.yml` 移除 `hadolint` 與 `trivy-iac` jobs
 - 確認 `package.json` 已包含 README 列出的必要 scripts，特別是 `lint`、`typecheck`、`build`、`test:coverage`、`format:check`
 - 安裝 README 列出的必要 devDependencies，至少包含 `prettier`、`prettier-plugin-tailwindcss`、`vitest`、`jsdom`、`@vitest/coverage-v8`
 - 若保留 `knip` 或 `lighthouse` job，另外安裝 `knip` 與 `@lhci/cli`
+- 確認已設定 `GH_PAT_RELEASE_NICSDP`，否則 `release-please.yml` 無法建立會觸發下游 workflows 的 release/tag
 
 ## Optional Follow-ups
 
@@ -18,4 +20,4 @@
 
 - `configs/vitest.config.ts` 目前刻意維持最小可用版本，避免同步到現有 repo 時因缺少 `src/test/setup.ts` 而壞掉
 - `configs/eslint.config.js` 目前不包含 `eslint-plugin-security`，避免 config sync 先於 dependency rollout
-- `bundle-size` workflow 仍保留在 meta，但預設不應在新 repo 直接啟用
+- `bundle-size` workflow 仍保留在 meta，但 template 中預設維持註解狀態，不應在新 repo 直接啟用

@@ -5,11 +5,12 @@
 #
 # 使用方式: 複製到新 repo 的 .github/workflows/ci.yml
 # 私有 repo: 保留 gh_pat secrets
-# 公開 repo: 移除所有 secrets 區塊
+# 公開 repo: 可移除 go / license jobs 中不需要的 secrets 區塊
 #
 # 根據專案類型調整:
 # - Service repo (有 Dockerfile): 保留 hadolint + trivy-iac jobs
 # - CLI repo / Library: 移除 hadolint + trivy-iac jobs
+# - 視需求保留 trivy-license / go-semgrep；go-test 目前依賴 go-lint + go-sec
 # - 非 Go repo: 移除 go-lint, go-sec, go-vulncheck, trivy-license, go-test jobs
 
 name: ci

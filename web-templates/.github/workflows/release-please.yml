@@ -4,6 +4,7 @@
 # 自動建立 Release PR (含 changelog) 並建立 GitHub Release
 #
 # 使用方式: 複製到 .github/workflows/release-please.yml
+# 注意: 需使用 GH_PAT_RELEASE_NICSDP；僅靠 GITHUB_TOKEN 不會觸發下游 workflows
 
 name: release-please
 

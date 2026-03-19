@@ -10,6 +10,7 @@
 # - CLI repo: 移除 image-build job
 # - Docker-only repo: 移除 go-release job
 # - 若啟用 CGO，請同時把 platforms 覆寫為僅 Linux 目標，或改用支援該目標的 runners
+# - workflow_run 僅會在同 repo PR 的 ci 成功後繼續；fork PR 不會進入 snapshot build
 
 name: snapshot
 
@@ -65,6 +66,7 @@ jobs:
       sbom: false # snapshot 不額外產出 BuildKit SBOM
       provenance: false # snapshot 不產生 provenance attestation
       attest: false # snapshot 不產生 artifact attestation
+      cosign: false
       snapshot: true
       ref: ${{ github.event.workflow_run.head_sha || '' }}
     secrets:

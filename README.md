@@ -33,7 +33,7 @@ jobs:
 
 ### go-lint.yml — 程式碼檢查
 
-執行 `mise run lint` (golangci-lint v2)。
+PR 時使用 reviewdog inline annotation，非 PR 時執行 `mise run ci:go-lint` (golangci-lint v2)。
 
 ```yaml
 uses: nics-dp/meta/.github/workflows/go-lint.yml@main
@@ -49,7 +49,7 @@ secrets:
 
 ### go-sec.yml — 靜態安全掃描
 
-執行 `mise run security` (gosec)。
+執行 `mise run ci:go-sec` (gosec)，結果以 sticky PR comment 回報。
 
 ```yaml
 uses: nics-dp/meta/.github/workflows/go-sec.yml@main
@@ -65,7 +65,7 @@ secrets:
 
 ### go-vulncheck.yml — Go 漏洞檢查
 
-執行 `mise run vulncheck` (govulncheck)。
+執行 `mise run ci:go-vulncheck` (govulncheck)，結果以 sticky PR comment 回報。
 
 ```yaml
 uses: nics-dp/meta/.github/workflows/go-vulncheck.yml@main
@@ -95,7 +95,7 @@ uses: nics-dp/meta/.github/workflows/go-semgrep.yml@main
 
 ### go-test.yml — 單元測試
 
-執行 `mise run test`，可選產出覆蓋率報告。
+執行 `mise run ci:test`，可選產出覆蓋率報告。
 
 ```yaml
 uses: nics-dp/meta/.github/workflows/go-test.yml@main
@@ -108,11 +108,10 @@ secrets:
 | 參數 | 類型 | 預設值 | 說明 |
 |------|------|--------|------|
 | `go_private_full` | boolean | `true` | 設定 GOPRIVATE/GONOSUMDB |
-| `test_command` | string | `mise run test` | 測試指令 (需產出 `coverage.out`) |
+| `test_command` | string | `mise run ci:test` | 測試指令 (需產出 `coverage.out`) |
 | `run_report` | boolean | `false` | 是否執行 report job |
-| `report_command` | string | `mise run report` | 覆蓋率報告指令 |
 
-**前提:** Consumer repo 的 mise.toml 需有 `test` task，且產出 `coverage.out`。
+**前提:** Consumer repo 的 mise.toml 需有 `ci:test` task，且產出 `coverage.out`。
 
 ---
 
@@ -210,7 +209,7 @@ uses: nics-dp/meta/.github/workflows/check-managed-files.yml@main
 
 ### bun-lint.yml — ESLint 檢查
 
-執行 `mise run lint` (內部預設呼叫 `bun run lint`)。
+執行 `mise run ci:lint` (內部預設呼叫 `bun run lint`)。
 
 ```yaml
 uses: nics-dp/meta/.github/workflows/bun-lint.yml@main
@@ -218,14 +217,14 @@ uses: nics-dp/meta/.github/workflows/bun-lint.yml@main
 
 | 參數 | 類型 | 預設值 | 說明 |
 |------|------|--------|------|
-| `task` | string | `lint` | `mise` task 名稱 |
+| `task` | string | `ci:lint` | `mise` task 名稱 |
 | `command` | string | `""` | 選用，直接覆寫 shell 指令 |
 
 ---
 
 ### bun-typecheck.yml — TypeScript 型別檢查
 
-執行 `mise run typecheck` (內部預設呼叫 `bun run typecheck`)。
+執行 `mise run ci:typecheck` (內部預設呼叫 `bun run typecheck`)。
 
 ```yaml
 uses: nics-dp/meta/.github/workflows/bun-typecheck.yml@main
@@ -233,7 +232,7 @@ uses: nics-dp/meta/.github/workflows/bun-typecheck.yml@main
 
 | 參數 | 類型 | 預設值 | 說明 |
 |------|------|--------|------|
-| `task` | string | `typecheck` | `mise` task 名稱 |
+| `task` | string | `ci:typecheck` | `mise` task 名稱 |
 | `command` | string | `""` | 選用，直接覆寫 shell 指令 |
 
 ---
@@ -255,7 +254,7 @@ uses: nics-dp/meta/.github/workflows/bun-build.yml@main
 
 ### bun-audit.yml — 依賴漏洞檢查
 
-執行 `mise run audit` (內部預設呼叫 `bun audit`)。
+執行 `mise run ci:audit` (內部預設呼叫 `bun audit`)。
 
 ```yaml
 uses: nics-dp/meta/.github/workflows/bun-audit.yml@main
@@ -263,14 +262,14 @@ uses: nics-dp/meta/.github/workflows/bun-audit.yml@main
 
 | 參數 | 類型 | 預設值 | 說明 |
 |------|------|--------|------|
-| `task` | string | `audit` | `mise` task 名稱 |
+| `task` | string | `ci:audit` | `mise` task 名稱 |
 | `command` | string | `""` | 選用，直接覆寫 shell 指令 |
 
 ---
 
 ### bun-test.yml — 單元測試
 
-執行 `mise run test` (內部預設呼叫 `bun run test:coverage`)。
+執行 `mise run ci:test` (內部預設呼叫 `bun run test:coverage`)。
 
 ```yaml
 uses: nics-dp/meta/.github/workflows/bun-test.yml@main
@@ -278,14 +277,14 @@ uses: nics-dp/meta/.github/workflows/bun-test.yml@main
 
 | 參數 | 類型 | 預設值 | 說明 |
 |------|------|--------|------|
-| `task` | string | `test` | `mise` task 名稱 |
+| `task` | string | `ci:test` | `mise` task 名稱 |
 | `command` | string | `""` | 選用，直接覆寫 shell 指令 |
 
 ---
 
 ### bun-format-check.yml — 格式檢查
 
-執行 `mise run format-check` (內部預設呼叫 `bun run format:check`)。
+執行 `mise run ci:format-check` (內部預設呼叫 `bun run format:check`)。
 
 ```yaml
 uses: nics-dp/meta/.github/workflows/bun-format-check.yml@main
@@ -293,14 +292,14 @@ uses: nics-dp/meta/.github/workflows/bun-format-check.yml@main
 
 | 參數 | 類型 | 預設值 | 說明 |
 |------|------|--------|------|
-| `task` | string | `format-check` | `mise` task 名稱 |
+| `task` | string | `ci:format-check` | `mise` task 名稱 |
 | `command` | string | `""` | 選用，直接覆寫 shell 指令 |
 
 ---
 
 ### bun-knip.yml — Dead Code 檢查
 
-執行 `mise run knip` (內部預設呼叫 `bun run knip`)。
+執行 `mise run ci:knip` (內部預設呼叫 `bun run knip`)。
 
 ```yaml
 uses: nics-dp/meta/.github/workflows/bun-knip.yml@main
@@ -308,7 +307,7 @@ uses: nics-dp/meta/.github/workflows/bun-knip.yml@main
 
 | 參數 | 類型 | 預設值 | 說明 |
 |------|------|--------|------|
-| `task` | string | `knip` | `mise` task 名稱 |
+| `task` | string | `ci:knip` | `mise` task 名稱 |
 | `command` | string | `""` | 選用，直接覆寫 shell 指令 |
 
 ---
@@ -400,7 +399,7 @@ with:
   cgo_enabled: true
   runs_on: '{"group":"releasers"}'  # 選用
 secrets:
-  gh_pat: ${{ secrets.GH_PAT_RELEASE_NICSDP }}  # 選用；若需要存取私有模組，通常沿用 release PAT
+  gh_pat: ${{ secrets.GH_PAT_READ_NICSDP }}  # 選用；若需要存取私有模組，通常傳 read PAT
 
 # 多 binary
 with:
@@ -425,7 +424,7 @@ with:
 | `runs_on` | string | `"ubuntu-latest"` | 否 | Runner (JSON 格式，經 `fromJSON()` 解析) |
 
 **選用 Secrets:**
-- `gh_pat` — 存取私有模組；consumer repo 的 `release.yml` 通常傳 `GH_PAT_RELEASE_NICSDP`
+- `gh_pat` — 存取私有模組；consumer repo 的 `release.yml` / `snapshot.yml` 通常傳 `GH_PAT_READ_NICSDP`
 - macOS notarize (當 `notarize: true`): `quill_sign_p12`, `quill_sign_password`, `quill_notary_key`, `quill_notary_key_id`, `quill_notary_issuer`
 
 ---
@@ -505,6 +504,7 @@ secrets:
 ```yaml
 uses: nics-dp/meta/.github/workflows/sbom-source.yml@main
 permissions:
+  actions: read
   contents: write
   security-events: write
 with:
@@ -528,6 +528,7 @@ with:
 ```yaml
 uses: nics-dp/meta/.github/workflows/sbom-image.yml@main
 permissions:
+  actions: read
   contents: write
   packages: read
   security-events: write
@@ -702,13 +703,13 @@ secrets:
 
 適用於 Go service、CLI、library 專案。詳見 [`golang-templates/.github/README.md`](golang-templates/.github/README.md)。
 
-包含: CI (lint, sec, vulncheck, semgrep, test), release, snapshot, codeql, notify, release-please workflows + `mise.toml` + `.golangci.yml`
+包含: CI (lint, sec, vulncheck, semgrep, test, trivy-license；service repo 另含 hadolint / trivy-iac), release, snapshot, codeql, notify, release-please workflows + `mise.toml` + `.golangci.yml`
 
 ### web-templates/ — Web 專案
 
 適用於 React + Vite + TypeScript + Bun 專案。包含 workflow templates 與 `mise.toml`。詳見 [`web-templates/.github/README.md`](web-templates/.github/README.md)。
 
-包含: CI (eslint, typecheck, build, audit, vitest, prettier, semgrep, trivy-license, knip, lighthouse), codeql, notify, release-please workflows + `mise.toml` + eslint, prettier, vitest, knip, lighthouse configs。`bundle-size` workflow 仍提供，但需 repo 自行補上 `size-limit` 設定後再啟用
+包含: CI (eslint, typecheck, build, audit；預設也啟用 vitest、prettier、semgrep、trivy-license、knip、lighthouse；有 Dockerfile 的 repo 還可保留 hadolint / trivy-iac), codeql, notify, release-please workflows + `mise.toml` + eslint, prettier, vitest, knip, lighthouse configs。`bundle-size` workflow 仍提供，但需 repo 自行補上 `size-limit` 設定後再啟用
 
 ---
 
@@ -722,8 +723,8 @@ secrets:
 4. 新增 `configs/codeqls/<repo-name>.yml`，設定 CodeQL workflow
 5. 更新 `cron.yml` 的 repo 清單 (`CODEQL_REPOS`, `GO_REPOS`, `ALL_REPOS`, `RENOVATE_SYNC_REPOS`)
 6. 確認 repo secrets:
-   - `GH_PAT_READ_NICSDP` (私有 Go modules / snapshot / CodeQL 用)
-   - `GH_PAT_RELEASE_NICSDP` (release-please / release 用)
+   - `GH_PAT_READ_NICSDP` (私有 Go modules / release / snapshot / CodeQL 用)
+   - `GH_PAT_RELEASE_NICSDP` (release-please 用)
    - `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN` (僅 Docker image repos 需要)
 
 ### Web 專案
@@ -731,9 +732,10 @@ secrets:
 1. 從 `web-templates/.github/` 複製 workflows，並複製 `web-templates/mise.toml`
 2. 從 `configs/` 複製所有 web 設定檔 (`.prettierrc.json`, `.prettierignore`, `eslint.config.js`, `vitest.config.ts`, `knip.json`, `lighthouserc.json`, `.commitlintrc.yml`, `renovate.json`)
 3. 安裝 devDependencies (見 `web-templates/.github/README.md`)
-4. 新增 `configs/codeqls/<repo-name>.yml` (使用 `javascript-typescript` language)
-5. 更新 `cron.yml` 的 repo 清單 (`CODEQL_REPOS`, `WEB_REPOS`, `ALL_REPOS`, `RENOVATE_SYNC_REPOS`)
-6. 確認 repo secrets: `GH_PAT_RELEASE_NICSDP`
+4. 若 repo 沒有 Dockerfile，先從 `web-templates/.github/workflows/ci.yml` 移除 `hadolint` 與 `trivy-iac` jobs；若不需要 `knip` / `lighthouse`，也可一併移除
+5. 新增 `configs/codeqls/<repo-name>.yml` (使用 `javascript-typescript` language)
+6. 更新 `cron.yml` 的 repo 清單 (`CODEQL_REPOS`, `WEB_REPOS`, `ALL_REPOS`, `RENOVATE_SYNC_REPOS`)
+7. 確認 repo secrets: `GH_PAT_RELEASE_NICSDP`
 
 ---
 
@@ -741,8 +743,8 @@ secrets:
 
 ### Go repos
 
-1. **mise.toml** — 定義 `prepare`, `lint`, `security`, `test`, `vulncheck`, `report` tasks (建議直接使用 `golang-templates/mise.toml`)
-2. **coverage.out** — `mise run test` 需產出此檔案 (go-test.yml 預期此路徑)
+1. **mise.toml** — 定義 `init`, `ci:go-lint`, `ci:go-sec`, `ci:go-vulncheck`, `ci:test` 等 CI tasks (建議直接使用 `golang-templates/mise.toml`)
+2. **coverage.out** — `mise run ci:test` 需產出此檔案 (go-test.yml 預期此路徑)
 3. **Go module** — go.mod 存在且版本正確
 4. **Private module access** — 若 repo 會引用私有 `nics-dp` modules，需設定 `GH_PAT_READ_NICSDP`
 
@@ -751,7 +753,8 @@ secrets:
 1. **mise.toml** — 建議直接使用 `web-templates/mise.toml`
 2. **bun.lock** — 使用 Bun 作為 package manager
 3. **package.json scripts** — 需包含 `lint`, `typecheck`, `build`, `test:coverage`, `format:check`
-4. **Release token** — `GH_PAT_RELEASE_NICSDP` secret 已設定 (供 release-please 建立 release/tag 並觸發下游 workflows)
+4. **選用 scripts / configs** — 若保留 `knip`、`lighthouse` 或之後啟用 `bundle-size`，需補齊對應 script 與設定檔
+5. **Release token** — `GH_PAT_RELEASE_NICSDP` secret 已設定 (供 release-please 建立 release/tag 並觸發下游 workflows)
 
 ## 相關文件
 
