@@ -1,0 +1,32 @@
+# Ruler Configuration File
+# See https://ai.intellectronica.net/ruler for documentation.
+
+# Default agents to run when --agents is not specified
+# Uses case-insensitive substring matching
+default_agents = ["claude", "codex"]
+
+# Enable nested rule loading from nested .ruler directories
+# When enabled, ruler will search for and process .ruler directories throughout the project hierarchy
+nested = true
+
+# --- Global MCP Server Configuration ---
+[mcp]
+# Enable/disable MCP propagation globally (default: true)
+enabled = false
+
+# --- Global .gitignore Configuration ---
+[gitignore]
+# Enable/disable automatic .gitignore updates (default: true)
+enabled = true
+# Write managed entries to .git/info/exclude instead of .gitignore (default: false)
+local = false
+
+# --- Agent Specific Configurations ---
+[agents.claude]
+enabled = true
+
+[agents.codex]
+enabled = true
+
+[agents.opencode]
+enabled = false
