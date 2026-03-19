@@ -20,9 +20,7 @@ on:
         required: true
         type: string
 
-permissions:
-  contents: write
-  pull-requests: write
+permissions: {}
 
 jobs:
   sync:
@@ -74,7 +72,8 @@ jobs:
             mkdir -p "${REPO_OWNER}/${REPO_NAME}/.github/workflows"
             cp "$CODEQL_FILE" "${REPO_OWNER}/${REPO_NAME}/.github/workflows/codeql.yml"
           else
-            echo "::warning::No codeql config found for ${REPO_NAME}"
+            echo "::error::No codeql config found for ${REPO_NAME}"
+            exit 1
           fi
 
       - name: Create Pull Request
