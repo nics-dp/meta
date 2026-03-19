@@ -134,9 +134,14 @@ uses: nics-dp/meta/.github/workflows/hadolint.yml@main
 
 ```yaml
 uses: nics-dp/meta/.github/workflows/trivy-iac.yml@main
+permissions:
+  actions: read
+  contents: read
+  pull-requests: write
+  security-events: write
 ```
 
-無需額外輸入參數。
+無需額外輸入參數。呼叫端須授予 `actions: read`、`contents: read`、`pull-requests: write` 與 `security-events: write` 權限。
 
 ---
 

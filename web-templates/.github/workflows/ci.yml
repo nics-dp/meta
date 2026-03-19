@@ -99,6 +99,7 @@ jobs:
   trivy-iac:
     uses: nics-dp/meta/.github/workflows/trivy-iac.yml@main
     permissions:
+      actions: read
       contents: read
       pull-requests: write
       security-events: write
