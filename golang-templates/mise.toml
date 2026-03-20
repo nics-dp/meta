@@ -55,9 +55,9 @@ BINARY_NAME = ""
 # ------------------------------------------------------------------------------
 [shell_alias]
 # Docker Aliases - All Docker commands start with "d" AND Docker Compose commands start with "dc"
-dstop = "docker stop $(sudo docker ps -a -q)"  # usage: dstop container_name
+dstop = "docker stop $(sudo docker ps -a -q)"  # stop all running containers
 dstopall = "docker stop $(sudo docker ps -aq)"  # stop all containers
-drm = "docker rm $(sudo docker ps -a -q)"  # usage: drm container_name
+drm = "docker rm $(sudo docker ps -a -q)"  # remove all containers
 dprunevol = "docker volume prune"  # remove unused volumes
 dprunesys = "docker system prune -a"  # remove unused docker data
 ddelimages = "docker rmi $(sudo docker images -q)"  # remove unused docker images

@@ -144,7 +144,7 @@ GitHub CodeQL static security analysis. Managed centrally via `configs/codeqls/<
 **Features:**
 - Uses `security-extended` and `security-and-quality` query suites
 - Supports private repo access via `external-repository-token`
-- Narrows PAT-backed git access to `github.com/nics-dp` instead of rewriting all GitHub HTTPS fetches
+- Narrows PAT-backed git access (both HTTPS and SSH) to `github.com/nics-dp` only
 
 ---
 

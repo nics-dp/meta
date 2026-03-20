@@ -46,7 +46,7 @@ jobs:
           if [ "$GO_PRIVATE_FULL" = "true" ]; then
             echo "GOPRIVATE=github.com/nics-dp" >> "$GITHUB_ENV"
             echo "GONOSUMDB=github.com/nics-dp" >> "$GITHUB_ENV"
-            git config --global url."https://${GH_PAT}@github.com/".insteadOf "git@github.com:"
+            git config --global url."https://${GH_PAT}@github.com/nics-dp/".insteadOf "git@github.com:nics-dp/"
           fi
           git config --global url."https://${GH_PAT}@github.com/nics-dp".insteadOf "https://github.com/nics-dp"
 
@@ -92,7 +92,7 @@ jobs:
         env:
           GH_PAT: ${{ secrets.gh_pat }}
         run: |
-          git config --global --remove-section "url.https://${GH_PAT}@github.com/" 2>/dev/null || true
+          git config --global --remove-section "url.https://${GH_PAT}@github.com/nics-dp/" 2>/dev/null || true
           git config --global --remove-section "url.https://${GH_PAT}@github.com/nics-dp" 2>/dev/null || true
 
       - name: Fail if scan found issues

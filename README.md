@@ -367,7 +367,7 @@ uses: nics-dp/meta/.github/workflows/bun-semgrep.yml@main
 - **Go repos:** 使用 `go` language + `manual` build-mode
 - **Web repos:** 使用 `javascript-typescript` language + `none` build-mode
 
-私有 repo 可設定 `GH_PAT_READ_NICSDP` 以存取 private modules / private repositories；未設定時，CodeQL 仍會執行，但不會傳 `external-repository-token`，也不會啟用 private module access 設定。PAT 僅限定於需要的 steps (CodeQL init 和 Git URL rewrite)，不會暴露給 caller 提供的 build commands。
+私有 repo 可設定 `GH_PAT_READ_NICSDP` 以存取 private modules / private repositories；未設定時，CodeQL 仍會執行，但不會傳 `external-repository-token`，也不會啟用 private module access 設定。PAT 僅限定於需要的 steps (CodeQL init 和 Git URL rewrite)，不會暴露給 caller 提供的 build commands。Git URL rewrite 僅作用於 `github.com/nics-dp` 範圍 (HTTPS 與 SSH)。
 
 #### codeql.yml reusable workflow 參數
 
