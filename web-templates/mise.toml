@@ -53,7 +53,6 @@ derase = "dstop ; drm ; dprunevol ; dprunesys ; ddelimages"  # WARNING: removes 
 dprune = "dprunevol ; dprunesys ; ddelimages"  # remove unused data, volumes, and images (perfect for safe clean up)
 dexec = "docker exec -ti"  # usage: dexec container_name (to access container terminal)
 dps = "docker ps -a"  # running docker processes
-dpss = '{% raw %}docker ps -a --format "table {{.Names}}\t{{.State}}\t{{.Status}}\t{{.Image}}" | (sed -u 1q; sort){% endraw %}'  # running docker processes as nicer table
 ddf = "docker system df"  # docker data usage (/var/lib/docker)
 dlogs = 'docker logs -tf --tail="50" '  # usage: dlogs container_name
 
