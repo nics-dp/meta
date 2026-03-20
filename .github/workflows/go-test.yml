@@ -133,7 +133,6 @@ jobs:
           path: |
             coverage.html
             coverage.md
-            gosec-report.json
 
       - name: Coverage summary
         if: github.event_name == 'pull_request'
