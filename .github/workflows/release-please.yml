@@ -3,6 +3,8 @@
 name: release-please
 
 on:
+  push:
+    branches: [main, "release/**"]
   workflow_call:
     inputs:
       release_type:
@@ -13,6 +15,9 @@ on:
       gh_pat:
         description: "PAT with contents:write + pull-requests:write (GITHUB_TOKEN won't trigger downstream workflows)"
         required: true
+      GH_PAT_RELEASE_NICSDP:
+        description: "Fallback PAT for push-triggered runs (meta repo self-use)"
+        required: false
     outputs:
       release_created:
         description: "Whether a release was created"
@@ -21,12 +26,11 @@ on:
         description: "The tag name of the release"
         value: ${{ jobs.release-please.outputs.tag_name }}
 
+permissions: {}
+
 jobs:
   release-please:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      pull-requests: write
     outputs:
       release_created: ${{ steps.release.outputs.release_created }}
       tag_name: ${{ steps.release.outputs.tag_name }}
@@ -34,5 +38,5 @@ jobs:
       - uses: googleapis/release-please-action@16a9c90856f42705d54a6fda1823352bdc62cf38 # v4.4.0
         id: release
         with:
-          release-type: ${{ inputs.release_type }}
-          token: ${{ secrets.gh_pat }}
+          release-type: ${{ github.event_name == 'workflow_call' && inputs.release_type || 'simple' }}
+          token: ${{ secrets.gh_pat || secrets.GH_PAT_RELEASE_NICSDP }}

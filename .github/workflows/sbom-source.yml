@@ -78,10 +78,11 @@ jobs:
           parlay ecosystems enrich sbom-source.cdx.json > enriched-source.cdx.json
 
       - name: Scan SBOM with Trivy (SARIF)
+        if: always()
         uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # 0.35.0
         with:
           scan-type: sbom
-          scan-ref: sbom-source.cdx.json
+          scan-ref: enriched-source.cdx.json
           format: sarif
           output: trivy-source.sarif
 
@@ -92,7 +93,6 @@ jobs:
           mv trivy-source-fixed.sarif trivy-source.sarif
 
       - name: Upload Trivy SARIF to GitHub Security tab
-        if: always()
         uses: github/codeql-action/upload-sarif@b1bff81932f5cdfc8695c7752dcee935dcd061c8 # v4.33.0
         with:
           sarif_file: trivy-source.sarif
@@ -102,7 +102,7 @@ jobs:
         uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # 0.35.0
         with:
           scan-type: sbom
-          scan-ref: sbom-source.cdx.json
+          scan-ref: enriched-source.cdx.json
           format: json
           output: trivy-source.json
 
@@ -113,9 +113,9 @@ jobs:
         with:
           sbom: sbom-source.cdx.json
           output-format: sarif
+          severity-cutoff: high
 
       - name: Upload Grype SARIF to GitHub Security tab
-        if: always()
         uses: github/codeql-action/upload-sarif@b1bff81932f5cdfc8695c7752dcee935dcd061c8 # v4.33.0
         with:
           sarif_file: ${{ steps.grype-sarif.outputs.sarif }}
@@ -127,6 +127,7 @@ jobs:
         with:
           sbom: sbom-source.cdx.json
           output-format: json
+          severity-cutoff: high
 
       - name: Prepare release assets
         env:

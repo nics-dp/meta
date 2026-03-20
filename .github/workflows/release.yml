@@ -1,0 +1,24 @@
+# yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
+
+name: release
+
+on:
+  release:
+    types: [created]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.release.tag_name || github.ref_name }}
+  cancel-in-progress: true
+
+jobs:
+  notify:
+    uses: ./.github/workflows/notify-gchat.yml
+    permissions: {}
+    with:
+      type: release
+      title: "🚀 Release: ${{ github.event.release.tag_name }}"
+      url: ${{ github.event.release.html_url }}
+      actor: ${{ github.event.release.author.login }}
+      body: ${{ github.event.release.body }}
+    secrets:
+      google_chat_webhook: ${{ secrets.GOOGLE_CHAT_WEBHOOK }}

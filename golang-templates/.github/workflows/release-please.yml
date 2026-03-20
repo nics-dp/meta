@@ -5,7 +5,7 @@
 #
 # 使用方式: 複製到 .github/workflows/release-please.yml
 # 私有 repo: 保留 gh_pat secret
-# 公開 repo: 保留 gh_pat secret (需要 PAT 才能觸發下游 release.yml)
+# 公開 repo: 也必須保留 gh_pat secret (需要 PAT 才能觸發下游 release.yml)
 
 name: release-please
 
@@ -13,9 +13,7 @@ on:
   push:
     branches: [main, "release/**"]
 
-permissions:
-  contents: write
-  pull-requests: write
+permissions: {}
 
 jobs:
   release-please:
