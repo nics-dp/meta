@@ -34,8 +34,8 @@ jobs:
           experimental: true
           log_level: "info"
 
-      - name: Prepare environment
-        run: mise run prepare
+      - name: Initialize environment
+        run: mise run init
 
       - name: Configure private git repository
         if: env.HAS_GH_PAT == 'true'
@@ -46,14 +46,14 @@ jobs:
           if [ "$GO_PRIVATE_FULL" = "true" ]; then
             echo "GOPRIVATE=github.com/nics-dp" >> "$GITHUB_ENV"
             echo "GONOSUMDB=github.com/nics-dp" >> "$GITHUB_ENV"
-            git config --global url."https://${GH_PAT}@github.com/".insteadOf "git@github.com:"
+            git config --global url."https://${GH_PAT}@github.com/nics-dp/".insteadOf "git@github.com:nics-dp/"
           fi
           git config --global url."https://${GH_PAT}@github.com/nics-dp".insteadOf "https://github.com/nics-dp"
 
       - name: Run security scan
         id: gosec
         run: |
-          mise run security 2>&1 | tee gosec-output.txt
+          mise run ci:go-sec 2>&1 | tee gosec-output.txt
           echo "exit_code=${PIPESTATUS[0]}" >> "$GITHUB_OUTPUT"
 
       - name: Write summary
@@ -92,7 +92,7 @@ jobs:
         env:
           GH_PAT: ${{ secrets.gh_pat }}
         run: |
-          git config --global --remove-section "url.https://${GH_PAT}@github.com/" 2>/dev/null || true
+          git config --global --remove-section "url.https://${GH_PAT}@github.com/nics-dp/" 2>/dev/null || true
           git config --global --remove-section "url.https://${GH_PAT}@github.com/nics-dp" 2>/dev/null || true
 
       - name: Fail if scan found issues

@@ -3,19 +3,24 @@ name: ci
 
 on:
   push:
-    branches: [main, dev]
+    branches: [main, dev, "release/**", "feature/**"]
   pull_request:
-    branches: [main, dev]
+    types: [opened, synchronize, reopened]
+    branches: [main, dev, "release/**"]
   workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+  checks: write
+  pull-requests: write
+
 jobs:
+  commitlint:
+    uses: ./.github/workflows/commitlint.yml
+
   actionlint:
     uses: ./.github/workflows/actionlint.yml
-    permissions:
-      contents: read
-      checks: write
-      pull-requests: write

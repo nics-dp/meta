@@ -6,9 +6,10 @@
 # All jobs call reusable workflows from nics-dp/meta.
 #
 # Adjust per project:
-# - Recommended jobs (test, format-check, trivy-license): keep enabled
-# - Optional jobs (knip, lighthouse): remove if not needed
-# - Bundle size is disabled by default until the repo adds its own size-limit config
+# - Recommended jobs (test, format-check, trivy-license, semgrep): keep enabled
+# - If the repo has no Dockerfile, remove hadolint + trivy-iac before the first CI run
+# - Optional jobs (knip, lighthouse) can be removed if not needed
+# - Bundle size is commented out by default until the repo adds its own size-limit config
 
 name: ci
 
@@ -24,57 +25,98 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-permissions:
-  contents: read
-  checks: write
-  pull-requests: write
+permissions: {}
 
 jobs:
   check-managed:
     uses: nics-dp/meta/.github/workflows/check-managed-files.yml@main
+    permissions:
+      pull-requests: read
 
   commitlint:
     uses: nics-dp/meta/.github/workflows/commitlint.yml@main
+    permissions:
+      contents: read
+      pull-requests: read
 
   # --- Required ---
 
   lint:
     uses: nics-dp/meta/.github/workflows/bun-lint.yml@main
+    permissions:
+      contents: read
 
   typecheck:
     uses: nics-dp/meta/.github/workflows/bun-typecheck.yml@main
+    permissions:
+      contents: read
 
   build:
     needs: [lint, typecheck]
     uses: nics-dp/meta/.github/workflows/bun-build.yml@main
+    permissions:
+      contents: read
 
   audit:
     uses: nics-dp/meta/.github/workflows/bun-audit.yml@main
+    permissions:
+      contents: read
 
   # --- Recommended ---
 
   test:
     needs: [lint, typecheck]
     uses: nics-dp/meta/.github/workflows/bun-test.yml@main
+    permissions:
+      contents: read
 
   format-check:
     uses: nics-dp/meta/.github/workflows/bun-format-check.yml@main
+    permissions:
+      contents: read
 
   trivy-license:
     # No gh_pat secret needed: web repos do not access private Go modules
     uses: nics-dp/meta/.github/workflows/trivy-license.yml@main
+    permissions:
+      contents: read
+      pull-requests: write
 
   semgrep:
     uses: nics-dp/meta/.github/workflows/bun-semgrep.yml@main
+    permissions:
+      contents: read
+      pull-requests: write
+
+  # --- Docker/Service repos only (repos with Dockerfile) ---
+
+  hadolint:
+    uses: nics-dp/meta/.github/workflows/hadolint.yml@main
+    permissions:
+      contents: read
+      checks: write
+      pull-requests: write
+
+  trivy-iac:
+    uses: nics-dp/meta/.github/workflows/trivy-iac.yml@main
+    permissions:
+      actions: read
+      contents: read
+      pull-requests: write
+      security-events: write
 
   # --- Optional ---
 
   knip:
     uses: nics-dp/meta/.github/workflows/bun-knip.yml@main
+    permissions:
+      contents: read
 
   lighthouse:
     needs: [build]
     uses: nics-dp/meta/.github/workflows/bun-lighthouse.yml@main
+    permissions:
+      contents: read
 
   # bundle-size:
   #   needs: [build]

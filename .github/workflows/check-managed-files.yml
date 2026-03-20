@@ -12,7 +12,6 @@ on:
         default: ".github/workflows/codeql.yml,.commitlintrc.yml,.golangci.yml,renovate.json,.prettierrc.json,.prettierignore,eslint.config.js,vitest.config.ts,knip.json,lighthouserc.json"
 
 permissions:
-  contents: read
   pull-requests: read
 
 jobs:

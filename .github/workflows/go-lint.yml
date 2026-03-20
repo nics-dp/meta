@@ -35,8 +35,8 @@ jobs:
           experimental: true
           log_level: "info"
 
-      - name: Prepare environment
-        run: mise run prepare
+      - name: Initialize environment
+        run: mise run init
 
       - name: Configure private git repository
         if: env.HAS_GH_PAT == 'true'
@@ -47,7 +47,7 @@ jobs:
           if [ "$GO_PRIVATE_FULL" = "true" ]; then
             echo "GOPRIVATE=github.com/nics-dp" >> "$GITHUB_ENV"
             echo "GONOSUMDB=github.com/nics-dp" >> "$GITHUB_ENV"
-            git config --global url."https://${GH_PAT}@github.com/".insteadOf "git@github.com:"
+            git config --global url."https://${GH_PAT}@github.com/nics-dp/".insteadOf "git@github.com:nics-dp/"
           fi
           git config --global url."https://${GH_PAT}@github.com/nics-dp".insteadOf "https://github.com/nics-dp"
 
@@ -62,12 +62,12 @@ jobs:
 
       - name: Run lint
         if: github.event_name != 'pull_request'
-        run: mise run lint
+        run: mise run ci:go-lint
 
       - name: Revoke private git repository access
         if: always() && env.HAS_GH_PAT == 'true'
         env:
           GH_PAT: ${{ secrets.gh_pat }}
         run: |
-          git config --global --remove-section "url.https://${GH_PAT}@github.com/" 2>/dev/null || true
+          git config --global --remove-section "url.https://${GH_PAT}@github.com/nics-dp/" 2>/dev/null || true
           git config --global --remove-section "url.https://${GH_PAT}@github.com/nics-dp" 2>/dev/null || true

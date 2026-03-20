@@ -7,7 +7,7 @@ All workflows call reusable workflows from `nics-dp/meta`, and CI tasks run thro
 
 | File | Purpose | Triggers |
 |---|---|---|
-| `ci.yml` | Lint, typecheck, build, audit, test, format check, Semgrep, trivy-license, knip, lighthouse | push, PR, manual |
+| `ci.yml` | Lint, typecheck, build, audit, test, format check, Semgrep, trivy-license, hadolint, trivy-iac, knip, lighthouse | push, PR, manual |
 | `release-please.yml` | Automated release management | push to main/release |
 | `codeql.yml` | CodeQL security analysis (JS/TS + Actions) | push, PR, weekly, manual |
 | `notify.yml` | Google Chat notifications | PR, push, release, issue, CI events |
@@ -30,7 +30,9 @@ check-managed ─┐
 commitlint ────┤
 audit ─────────┤
 format-check ──┤
-trivy-license ─┤ (all independent)
+trivy-license ─┤
+hadolint ──────┤ (all independent)
+trivy-iac ─────┤
 semgrep ───────┤
 knip ──────────┤
 lint ──────────┼──► build ──► lighthouse
@@ -44,29 +46,31 @@ typecheck ─────┘      │
 |-----|---------------|-------------|
 | check-managed | `check-managed-files.yml` | Check managed files are in sync with meta |
 | commitlint | `commitlint.yml` | Validate commit messages (conventional commits) |
-| lint | `bun-lint.yml` | Runs `mise run lint` |
-| typecheck | `bun-typecheck.yml` | Runs `mise run typecheck` |
+| lint | `bun-lint.yml` | Runs `mise run ci:lint` |
+| typecheck | `bun-typecheck.yml` | Runs `mise run ci:typecheck` |
 | build | `bun-build.yml` | Runs `mise run build` (depends on lint, typecheck) |
-| audit | `bun-audit.yml` | Runs `mise run audit` |
+| audit | `bun-audit.yml` | Runs `mise run ci:audit` |
 
 #### Recommended (enabled by default)
 
 | Job | Meta Workflow | Description |
 |-----|---------------|-------------|
-| test | `bun-test.yml` | Runs `mise run test` (depends on lint, typecheck) |
-| format-check | `bun-format-check.yml` | Runs `mise run format-check` |
+| test | `bun-test.yml` | Runs `mise run ci:test` (depends on lint, typecheck) |
+| format-check | `bun-format-check.yml` | Runs `mise run ci:format-check` |
 | trivy-license | `trivy-license.yml` | License compliance (no `gh_pat` needed) |
 | semgrep | `bun-semgrep.yml` | Semgrep static analysis (JS/TS) |
 
 #### Optional
 
-These jobs are enabled in the shipped `ci.yml`. If you don't want them, comment them out or remove them before the first CI run.
+These jobs are enabled in the shipped `ci.yml` unless otherwise noted. Remove or comment out any that don't apply to your project before the first CI run.
 
 | Job | Meta Workflow | Description |
 |-----|---------------|-------------|
-| knip | `bun-knip.yml` | Runs `mise run knip` |
+| hadolint | `hadolint.yml` | Dockerfile linting (Docker/service repos only) |
+| trivy-iac | `trivy-iac.yml` | IaC security scanning for Dockerfiles + compose (Docker/service repos only) |
+| knip | `bun-knip.yml` | Runs `mise run ci:knip` |
 | lighthouse | `bun-lighthouse.yml` | Runs `mise run lighthouse` (depends on build) |
-| bundle-size | `bun-bundle-size.yml` | Disabled by default; enable after adding repo-specific `size-limit` config |
+| bundle-size | `bun-bundle-size.yml` | Commented out by default; enable only after adding repo-specific `size-limit` config |
 
 ---
 
@@ -81,6 +85,8 @@ Auto-creates Release PRs with changelog based on conventional commits. After mer
 1. Detect conventional commits, calculate next semver version
 2. Create/update Release PR (with auto-generated changelog)
 3. After Release PR merge, create GitHub Release + tag
+
+**Note:** `release-please.yml` requires `GH_PAT_RELEASE_NICSDP`; `GITHUB_TOKEN` alone will not trigger downstream workflows.
 
 ---
 
@@ -142,16 +148,18 @@ Sends GitHub event notifications to Google Chat.
    cp configs/renovate.json <new-repo>/
    ```
 
-4. Handle the jobs that are enabled in `ci.yml` by default:
+4. If the project does **not** have a Dockerfile, remove `hadolint` and `trivy-iac` from `ci.yml`.
+
+5. Handle the jobs that are enabled in `ci.yml` by default:
    - Keep the default optional jobs: copy the optional configs below so `knip` and `lighthouse` can run.
    - Enable `bundle-size` only after adding your own `size-limit` configuration.
-   - Slim down the template: remove or comment out optional jobs in `.github/workflows/ci.yml` before the first CI run.
+   - Slim down the template: remove or comment out `knip` / `lighthouse` if the repo does not need them before the first CI run.
    ```
    cp configs/knip.json <new-repo>/
    cp configs/lighthouserc.json <new-repo>/
    ```
 
-5. Add required scripts to `package.json`:
+6. Add required scripts to `package.json`:
    ```json
    {
      "scripts": {
@@ -171,7 +179,7 @@ Sends GitHub event notifications to Google Chat.
    }
    ```
 
-6. Install devDependencies:
+7. Install devDependencies:
    ```bash
    # Required
    bun add -d prettier prettier-plugin-tailwindcss

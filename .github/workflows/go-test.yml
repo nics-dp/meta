@@ -13,18 +13,13 @@ on:
       test_command:
         required: false
         type: string
-        default: "mise run test"
+        default: "mise run ci:test"
         description: "Command to run unit tests (must produce coverage.out)"
       run_report:
         required: false
         type: boolean
         default: false
         description: "Whether to run the report job after tests"
-      report_command:
-        required: false
-        type: string
-        default: "mise run report"
-        description: "Command to generate coverage report"
     secrets:
       gh_pat:
         required: false
@@ -49,8 +44,8 @@ jobs:
           experimental: true
           log_level: "info"
 
-      - name: Prepare environment
-        run: mise run prepare
+      - name: Initialize environment
+        run: mise run init
 
       - name: Configure private git repository
         if: env.HAS_GH_PAT == 'true'
@@ -61,7 +56,7 @@ jobs:
           if [ "$GO_PRIVATE_FULL" = "true" ]; then
             echo "GOPRIVATE=github.com/nics-dp" >> "$GITHUB_ENV"
             echo "GONOSUMDB=github.com/nics-dp" >> "$GITHUB_ENV"
-            git config --global url."https://${GH_PAT}@github.com/".insteadOf "git@github.com:"
+            git config --global url."https://${GH_PAT}@github.com/nics-dp/".insteadOf "git@github.com:nics-dp/"
           fi
           git config --global url."https://${GH_PAT}@github.com/nics-dp".insteadOf "https://github.com/nics-dp"
 
@@ -84,7 +79,7 @@ jobs:
         env:
           GH_PAT: ${{ secrets.gh_pat }}
         run: |
-          git config --global --remove-section "url.https://${GH_PAT}@github.com/" 2>/dev/null || true
+          git config --global --remove-section "url.https://${GH_PAT}@github.com/nics-dp/" 2>/dev/null || true
           git config --global --remove-section "url.https://${GH_PAT}@github.com/nics-dp" 2>/dev/null || true
 
   report:
@@ -104,8 +99,8 @@ jobs:
           experimental: true
           log_level: "info"
 
-      - name: Prepare environment
-        run: mise run prepare
+      - name: Initialize environment
+        run: mise run init
 
       - name: Configure private git repository
         if: env.HAS_GH_PAT == 'true'
@@ -116,7 +111,7 @@ jobs:
           if [ "$GO_PRIVATE_FULL" = "true" ]; then
             echo "GOPRIVATE=github.com/nics-dp" >> "$GITHUB_ENV"
             echo "GONOSUMDB=github.com/nics-dp" >> "$GITHUB_ENV"
-            git config --global url."https://${GH_PAT}@github.com/".insteadOf "git@github.com:"
+            git config --global url."https://${GH_PAT}@github.com/nics-dp/".insteadOf "git@github.com:nics-dp/"
           fi
           git config --global url."https://${GH_PAT}@github.com/nics-dp".insteadOf "https://github.com/nics-dp"
 
@@ -126,10 +121,9 @@ jobs:
           name: coverage-data
 
       - name: Generate report
-        env:
-          REPORT_COMMAND: ${{ inputs.report_command }}
         run: |
-          bash -euo pipefail -lc "$REPORT_COMMAND"
+          go tool cover -html=coverage.out -o coverage.html
+          go tool cover -func=coverage.out > coverage.md
 
       - name: Upload reports
         id: upload-reports
@@ -139,7 +133,6 @@ jobs:
           path: |
             coverage.html
             coverage.md
-            gosec-report.json
 
       - name: Coverage summary
         if: github.event_name == 'pull_request'
@@ -173,5 +166,5 @@ jobs:
         env:
           GH_PAT: ${{ secrets.gh_pat }}
         run: |
-          git config --global --remove-section "url.https://${GH_PAT}@github.com/" 2>/dev/null || true
+          git config --global --remove-section "url.https://${GH_PAT}@github.com/nics-dp/" 2>/dev/null || true
           git config --global --remove-section "url.https://${GH_PAT}@github.com/nics-dp" 2>/dev/null || true

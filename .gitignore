@@ -1,4 +1,25 @@
+# OS files
 .DS_Store
-AGENTS.md
-CLAUDE.md
 .claude
+
+
+# START Ruler Generated Files
+/.codex/config.toml
+/.codex/config.toml.bak
+/AGENTS.md
+/AGENTS.md.bak
+/CLAUDE.md
+/CLAUDE.md.bak
+/golang-templates/.codex/config.toml
+/golang-templates/.codex/config.toml.bak
+/golang-templates/AGENTS.md
+/golang-templates/AGENTS.md.bak
+/golang-templates/CLAUDE.md
+/golang-templates/CLAUDE.md.bak
+/web-templates/.codex/config.toml
+/web-templates/.codex/config.toml.bak
+/web-templates/AGENTS.md
+/web-templates/AGENTS.md.bak
+/web-templates/CLAUDE.md
+/web-templates/CLAUDE.md.bak
+# END Ruler Generated Files

@@ -10,6 +10,7 @@
 # - CLI repo: 移除 image-build job
 # - Docker-only repo: 移除 go-release job
 # - 若啟用 CGO，請同時把 platforms 覆寫為僅 Linux 目標，或改用支援該目標的 runners
+# - workflow_run 僅會在同 repo PR 的 ci 成功後繼續；fork PR 不會進入 snapshot build
 
 name: snapshot
 
@@ -35,7 +36,7 @@ jobs:
       contents: write
       id-token: write
     with:
-      project_name: TODO        # TODO: 與 release.yml 一致
+      project_name: TODO # TODO: 與 release.yml 一致
       binary: "TODO:./cmd/TODO" # TODO: 與 release.yml 一致
       # cgo_enabled: true       # TODO: 與 release.yml 一致
       #                         # 注意: 若啟用 CGO，請同時在 release.yml / snapshot.yml 覆寫 `platforms`
@@ -57,13 +58,15 @@ jobs:
     permissions:
       contents: read
       packages: write
+      attestations: write
       id-token: write
     with:
-      image_name: TODO          # TODO: 與 release.yml 一致
+      image_name: TODO # TODO: 與 release.yml 一致
       runs_on: '{"group":"releasers"}' # TODO: 若無 self-hosted releasers runner，改回 '"ubuntu-latest"'
       sbom: false # snapshot 不額外產出 BuildKit SBOM
       provenance: false # snapshot 不產生 provenance attestation
       attest: false # snapshot 不產生 artifact attestation
+      cosign: false
       snapshot: true
       ref: ${{ github.event.workflow_run.head_sha || '' }}
     secrets:
@@ -78,5 +81,5 @@ jobs:
     uses: nics-dp/meta/.github/workflows/artifacts-comment.yml@main
     permissions:
       actions: read # 讀取 workflow artifacts
-      pull-requests: write # 更新 PR comment
-      issues: write # sticky comment action 需要
+      issues: write # 更新 PR comment
+      pull-requests: write # 寫入 PR comment (issues API 需要此權限)
