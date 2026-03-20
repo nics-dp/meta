@@ -198,6 +198,15 @@ go clean -testcache -cache
 echo "Clean completed!"
 '''
 
+[tasks.all]
+description = "Full Build Pipeline"
+raw = true
+run = [
+  { task = "clean" },
+  { tasks = ["gs:update", "go:upgrade"] },
+  { tasks = ["go:build", "ci"] },
+]
+
 # ==============================================================================
 #  CI Tasks
 # ==============================================================================
