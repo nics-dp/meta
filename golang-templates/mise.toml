@@ -120,7 +120,7 @@ go mod download
 '''
 
 [tasks."go:build"]
-description = "Building golang  binary"
+description = "Building golang binary"
 raw = true
 run = '''
 echo "Building..."

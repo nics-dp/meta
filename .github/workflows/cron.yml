@@ -12,8 +12,6 @@ permissions: {}
 env:
   # All DCF repos (commitlintrc)
   ALL_REPOS: '["dcf-platform","dcf-access","dcf-service","dcf-access-cli","dcf-platform-cli","dcf-access-web","dcf-platform-web","libdcf","otel-bundle","test-repo","ZenQuery","patroni"]'
-  # Repos that should receive synced renovate.json (patroni excluded — uses its own Renovate config)
-  RENOVATE_SYNC_REPOS: '["dcf-platform","dcf-access","dcf-service","dcf-access-cli","dcf-platform-cli","dcf-access-web","dcf-platform-web","libdcf","otel-bundle","test-repo","ZenQuery"]'
   # Go repos only (golangci-lint)
   GO_REPOS: '["dcf-platform","dcf-access","dcf-service","dcf-access-cli","dcf-platform-cli","libdcf","otel-bundle","test-repo","ZenQuery"]'
   # Web repos only (prettier, eslint, vitest, knip, lighthouserc)
@@ -26,7 +24,6 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       all_repos: ${{ steps.repos.outputs.all }}
-      renovate_repos: ${{ steps.repos.outputs.renovate }}
       go_repos: ${{ steps.repos.outputs.go }}
       web_repos: ${{ steps.repos.outputs.web }}
       codeql_repos: ${{ steps.repos.outputs.codeql }}
@@ -35,7 +32,6 @@ jobs:
         run: |
           {
             echo "all=$ALL_REPOS"
-            echo "renovate=$RENOVATE_SYNC_REPOS"
             echo "go=$GO_REPOS"
             echo "web=$WEB_REPOS"
             echo "codeql=$CODEQL_REPOS"
@@ -60,18 +56,6 @@ jobs:
       matrix:
         repo: ${{ fromJSON(needs.setup.outputs.all_repos) }}
     uses: ./.github/workflows/sync-commitlintrc.yml
-    with:
-      repo_name: ${{ matrix.repo }}
-    secrets:
-      gh_token: ${{ secrets.GH_PAT_READ_NICSDP }}
-
-  sync-renovate:
-    needs: setup
-    strategy:
-      fail-fast: false
-      matrix:
-        repo: ${{ fromJSON(needs.setup.outputs.renovate_repos) }}
-    uses: ./.github/workflows/sync-renovate.yml
     with:
       repo_name: ${{ matrix.repo }}
     secrets:
