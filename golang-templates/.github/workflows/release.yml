@@ -19,12 +19,12 @@
 name: release
 
 on:
-  push:
-    tags: ['v*']
+  release:
+    types: [created]
   workflow_dispatch:
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref_name }}
+  group: ${{ github.workflow }}-${{ github.event.release.tag_name || github.ref_name }}
   cancel-in-progress: true
 
 jobs:
