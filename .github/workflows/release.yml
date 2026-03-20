@@ -13,8 +13,7 @@ concurrency:
 jobs:
   notify:
     uses: ./.github/workflows/notify-gchat.yml
-    permissions:
-      contents: write
+    permissions: {}
     with:
       type: release
       title: "🚀 Release: ${{ github.event.release.tag_name }}"
