@@ -6,6 +6,7 @@
 bin/*
 
 # coverage reports
+coverage/
 coverage.*
 gosec-report.json
 
