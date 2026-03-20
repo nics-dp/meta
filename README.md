@@ -473,7 +473,19 @@ secrets:
 - `docker.io/nicsdp/<image_name>`
 - `ghcr.io/nics-dp/<image_name>`
 
-**Tag 策略:** branch ref, PR ref, semver (`v1.2.3`, `v1.2`, `v1`), `latest`
+**Tag 策略:**
+
+根據 `snapshot` 輸入和 git ref，依優先順序套用以下三種模式：
+
+| 模式 | 條件 | 產生的 Tag | 範例 |
+|------|------|-----------|------|
+| Snapshot | `inputs.snapshot == true` | commit SHA (短 + 長) | `abc1234`, `abc1234567890def` |
+| Release | ref 是 tag (`refs/tags/v*`) | semver 三層 + `latest` | `v1.2.3`, `v1.2`, `v1` |
+| Fallback | 其他情況 | branch 名稱或 PR 編號 | `main`, `pr-42` |
+
+> **實作細節：** 因為此 workflow 透過 `workflow_call` 呼叫，`github.event_name` 是 `workflow_call` 而非 `release`，
+> 所以 release 偵測使用 `startsWith(github.ref, 'refs/tags/')` 而非檢查 event name。
+> semver pattern 中的 `{{{{raw}}}}` 是因為 `format()` 將 `{{` 轉義為字面 `{`，最終產生 metadata-action 認得的 `{{raw}}`。
 
 ---
 
