@@ -38,5 +38,5 @@ jobs:
       - uses: googleapis/release-please-action@16a9c90856f42705d54a6fda1823352bdc62cf38 # v4.4.0
         id: release
         with:
-          release-type: ${{ inputs.release_type || 'simple' }}
+          release-type: ${{ github.event_name == 'workflow_call' && inputs.release_type || 'simple' }}
           token: ${{ secrets.gh_pat || secrets.GH_PAT_RELEASE_NICSDP }}
