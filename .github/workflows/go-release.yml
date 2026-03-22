@@ -26,7 +26,7 @@ on:
         required: false
         type: boolean
         default: false
-        description: "Enable CGO; when true, you must also override 'platforms' to Linux-only targets (e.g., linux/amd64,linux/arm64) to avoid unsupported cross-compilation for darwin/windows on Linux runners"
+        description: "Enable CGO for native and supported cross-compilation (linux amd64↔arm64)"
       go_env:
         required: false
         type: string
@@ -46,7 +46,7 @@ on:
         required: false
         type: boolean
         default: true
-        description: "Set GOPRIVATE/GONOSUMDB for nics-dp private modules"
+        description: "Set GOPRIVATE/GONOPROXY/GONOSUMDB for nics-dp private modules"
       notarize:
         required: false
         type: boolean
@@ -66,7 +66,17 @@ on:
         required: false
         type: string
         default: '"ubuntu-latest"'
-        description: "Runner for build jobs as JSON"
+        description: "Runner for Linux build jobs as JSON"
+      runs_on_darwin:
+        required: false
+        type: string
+        default: '"macos-latest"'
+        description: "Runner for macOS build jobs as JSON"
+      runs_on_windows:
+        required: false
+        type: string
+        default: '"windows-latest"'
+        description: "Runner for Windows build jobs as JSON"
     secrets:
       gh_pat:
         required: false
@@ -115,20 +125,35 @@ jobs:
         id: matrix
         env:
           PLATFORMS: ${{ inputs.platforms }}
+          RUNS_ON_LINUX: ${{ inputs.runs_on }}
+          RUNS_ON_DARWIN: ${{ inputs.runs_on_darwin }}
+          RUNS_ON_WINDOWS: ${{ inputs.runs_on_windows }}
         run: |
-          MATRIX=$(echo "$PLATFORMS" | tr ',' '\n' | jq -R '
+          MATRIX=$(echo "$PLATFORMS" | tr ',' '\n' | jq -R \
+            --argjson linux_runner "$RUNS_ON_LINUX" \
+            --argjson darwin_runner "$RUNS_ON_DARWIN" \
+            --argjson windows_runner "$RUNS_ON_WINDOWS" '
             split("/") |
-            if length == 3 then
+            (if length == 3 then
               {goos: .[0], goarch: .[1], goarm: (.[2] | ltrimstr("v"))}
             else
               {goos: .[0], goarch: .[1], goarm: ""}
-            end
+            end) |
+            .runs_on = (
+              if .goos == "darwin" then $darwin_runner
+              elif .goos == "windows" then $windows_runner
+              else $linux_runner
+              end
+            )
           ' | jq -sc '{include: .}')
           echo "result=${MATRIX}" >> "$GITHUB_OUTPUT"
 
   build:
     needs: prepare
-    runs-on: ${{ fromJSON(inputs.runs_on) }}
+    runs-on: ${{ matrix.runs_on }}
+    defaults:
+      run:
+        shell: bash
     permissions:
       contents: read
     strategy:
@@ -154,10 +179,17 @@ jobs:
         run: |
           if [[ "$GO_PRIVATE_FULL" == "true" ]]; then
             echo "GOPRIVATE=github.com/nics-dp" >> "$GITHUB_ENV"
+            echo "GONOPROXY=github.com/nics-dp" >> "$GITHUB_ENV"
             echo "GONOSUMDB=github.com/nics-dp" >> "$GITHUB_ENV"
             git config --global url."https://${GH_PAT}@github.com/nics-dp/".insteadOf "git@github.com:nics-dp/"
           fi
           git config --global url."https://${GH_PAT}@github.com/nics-dp".insteadOf "https://github.com/nics-dp"
+
+      - name: Install cross-compiler
+        if: inputs.cgo_enabled && runner.arch == 'X64' && matrix.goarch == 'arm64' && matrix.goos == 'linux'
+        run: |
+          sudo apt-get update && sudo apt-get install -y g++-aarch64-linux-gnu
+          echo "CC=aarch64-linux-gnu-gcc" >> "$GITHUB_ENV"
 
       - name: Build binaries
         env:
@@ -243,7 +275,7 @@ jobs:
           cp README* LICENSE* "${ARCHIVE_DIR}/" 2>/dev/null || true
 
           if [[ "$TARGET_GOOS" == "windows" ]]; then
-            zip -r "${ARCHIVE_DIR}.zip" "${ARCHIVE_DIR}"
+            7z a -tzip "${ARCHIVE_DIR}.zip" "${ARCHIVE_DIR}"
             echo "file=${ARCHIVE_DIR}.zip" >> "$GITHUB_OUTPUT"
           else
             tar czf "${ARCHIVE_DIR}.tar.gz" "${ARCHIVE_DIR}"
