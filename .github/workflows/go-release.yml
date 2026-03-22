@@ -128,11 +128,13 @@ jobs:
           RUNS_ON_LINUX: ${{ inputs.runs_on }}
           RUNS_ON_DARWIN: ${{ inputs.runs_on_darwin }}
           RUNS_ON_WINDOWS: ${{ inputs.runs_on_windows }}
+          CGO_ENABLED: ${{ inputs.cgo_enabled && '1' || '0' }}
         run: |
           MATRIX=$(echo "$PLATFORMS" | tr ',' '\n' | jq -R \
             --argjson linux_runner "$RUNS_ON_LINUX" \
             --argjson darwin_runner "$RUNS_ON_DARWIN" \
-            --argjson windows_runner "$RUNS_ON_WINDOWS" '
+            --argjson windows_runner "$RUNS_ON_WINDOWS" \
+            --arg cgo "$CGO_ENABLED" '
             split("/") |
             (if length == 3 then
               {goos: .[0], goarch: .[1], goarm: (.[2] | ltrimstr("v"))}
@@ -140,7 +142,8 @@ jobs:
               {goos: .[0], goarch: .[1], goarm: ""}
             end) |
             .runs_on = (
-              if .goos == "darwin" then $darwin_runner
+              if $cgo == "0" then $linux_runner
+              elif .goos == "darwin" then $darwin_runner
               elif .goos == "windows" then $windows_runner
               else $linux_runner
               end
@@ -178,9 +181,11 @@ jobs:
           GO_PRIVATE_FULL: ${{ inputs.go_private_full }}
         run: |
           if [[ "$GO_PRIVATE_FULL" == "true" ]]; then
-            echo "GOPRIVATE=github.com/nics-dp" >> "$GITHUB_ENV"
-            echo "GONOPROXY=github.com/nics-dp" >> "$GITHUB_ENV"
-            echo "GONOSUMDB=github.com/nics-dp" >> "$GITHUB_ENV"
+            {
+              echo "GOPRIVATE=github.com/nics-dp"
+              echo "GONOPROXY=github.com/nics-dp"
+              echo "GONOSUMDB=github.com/nics-dp"
+            } >> "$GITHUB_ENV"
             git config --global url."https://${GH_PAT}@github.com/nics-dp/".insteadOf "git@github.com:nics-dp/"
           fi
           git config --global url."https://${GH_PAT}@github.com/nics-dp".insteadOf "https://github.com/nics-dp"
