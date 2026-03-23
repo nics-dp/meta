@@ -49,7 +49,7 @@ jobs:
     with:
       repo_name: ${{ matrix.repo }}
     secrets:
-      gh_token: ${{ secrets.GH_PAT_READ_NICSDP }}
+      gh_token: ${{ secrets.GH_PAT_SYNC_NICSDP }}
 
   sync-commitlintrc:
     needs: setup
@@ -61,7 +61,7 @@ jobs:
     with:
       repo_name: ${{ matrix.repo }}
     secrets:
-      gh_token: ${{ secrets.GH_PAT_READ_NICSDP }}
+      gh_token: ${{ secrets.GH_PAT_SYNC_NICSDP }}
 
   sync-golangci:
     needs: setup
@@ -73,7 +73,7 @@ jobs:
     with:
       repo_name: ${{ matrix.repo }}
     secrets:
-      gh_token: ${{ secrets.GH_PAT_READ_NICSDP }}
+      gh_token: ${{ secrets.GH_PAT_SYNC_NICSDP }}
 
   sync-prettier:
     needs: setup
@@ -85,7 +85,7 @@ jobs:
     with:
       repo_name: ${{ matrix.repo }}
     secrets:
-      gh_token: ${{ secrets.GH_PAT_READ_NICSDP }}
+      gh_token: ${{ secrets.GH_PAT_SYNC_NICSDP }}
 
   sync-eslint-config:
     needs: setup
@@ -97,7 +97,7 @@ jobs:
     with:
       repo_name: ${{ matrix.repo }}
     secrets:
-      gh_token: ${{ secrets.GH_PAT_READ_NICSDP }}
+      gh_token: ${{ secrets.GH_PAT_SYNC_NICSDP }}
 
   sync-vitest-config:
     needs: setup
@@ -109,7 +109,7 @@ jobs:
     with:
       repo_name: ${{ matrix.repo }}
     secrets:
-      gh_token: ${{ secrets.GH_PAT_READ_NICSDP }}
+      gh_token: ${{ secrets.GH_PAT_SYNC_NICSDP }}
 
   sync-knip:
     needs: setup
@@ -121,7 +121,7 @@ jobs:
     with:
       repo_name: ${{ matrix.repo }}
     secrets:
-      gh_token: ${{ secrets.GH_PAT_READ_NICSDP }}
+      gh_token: ${{ secrets.GH_PAT_SYNC_NICSDP }}
 
   sync-lighthouserc:
     needs: setup
@@ -133,4 +133,4 @@ jobs:
     with:
       repo_name: ${{ matrix.repo }}
     secrets:
-      gh_token: ${{ secrets.GH_PAT_READ_NICSDP }}
+      gh_token: ${{ secrets.GH_PAT_SYNC_NICSDP }}
