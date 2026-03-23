@@ -70,23 +70,22 @@ jobs:
         env:
           GH_PAT: ${{ secrets.GH_PAT_READ_NICSDP }}
         run: |
+          {
+            echo "GOPRIVATE=github.com/nics-dp"
+            echo "GONOPROXY=github.com/nics-dp"
+            echo "GONOSUMDB=github.com/nics-dp"
+          } >> "$GITHUB_ENV"
           git config --global url."https://${GH_PAT}@github.com/nics-dp".insteadOf "https://github.com/nics-dp"
           git config --global url."https://${GH_PAT}@github.com/nics-dp/".insteadOf "git@github.com:nics-dp/"
-          echo "GOPRIVATE=github.com/nics-dp" >> "$GITHUB_ENV"
-
-      - name: Install Go tools
-        if: matrix.language == 'go'
-        run: |
-          go install github.com/swaggo/swag/cmd/swag@v1.16.6
 
       - name: Manual Go build for CodeQL
         if: matrix.language == 'go'
         env:
-          CGO_ENABLED: "1"
+          CGO_ENABLED: "0"
           GOOS: linux
         run: |
-          go mod download
-          go build ./...
+          go mod vendor
+          go build -mod=vendor ./...
 
       - name: Revoke private module access
         if: always() && matrix.language == 'go' && env.HAS_GH_PAT == 'true'
