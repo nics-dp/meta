@@ -43,6 +43,7 @@ permissions: {}
 
 jobs:
   notify:
+    if: ${{ !contains(inputs.title, 'chore(ci): sync') }}
     runs-on: ubuntu-latest
     steps:
       - name: Send Google Chat notification
