@@ -42,10 +42,22 @@ jobs:
             exit 1
           fi
 
+      - name: Detect target branch
+        id: branch
+        env:
+          GH_TOKEN: ${{ secrets.gh_token || secrets.GH_PAT_SYNC_NICSDP || github.token }}
+          REPO_FULL: ${{ github.repository_owner }}/${{ inputs.repo_name }}
+        run: |
+          if gh api "repos/${REPO_FULL}/branches/dev" --silent 2>/dev/null; then
+            echo "target=dev" >> "$GITHUB_OUTPUT"
+          else
+            echo "target=main" >> "$GITHUB_OUTPUT"
+          fi
+
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           repository: ${{ github.repository_owner }}/${{ inputs.repo_name }}
-          ref: dev
+          ref: ${{ steps.branch.outputs.target }}
           path: ${{ github.repository_owner }}/${{ inputs.repo_name }}
           # Falls back to github.token on workflow_dispatch, which only works for same-org public repos
           token: ${{ secrets.gh_token || secrets.GH_PAT_SYNC_NICSDP || github.token }}
@@ -80,7 +92,7 @@ jobs:
           title: "ci: sync vitest config"
           body: |
             This is an automated pull request to sync `vitest.config.ts` with the meta repository.
-          base: dev
+          base: ${{ steps.branch.outputs.target }}
           branch: "ci/sync-vitest-config"
           delete-branch: true
           path: "${{ github.repository_owner }}/${{ inputs.repo_name }}"
