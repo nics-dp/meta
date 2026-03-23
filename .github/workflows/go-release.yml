@@ -190,6 +190,19 @@ jobs:
           fi
           git config --global url."https://${GH_PAT}@github.com/nics-dp".insteadOf "https://github.com/nics-dp"
 
+      - name: Cache vendor directory
+        if: contains(inputs.extra_build_flags, '-mod=vendor')
+        uses: actions/cache@v4
+        with:
+          path: vendor
+          key: go-vendor-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('go.sum') }}
+          restore-keys: |
+            go-vendor-${{ runner.os }}-${{ runner.arch }}-
+
+      - name: Vendor Go modules
+        if: contains(inputs.extra_build_flags, '-mod=vendor')
+        run: go mod vendor
+
       - name: Install cross-compiler
         if: inputs.cgo_enabled && runner.arch == 'X64' && matrix.goarch == 'arm64' && matrix.goos == 'linux'
         run: |

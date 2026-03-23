@@ -64,6 +64,16 @@ on:
         type: string
         default: ""
         description: "Git ref to checkout (defaults to event ref)"
+      go_vendor:
+        required: false
+        type: boolean
+        default: false
+        description: "Run go mod vendor before Docker build to include vendor/ in build context"
+      go_version:
+        required: false
+        type: string
+        default: "stable"
+        description: "Go version for vendor step (only used when go_vendor is true)"
     outputs:
       digest:
         description: "Image digest (sha256:...)"
@@ -138,6 +148,28 @@ jobs:
             fi
           done < "$ENV_FILE"
           echo "${DELIM}" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Go for vendoring
+        if: inputs.go_vendor
+        uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v6.3.0
+        with:
+          go-version: ${{ inputs.go_version }}
+          cache: false
+
+      - name: Configure private modules and vendor
+        if: inputs.go_vendor
+        env:
+          HAS_GH_PAT: ${{ secrets.gh_pat != '' }}
+          GH_PAT: ${{ secrets.gh_pat }}
+        run: |
+          if [[ "$HAS_GH_PAT" == "true" ]]; then
+            git config --global url."https://${GH_PAT}@github.com/nics-dp".insteadOf "https://github.com/nics-dp"
+          fi
+          go env -w GOPRIVATE=github.com/nics-dp GONOPROXY=github.com/nics-dp GONOSUMDB=github.com/nics-dp
+          go mod vendor
+          if [[ "$HAS_GH_PAT" == "true" ]]; then
+            git config --global --remove-section "url.https://${GH_PAT}@github.com/nics-dp" 2>/dev/null || true
+          fi
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@ce360397dd3f832beb865e1373c09c0e9f86d70a # v4.0.0
