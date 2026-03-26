@@ -1,6 +1,6 @@
 # GitHub Workflows for Web Projects
 
-This directory contains workflow and config templates for React + Vite + TypeScript + Bun web projects.
+This directory contains workflow and config templates for Vue + Vite + TypeScript + Bun web projects.
 All workflows call reusable workflows from `nics-dp/meta`, and CI tasks run through `mise`.
 
 ## Workflows
@@ -164,10 +164,10 @@ Sends GitHub event notifications to Google Chat.
    {
      "scripts": {
        "dev": "vite",
-       "build": "tsc -b && vite build",
+       "build": "vue-tsc -b && vite build",
        "lint": "eslint .",
        "lint:fix": "eslint . --fix",
-       "typecheck": "tsc --noEmit",
+       "typecheck": "vue-tsc --noEmit",
        "format:check": "prettier --check .",
        "format": "prettier --write .",
        "test": "vitest run",
