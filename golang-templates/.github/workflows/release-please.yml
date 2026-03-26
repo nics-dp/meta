@@ -11,7 +11,7 @@ name: release-please
 
 on:
   push:
-    branches: [main, "release/**"]
+    branches: [main]
 
 permissions: {}
 
