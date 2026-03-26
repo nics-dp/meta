@@ -17,7 +17,7 @@ permissions:
 jobs:
   check:
     # Only check on PRs, skip sync PRs from meta repo
-    if: github.event_name == 'pull_request' && !startsWith(github.head_ref, 'ci/sync-')
+    if: github.event_name == 'pull_request' && !startsWith(github.head_ref, 'feature/sync-ci-')
     runs-on: ubuntu-latest
     steps:
       - name: Check for managed file changes
