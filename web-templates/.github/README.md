@@ -181,7 +181,13 @@ Sends GitHub event notifications to Google Chat.
 
 7. Install devDependencies:
    ```bash
-   # Required
+   # Required (Vue + Vite + TypeScript)
+   bun add -d @vitejs/plugin-vue vue-tsc
+
+   # Required (ESLint)
+   bun add -d eslint-plugin-vue @vue/eslint-config-typescript
+
+   # Required (Prettier)
    bun add -d prettier prettier-plugin-tailwindcss
 
    # Required (ci.yml runs test by default)
