@@ -40,7 +40,7 @@ jobs:
           install: false
 
       - name: Install required tools
-        run: mise install bun
+        run: MISE_AUTO_INSTALL=false mise install bun
 
       - name: Initialize environment
         run: MISE_AUTO_INSTALL=false mise run init
@@ -53,5 +53,5 @@ jobs:
           if [ -n "$COMMAND" ]; then
             bash -euo pipefail -lc "$COMMAND"
           else
-            mise run "$TASK"
+            MISE_AUTO_INSTALL=false mise run "$TASK"
           fi
