@@ -217,4 +217,4 @@ The `codeql.yml` template is a starting point. For repos managed by `sync-codeql
 |---|---|---|
 | `.golangci.yml` | `configs/.golangci.yml` | golangci-lint v2 config (synced via `sync-golangci`) |
 | `.commitlintrc.yml` | `configs/.commitlintrc.yml` | Conventional commit message rules (synced via `sync-commitlintrc`) |
-| `renovate.json` | `configs/renovate.json` | Renovate preset + ignoreDeps (synced via `sync-renovate`) |
+| `renovate.json` | `configs/renovate.json` | Renovate preset + ignoreDeps (manually copied) |
