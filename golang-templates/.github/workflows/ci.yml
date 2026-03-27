@@ -96,6 +96,8 @@ jobs:
     permissions:
       contents: read
       pull-requests: write
+    secrets:
+      gh_pat: ${{ secrets.GH_PAT_READ_NICSDP }}
 
   go-test:
     needs: [go-lint, go-sec]

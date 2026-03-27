@@ -2,7 +2,7 @@
 # Golang related
 go = "1.26.1"
 golangci-lint = "latest"
-"aqua:securego/gosec" = "latest"
+"github:securego/gosec" = "latest"
 "go:golang.org/x/vuln/cmd/govulncheck" = "latest"
 
 # Dockerfile lint

@@ -24,6 +24,9 @@ on:
       gh_pat:
         required: false
 
+env:
+  MISE_AUTO_INSTALL: "false"
+
 permissions:
   contents: read
   pull-requests: write
@@ -62,15 +65,14 @@ jobs:
           install: false
 
       - name: Install required tools
-        run: MISE_AUTO_INSTALL=false mise install go
+        run: mise install go
 
       - name: Initialize environment
-        run: MISE_AUTO_INSTALL=false mise run go:mod
+        run: mise run go:mod
 
       - name: Run unit tests
         env:
           TEST_COMMAND: ${{ inputs.test_command }}
-          MISE_AUTO_INSTALL: "false"
         run: |
           bash -euo pipefail -lc "$TEST_COMMAND"
 
@@ -125,10 +127,10 @@ jobs:
           install: false
 
       - name: Install required tools
-        run: MISE_AUTO_INSTALL=false mise install go
+        run: mise install go
 
       - name: Initialize environment
-        run: MISE_AUTO_INSTALL=false mise run go:mod
+        run: mise run go:mod
 
       - name: Download coverage data
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
