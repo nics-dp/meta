@@ -40,6 +40,14 @@
       "automerge": false
     },
     {
+      "description": "Group mise dev tool updates",
+      "matchManagers": ["mise"],
+      "groupName": "mise dev tools",
+      "commitMessagePrefix": "chore(mise.deps):",
+      "labels": ["dependencies", "mise"],
+      "automerge": false
+    },
+    {
       "description": "Automerge patch updates",
       "matchUpdateTypes": ["patch"],
       "automerge": true,
