@@ -46,6 +46,10 @@ jobs:
           cache: true
           experimental: true
           log_level: "info"
+          install: false
+
+      - name: Install required tools
+        run: mise install go "go:golang.org/x/vuln/cmd/govulncheck"
 
       - name: Initialize environment
         run: mise run init
