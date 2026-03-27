@@ -8,7 +8,7 @@ All workflows call reusable workflows from `nics-dp/meta`.
 | File | Purpose | Triggers |
 |---|---|---|
 | `ci.yml` | Managed file check, commitlint, hadolint, trivy-iac, trivy-license, lint, security scan, vulnerability check, Semgrep, test | push, PR, manual |
-| `release-please.yml` | Auto-create Release PR with changelog, then GitHub Release | push to main/release |
+| `release-please.yml` | Auto-create Release PR with changelog, then GitHub Release | push to main |
 | `release.yml` | Build Go binaries, Docker image, SBOMs, sign artifacts | release created, manual |
 | `snapshot.yml` | Build snapshot artifacts on PR, post artifact links via `artifacts-comment` | CI success on PR, manual |
 | `codeql.yml` | CodeQL security analysis (Go + Actions) | push, PR, weekly, manual |
@@ -59,7 +59,7 @@ go-semgrep ────┘ (independent)
 Auto-creates Release PRs with changelog based on conventional commits. After merge, creates GitHub Release + tag which triggers release.yml.
 
 **Triggers:**
-- Push to `main`, `release/**`
+- Push to `main`
 
 **Flow:**
 1. Detect conventional commits, calculate next semver version

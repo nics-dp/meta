@@ -1,6 +1,6 @@
 # GitHub Workflows for Web Projects
 
-This directory contains workflow and config templates for React + Vite + TypeScript + Bun web projects.
+This directory contains workflow and config templates for Vue + Vite + TypeScript + Bun web projects.
 All workflows call reusable workflows from `nics-dp/meta`, and CI tasks run through `mise`.
 
 ## Workflows
@@ -8,7 +8,7 @@ All workflows call reusable workflows from `nics-dp/meta`, and CI tasks run thro
 | File | Purpose | Triggers |
 |---|---|---|
 | `ci.yml` | Lint, typecheck, build, audit, test, format check, Semgrep, trivy-license, hadolint, trivy-iac, knip, lighthouse | push, PR, manual |
-| `release-please.yml` | Automated release management | push to main/release |
+| `release-please.yml` | Automated release management | push to main |
 | `codeql.yml` | CodeQL security analysis (JS/TS + Actions) | push, PR, weekly, manual |
 | `notify.yml` | Google Chat notifications | PR, push, release, issue, CI events |
 
@@ -79,7 +79,7 @@ These jobs are enabled in the shipped `ci.yml` unless otherwise noted. Remove or
 Auto-creates Release PRs with changelog based on conventional commits. After merge, creates GitHub Release + tag.
 
 **Triggers:**
-- Push to `main`, `release/**`
+- Push to `main`
 
 **Flow:**
 1. Detect conventional commits, calculate next semver version
@@ -164,10 +164,10 @@ Sends GitHub event notifications to Google Chat.
    {
      "scripts": {
        "dev": "vite",
-       "build": "tsc -b && vite build",
+       "build": "vue-tsc -b && vite build",
        "lint": "eslint .",
        "lint:fix": "eslint . --fix",
-       "typecheck": "tsc --noEmit",
+       "typecheck": "vue-tsc --noEmit",
        "format:check": "prettier --check .",
        "format": "prettier --write .",
        "test": "vitest run",
@@ -181,7 +181,13 @@ Sends GitHub event notifications to Google Chat.
 
 7. Install devDependencies:
    ```bash
-   # Required
+   # Required (Vue + Vite + TypeScript)
+   bun add -d @vitejs/plugin-vue vue-tsc
+
+   # Required (ESLint)
+   bun add -d eslint-plugin-vue @vue/eslint-config-typescript
+
+   # Required (Prettier)
    bun add -d prettier prettier-plugin-tailwindcss
 
    # Required (ci.yml runs test by default)
