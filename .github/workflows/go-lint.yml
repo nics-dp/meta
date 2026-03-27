@@ -14,6 +14,9 @@ on:
       gh_pat:
         required: false
 
+env:
+  MISE_AUTO_INSTALL: "false"
+
 permissions:
   contents: read
   checks: write
@@ -53,10 +56,10 @@ jobs:
           install: false
 
       - name: Install required tools
-        run: MISE_AUTO_INSTALL=false mise install go golangci-lint
+        run: mise install go golangci-lint
 
       - name: Initialize environment
-        run: MISE_AUTO_INSTALL=false mise run go:mod
+        run: mise run go:mod
 
       - name: Run lint (reviewdog)
         if: github.event_name == 'pull_request'
@@ -69,7 +72,7 @@ jobs:
 
       - name: Run lint
         if: github.event_name != 'pull_request'
-        run: MISE_AUTO_INSTALL=false mise run ci:go-lint
+        run: mise run ci:go-lint
 
       - name: Revoke private git repository access
         if: always() && env.HAS_GH_PAT == 'true'

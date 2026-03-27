@@ -14,6 +14,9 @@ on:
       gh_pat:
         required: false
 
+env:
+  MISE_AUTO_INSTALL: "false"
+
 permissions:
   contents: read
   pull-requests: write
@@ -52,15 +55,15 @@ jobs:
           install: false
 
       - name: Install required tools
-        run: MISE_AUTO_INSTALL=false mise install go "aqua:securego/gosec"
+        run: mise install go "aqua:securego/gosec"
 
       - name: Initialize environment
-        run: MISE_AUTO_INSTALL=false mise run go:mod
+        run: mise run go:mod
 
       - name: Run security scan
         id: gosec
         run: |
-          MISE_AUTO_INSTALL=false mise run ci:go-sec 2>&1 | tee gosec-output.txt
+          mise run ci:go-sec 2>&1 | tee gosec-output.txt
           echo "exit_code=${PIPESTATUS[0]}" >> "$GITHUB_OUTPUT"
 
       - name: Write summary
