@@ -55,7 +55,10 @@ jobs:
           install: false
 
       - name: Install required tools
-        run: mise install go "aqua:securego/gosec"
+        run: mise install go
+
+      - name: Install gosec
+        run: go install github.com/securego/gosec/v2/cmd/gosec@latest
 
       - name: Initialize environment
         run: mise run go:mod
@@ -63,7 +66,7 @@ jobs:
       - name: Run security scan
         id: gosec
         run: |
-          mise run ci:go-sec 2>&1 | tee gosec-output.txt
+          gosec -quiet ./... 2>&1 | tee gosec-output.txt
           echo "exit_code=${PIPESTATUS[0]}" >> "$GITHUB_OUTPUT"
 
       - name: Write summary
