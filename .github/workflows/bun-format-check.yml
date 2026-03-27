@@ -19,6 +19,9 @@ on:
       gh_pat:
         required: false
 
+env:
+  MISE_AUTO_INSTALL: "false"
+
 permissions:
   contents: read
 
@@ -40,10 +43,10 @@ jobs:
           install: false
 
       - name: Install required tools
-        run: MISE_AUTO_INSTALL=false mise install bun
+        run: mise install bun
 
       - name: Initialize environment
-        run: MISE_AUTO_INSTALL=false mise run init
+        run: mise run init
 
       - name: Run format check
         env:
@@ -53,5 +56,5 @@ jobs:
           if [ -n "$COMMAND" ]; then
             bash -euo pipefail -lc "$COMMAND"
           else
-            MISE_AUTO_INSTALL=false mise run "$TASK"
+            mise run "$TASK"
           fi
