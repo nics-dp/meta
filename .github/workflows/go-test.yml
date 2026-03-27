@@ -36,6 +36,9 @@ jobs:
       HAS_GH_PAT: ${{ secrets.gh_pat != '' }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          submodules: recursive
+          token: ${{ secrets.gh_pat }}
 
       - name: Configure private git repository
         if: env.HAS_GH_PAT == 'true'
@@ -62,7 +65,7 @@ jobs:
         run: mise install go
 
       - name: Initialize environment
-        run: mise run init
+        run: MISE_AUTO_INSTALL=false mise run go:mod
 
       - name: Run unit tests
         env:
@@ -95,6 +98,9 @@ jobs:
       HAS_GH_PAT: ${{ secrets.gh_pat != '' }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          submodules: recursive
+          token: ${{ secrets.gh_pat }}
 
       - name: Configure private git repository
         if: env.HAS_GH_PAT == 'true'
@@ -121,7 +127,7 @@ jobs:
         run: mise install go
 
       - name: Initialize environment
-        run: mise run init
+        run: MISE_AUTO_INSTALL=false mise run go:mod
 
       - name: Download coverage data
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1

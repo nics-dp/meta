@@ -29,6 +29,9 @@ jobs:
       HAS_GH_PAT: ${{ secrets.gh_pat != '' }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          submodules: recursive
+          token: ${{ secrets.gh_pat }}
 
       - name: Configure private git repository
         if: env.HAS_GH_PAT == 'true'
@@ -55,7 +58,7 @@ jobs:
         run: mise install go
 
       - name: Initialize environment
-        run: mise run init
+        run: MISE_AUTO_INSTALL=false mise run go:mod
 
       - name: Run Trivy license scan (table)
         uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # 0.35.0
