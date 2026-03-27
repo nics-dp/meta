@@ -55,7 +55,7 @@ jobs:
           install: false
 
       - name: Install required tools
-        run: mise install go
+        run: MISE_AUTO_INSTALL=false mise install go
 
       - name: Initialize environment
         run: MISE_AUTO_INSTALL=false mise run go:mod
