@@ -62,7 +62,7 @@ jobs:
           install: false
 
       - name: Install required tools
-        run: mise install go
+        run: MISE_AUTO_INSTALL=false mise install go
 
       - name: Initialize environment
         run: MISE_AUTO_INSTALL=false mise run go:mod
@@ -70,6 +70,7 @@ jobs:
       - name: Run unit tests
         env:
           TEST_COMMAND: ${{ inputs.test_command }}
+          MISE_AUTO_INSTALL: "false"
         run: |
           bash -euo pipefail -lc "$TEST_COMMAND"
 
@@ -124,7 +125,7 @@ jobs:
           install: false
 
       - name: Install required tools
-        run: mise install go
+        run: MISE_AUTO_INSTALL=false mise install go
 
       - name: Initialize environment
         run: MISE_AUTO_INSTALL=false mise run go:mod
