@@ -213,6 +213,6 @@ Sends GitHub event notifications to Google Chat.
 | `eslint.config.js` | `configs/eslint.config.js` | ESLint flat config |
 | `vitest.config.ts` | `configs/vitest.config.ts` | Vitest config |
 | `.commitlintrc.yml` | `configs/.commitlintrc.yml` | Conventional commit message rules (synced via `sync-commitlintrc`) |
-| `renovate.json` | `configs/renovate.json` | Renovate preset + ignoreDeps (synced via `sync-renovate`) |
+| `renovate.json` | `configs/renovate.json` | Renovate preset + ignoreDeps (manually copied) |
 | `knip.json` | `configs/knip.json` | Knip config (optional) |
 | `lighthouserc.json` | `configs/lighthouserc.json` | Lighthouse CI config (optional) |

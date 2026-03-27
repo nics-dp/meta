@@ -20,6 +20,7 @@ permissions:
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  MISE_AUTO_INSTALL: "false"
 
 jobs:
   license:
@@ -55,10 +56,10 @@ jobs:
           install: false
 
       - name: Install required tools
-        run: MISE_AUTO_INSTALL=false mise install go
+        run: mise install go
 
       - name: Initialize environment
-        run: MISE_AUTO_INSTALL=false mise run go:mod
+        run: mise run go:mod
 
       - name: Run Trivy license scan (table)
         uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # 0.35.0
