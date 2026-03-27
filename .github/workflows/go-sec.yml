@@ -55,13 +55,9 @@ jobs:
           install: false
 
       - name: Install required tools
-        run: mise install go
-
-      - name: Install gosec
-        run: go install github.com/securego/gosec/v2/cmd/gosec@latest
-
-      - name: Initialize environment
-        run: mise run go:mod
+        run: |
+          mise use -g "github:securego/gosec@latest"
+          mise install go
 
       - name: Run security scan
         id: gosec
