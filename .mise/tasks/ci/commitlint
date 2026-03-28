@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+#MISE description="Run commitlint on recent commits"
+#MISE raw=true
+
+bunx commitlint --from HEAD~1 --to HEAD
