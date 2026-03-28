@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+#MISE description="Clone git submodules"
+#MISE raw=true
+
+git submodule update --init --recursive

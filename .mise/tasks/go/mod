@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+#MISE description="Go modules (tidy/download/vendor)"
+#MISE raw=true
+
+go mod tidy
+go mod vendor
+go mod download
