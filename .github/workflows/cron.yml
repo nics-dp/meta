@@ -13,13 +13,13 @@ permissions:
 
 env:
   # All DCF repos (commitlintrc)
-  ALL_REPOS: '["dcf-platform","dcf-access","dcf-service","dcf-access-cli","dcf-platform-cli","dcf-access-web","dcf-platform-web","libdcf","otel-bundle","test-repo","ZenQuery","patroni"]'
+  ALL_REPOS: '["dcf-platform","dcf-access","dcf-service","dcf-access-cli","dcf-platform-cli","dcf-access-web","dcf-platform-web","libdcf","otel-bundle","ZenQuery","patroni"]'
   # Go repos only (golangci-lint)
-  GO_REPOS: '["dcf-platform","dcf-access","dcf-service","dcf-access-cli","dcf-platform-cli","libdcf","otel-bundle","test-repo","ZenQuery"]'
+  GO_REPOS: '["dcf-platform","dcf-access","dcf-service","dcf-access-cli","dcf-platform-cli","libdcf","otel-bundle","ZenQuery"]'
   # Web repos only (prettier, eslint, vitest, knip, lighthouserc)
   WEB_REPOS: '["dcf-access-web","dcf-platform-web"]'
   # Repos with per-repo CodeQL configs in configs/codeqls/
-  CODEQL_REPOS: '["dcf-platform","dcf-access","dcf-service","dcf-access-cli","dcf-platform-cli","dcf-access-web","dcf-platform-web","libdcf","otel-bundle","test-repo","ZenQuery"]'
+  CODEQL_REPOS: '["dcf-platform","dcf-access","dcf-service","dcf-access-cli","dcf-platform-cli","dcf-access-web","dcf-platform-web","libdcf","otel-bundle","ZenQuery"]'
 
 jobs:
   setup:
