@@ -17,10 +17,23 @@ asset_pattern = "codeql-win64.zip"
 
 bun = "latest"
 
-# ------------------------------------------------------------------------------
 # ==============================================================================
-#  Compile Ruler
+#  Aggregator Tasks (cannot be file tasks — name conflicts with ci/ and sbom/ dirs)
 # ==============================================================================
-[tasks.ruler] # command: mise run ruler
-description = "Compile ruler to AGENTS.md and CLAUDE.md"
-run = "bunx @intellectronica/ruler apply"
+[tasks.ci]
+description = "Run all CI checks"
+depends = [
+  "ci:commitlint",
+  "ci:hadolint",
+  "ci:trivy-iac",
+  "ci:trivy-license",
+  "ci:go-lint",
+  "ci:go-sec",
+  "ci:go-vulncheck",
+  "ci:semgrep",
+  "ci:test",
+]
+
+[tasks.sbom]
+description = "Run full SBOM pipeline (generate, enrich, scan)"
+depends = ["sbom:trivy", "sbom:grype"]
