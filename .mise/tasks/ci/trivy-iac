@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+#MISE description="Run Trivy IaC scan on Dockerfiles and compose files"
+#MISE raw=true
+
+trivy config --exit-code 0 .

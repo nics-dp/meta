@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+#MISE description="Run semgrep static analysis for Go"
+#MISE raw=true
+
+semgrep scan --error --enable-nosem --config p/golang .

@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+#MISE description="Running golang script (usage: mise run go:run [name] -- --flag)"
+#MISE raw=true
+#USAGE arg "[name]" help="Script name to run (auto-detected if cmd/ has only one entry)"
+#USAGE arg "[args]" var=#true var_min=0 help="Arguments to pass to the script"
+
+if [ -z "$usage_name" ]; then
+  entries=(cmd/*/main.go)
+  if [ "${#entries[@]}" -eq 1 ]; then
+    usage_name=$(basename "$(dirname "${entries[0]}")")
+  else
+    echo "Multiple cmd entries found. Please specify one of:"
+    for e in "${entries[@]}"; do basename "$(dirname "$e")"; done
+    exit 1
+  fi
+fi
+if [ ! -f "cmd/$usage_name/main.go" ]; then
+  echo "Error: cmd/$usage_name/main.go not found"
+  exit 1
+fi
+go run -mod=vendor "./cmd/$usage_name/main.go" $usage_args
