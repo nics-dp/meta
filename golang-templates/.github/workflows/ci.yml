@@ -100,7 +100,6 @@ jobs:
       gh_pat: ${{ secrets.GH_PAT_READ_NICSDP }}
 
   go-test:
-    needs: [go-lint, go-sec]
     uses: nics-dp/meta/.github/workflows/go-test.yml@main
     permissions:
       contents: read
