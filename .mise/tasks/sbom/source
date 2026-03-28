@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+#MISE description="Generate CycloneDX SBOM for source"
+
+syft scan . -o cyclonedx-json=sbom-source.cdx.json
