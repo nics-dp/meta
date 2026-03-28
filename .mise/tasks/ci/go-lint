@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+#MISE description="Run golangci-lint"
+#MISE raw=true
+
+golangci-lint run ./...

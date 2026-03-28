@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+#MISE description="Upgrading Golang dependencies"
+
+go get -u ./...
+go mod tidy
+go mod vendor

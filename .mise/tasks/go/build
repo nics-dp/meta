@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+#MISE description="Build a binary"
+#MISE hide=true
+#MISE raw=true
+#USAGE arg "<name>" help="Binary name"
+
+echo "Building ${usage_name?}..."
+go build -o "bin/${usage_name?}" ${EXTRA_BUILD_FLAGS} -ldflags "${LDFLAGS}" "./cmd/${usage_name?}/main.go"

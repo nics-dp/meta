@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+#MISE description="Lint Dockerfiles with hadolint"
+#MISE raw=true
+
+hadolint Dockerfile*
