@@ -83,7 +83,7 @@ jobs:
   # 將 artifact 連結回報到 PR；CLI repos 請把 needs 改為 [go-release]
   artifacts-comment:
     if: github.event.workflow_run.event == 'pull_request'
-    needs: [go-release, image-build] # TODO: CLI repos 改為僅ㄋ [go-release]
+    needs: [go-release, image-build] # TODO: CLI repos 改為僅 [go-release]
     uses: nics-dp/meta/.github/workflows/artifacts-comment.yml@main
     permissions:
       actions: read # 讀取 workflow artifacts
