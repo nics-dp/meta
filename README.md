@@ -7,9 +7,10 @@ nics-dp 組織的共用設定與 CI/CD 基礎設施 repo。本 repo 不包含可
 | 目錄/檔案 | 說明 |
 |-----------|------|
 | `.github/workflows/` | Reusable GitHub Actions workflows |
+| `.mise/tasks/` | 共用 mise task 檔案 (ci, dc, go, gs, sbom, ruler)，透過 `git::` remote includes 供 consumer repos 使用 |
 | `configs/` | Sync 來源設定檔 (commitlintrc, renovate, golangci, prettier, eslint, vitest, knip, lighthouserc) |
 | `configs/codeqls/` | 各 repo 的 CodeQL workflow 設定 (`<repo-name>.yml`) |
-| `golang-templates/` | Go 專案模板 (workflows) |
+| `golang-templates/` | Go 專案模板 (workflows + `mise.toml`) |
 | `web-templates/` | Web 專案模板 (workflows + `mise.toml`) |
 | `renovate-preset.json` | Org-level Renovate 設定 preset |
 
@@ -26,6 +27,28 @@ jobs:
 ```
 
 所有 workflows 固定引用 `@main` 分支。
+
+## 如何引用共用 Mise Tasks
+
+Consumer repo 透過 `git::` remote includes 引用本 repo 的共用 mise task 檔案：
+
+```toml
+[task_config]
+includes = ["git::https://github.com/nics-dp/meta.git//.mise/tasks?ref=main"]
+```
+
+提供的共用 tasks：
+
+| 類別 | Tasks | 說明 |
+|------|-------|------|
+| `ci:*` | commitlint, go-lint, go-sec, go-vulncheck, hadolint, semgrep, trivy-iac, trivy-license | CI 檢查 |
+| `dc:*` | clean, down, pull, rec, up | Docker Compose 生命週期管理 |
+| `go:*` | build, local, mod, remote, run, upgrade | Go 建置與模組管理 |
+| `gs:*` | clone, update | Git submodules |
+| `sbom:*` | source, enrich, trivy, grype | SBOM 產生與漏洞掃描 |
+| `ruler` | — | 編譯 ruler 至 AGENTS.md / CLAUDE.md |
+
+Consumer repos 可在自己的 `mise.toml` 中定義同名 task 來覆寫或擴充。
 
 ---
 
@@ -708,13 +731,13 @@ secrets:
 
 適用於 Go service、CLI、library 專案。詳見 [`golang-templates/.github/README.md`](golang-templates/.github/README.md)。
 
-包含: CI (lint, sec, vulncheck, semgrep, test, trivy-license；service repo 另含 hadolint / trivy-iac), release, snapshot, codeql, notify, release-please workflows + `mise.toml` + `.golangci.yml`
+包含: CI (lint, sec, vulncheck, semgrep, test, trivy-license；service repo 另含 hadolint / trivy-iac), release, snapshot, codeql, notify, release-please workflows + `mise.toml` (含 `git::` remote task includes) + `.golangci.yml`
 
 ### web-templates/ — Web 專案
 
 適用於 Vue + Vite + TypeScript + Bun 專案。包含 workflow templates 與 `mise.toml`。詳見 [`web-templates/.github/README.md`](web-templates/.github/README.md)。
 
-包含: CI (eslint, typecheck, build, audit；預設也啟用 vitest、prettier、semgrep、trivy-license、knip、lighthouse；有 Dockerfile 的 repo 還可保留 hadolint / trivy-iac), codeql, notify, release-please workflows + `mise.toml` + eslint, prettier, vitest, knip, lighthouse configs。`bundle-size` workflow 仍提供，但需 repo 自行補上 `size-limit` 設定後再啟用
+包含: CI (eslint, typecheck, build, audit；預設也啟用 vitest、prettier、semgrep、trivy-license、knip、lighthouse；有 Dockerfile 的 repo 還可保留 hadolint / trivy-iac), codeql, notify, release-please workflows + `mise.toml` (含 `git::` remote task includes) + eslint, prettier, vitest, knip, lighthouse configs。`bundle-size` workflow 仍提供，但需 repo 自行補上 `size-limit` 設定後再啟用
 
 ---
 
@@ -722,7 +745,7 @@ secrets:
 
 ### Go 專案
 
-1. 從 `golang-templates/.github/` 複製 workflows，並複製 `golang-templates/mise.toml`
+1. 從 `golang-templates/.github/` 複製 workflows，並複製 `golang-templates/mise.toml` (已含 `git::` remote task includes，共用 CI/Go/SBOM 等 tasks)
 2. 從 `configs/` 複製 `.golangci.yml`、`.commitlintrc.yml`、`renovate.json`
 3. 替換 `TODO` 標記 (`project_name`, `binary`, `image_name`)
 4. 新增 `configs/codeqls/<repo-name>.yml`，設定 CodeQL workflow
@@ -734,7 +757,7 @@ secrets:
 
 ### Web 專案
 
-1. 從 `web-templates/.github/` 複製 workflows，並複製 `web-templates/mise.toml`
+1. 從 `web-templates/.github/` 複製 workflows，並複製 `web-templates/mise.toml` (已含 `git::` remote task includes，共用 CI/SBOM 等 tasks)
 2. 從 `configs/` 複製所有 web 設定檔 (`.prettierrc.json`, `.prettierignore`, `eslint.config.js`, `vitest.config.ts`, `knip.json`, `lighthouserc.json`, `.commitlintrc.yml`, `renovate.json`)
 3. 安裝 devDependencies (見 `web-templates/.github/README.md`)
 4. 若 repo 沒有 Dockerfile，先從 `web-templates/.github/workflows/ci.yml` 移除 `hadolint` 與 `trivy-iac` jobs；若不需要 `knip` / `lighthouse`，也可一併移除
