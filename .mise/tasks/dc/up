@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+#MISE description="Start Docker Compose services (detached + build)"
+#MISE raw=true
+#USAGE arg "[services]" var=#true var_min=0 help="Services to start (default: all)"
+# shellcheck disable=SC2154 # usage_services is set by mise USAGE
+
+docker compose up -d --build --remove-orphans "${usage_services[@]}"
