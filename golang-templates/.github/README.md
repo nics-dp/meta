@@ -21,7 +21,7 @@ All workflows call reusable workflows from `nics-dp/meta`.
 Runs comprehensive CI checks including code style, security scanning, and unit tests.
 
 **Triggers:**
-- Push to `main`, `dev`, `release/**`, `feature/**`
+- Push to `main`, `dev`
 - PR targeting `main`, `dev`, `release/**`
 - Manual (`workflow_dispatch`)
 
@@ -164,7 +164,7 @@ Sends GitHub event notifications to Google Chat.
 
 ## Setup
 
-1. Copy workflow files and `mise.toml`:
+1. Copy workflow files and `mise.toml` (includes `git::` remote task includes for shared CI/Go/SBOM tasks):
    ```
    cp -r golang-templates/.github <new-repo>/.github
    cp golang-templates/mise.toml <new-repo>/

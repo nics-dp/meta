@@ -1,8 +1,28 @@
 #!/usr/bin/env bash
-#MISE description="Build a binary"
+#MISE description="Build Go binary from cmd/"
 #MISE hide=true
 #MISE raw=true
-#USAGE arg "<name>" help="Binary name"
+#USAGE arg "<name>" help="Binary name (auto-detected if cmd/ has only one entry)"
+# shellcheck disable=SC2154 # usage_name is set by mise USAGE
 
-echo "Building ${usage_name?}..."
-go build -o "bin/${usage_name?}" ${EXTRA_BUILD_FLAGS} -ldflags "${LDFLAGS}" "./cmd/${usage_name?}/main.go"
+build_one() {
+  echo "Building $1..."
+  go build -o "bin/$1" "$EXTRA_BUILD_FLAGS" -ldflags "$LDFLAGS" "./cmd/$1"
+}
+
+if [ "$usage_name" = "" ]; then
+  entries=(cmd/*/main.go)
+  if [ ${#entries[@]} -eq 0 ]; then
+    echo "Error: no cmd/*/main.go found"
+    exit 1
+  fi
+  for e in "${entries[@]}"; do
+    build_one "$(basename "$(dirname "$e")")"
+  done
+else
+  if [ ! -f "cmd/$usage_name/main.go" ]; then
+    echo "Error: cmd/$usage_name/main.go not found"
+    exit 1
+  fi
+  build_one "$usage_name"
+fi

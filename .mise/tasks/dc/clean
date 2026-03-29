@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+#MISE description="Clean Docker Compose resources"
+#MISE raw=true
+#USAGE arg "<target>" help="Resource to clean: vol, img, net, all" {
+#USAGE   choices "vol" "img" "net" "all"
+#USAGE }
+
+project=$(docker compose config --format json 2>/dev/null | grep -o '"name":"[^"]*"' | head -1 | cut -d'"' -f4)
+if [ -z "$project" ]; then
+  project=$(basename "$(pwd)")
+fi
+
+clean_volumes() {
+  echo "Removing volumes..."
+  docker compose down --volumes --remove-orphans
+}
+
+clean_images() {
+  echo "Removing images..."
+  docker compose down --rmi all --remove-orphans
+}
+
+clean_networks() {
+  echo "Removing networks..."
+  docker compose down --remove-orphans
+  docker network ls --filter "name=${project}" -q | xargs -r docker network rm 2>/dev/null || true
+}
+
+case "$usage_target" in
+  vol) clean_volumes ;;
+  img) clean_images ;;
+  net) clean_networks ;;
+  all)
+    echo "Removing volumes, images, and networks..."
+    docker compose down --volumes --rmi all --remove-orphans
+    docker network ls --filter "name=${project}" -q | xargs -r docker network rm 2>/dev/null || true
+    ;;
+esac

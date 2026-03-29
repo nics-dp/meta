@@ -4,14 +4,15 @@ nics-dp 組織的共用設定與 CI/CD 基礎設施 repo。本 repo 不包含可
 
 ## 內容總覽
 
-| 目錄/檔案 | 說明 |
-|-----------|------|
-| `.github/workflows/` | Reusable GitHub Actions workflows |
-| `configs/` | Sync 來源設定檔 (commitlintrc, renovate, golangci, prettier, eslint, vitest, knip, lighthouserc) |
-| `configs/codeqls/` | 各 repo 的 CodeQL workflow 設定 (`<repo-name>.yml`) |
-| `golang-templates/` | Go 專案模板 (workflows) |
-| `web-templates/` | Web 專案模板 (workflows + `mise.toml`) |
-| `renovate-preset.json` | Org-level Renovate 設定 preset |
+| 目錄/檔案              | 說明                                                                                                   |
+| ---------------------- | ------------------------------------------------------------------------------------------------------ |
+| `.github/workflows/`   | Reusable GitHub Actions workflows                                                                      |
+| `.mise/tasks/`         | 共用 mise task 檔案 (ci, dc, go, gs, sbom, ruler)，透過 `git::` remote includes 供 consumer repos 使用 |
+| `configs/`             | Sync 來源設定檔 (commitlintrc, renovate, golangci, prettier, eslint, vitest, knip, lighthouserc)       |
+| `configs/codeqls/`     | 各 repo 的 CodeQL workflow 設定 (`<repo-name>.yml`)                                                    |
+| `golang-templates/`    | Go 專案模板 (workflows + `mise.toml`)                                                                  |
+| `web-templates/`       | Web 專案模板 (workflows + `mise.toml`)                                                                 |
+| `renovate-preset.json` | Org-level Renovate 設定 preset                                                                         |
 
 ## 如何引用 Reusable Workflows
 
@@ -27,6 +28,28 @@ jobs:
 
 所有 workflows 固定引用 `@main` 分支。
 
+## 如何引用共用 Mise Tasks
+
+Consumer repo 透過 `git::` remote includes 引用本 repo 的共用 mise task 檔案：
+
+```toml
+[task_config]
+includes = ["git::https://github.com/nics-dp/meta.git//.mise/tasks?ref=main"]
+```
+
+提供的共用 tasks：
+
+| 類別     | Tasks                                                                                  | 說明                                |
+| -------- | -------------------------------------------------------------------------------------- | ----------------------------------- |
+| `ci:*`   | commitlint, go-lint, go-sec, go-vulncheck, hadolint, semgrep, trivy-iac, trivy-license | CI 檢查                             |
+| `dc:*`   | clean, down, pull, rec, up                                                             | Docker Compose 生命週期管理         |
+| `go:*`   | build, local, mod, remote, run, upgrade                                                | Go 建置與模組管理                   |
+| `gs:*`   | clone, update                                                                          | Git submodules                      |
+| `sbom:*` | source, enrich, trivy, grype                                                           | SBOM 產生與漏洞掃描                 |
+| `ruler`  | —                                                                                      | 編譯 ruler 至 AGENTS.md / CLAUDE.md |
+
+Consumer repos 可在自己的 `mise.toml` 中定義同名 task 來覆寫或擴充。
+
 ---
 
 ## CI Workflows
@@ -38,11 +61,11 @@ PR 時使用 reviewdog inline annotation，非 PR 時執行 `mise run ci:go-lint
 ```yaml
 uses: nics-dp/meta/.github/workflows/go-lint.yml@main
 secrets:
-  gh_pat: ${{ secrets.GH_PAT_READ_NICSDP }}  # 選用，存取私有模組
+  gh_pat: ${{ secrets.GH_PAT_READ_NICSDP }} # 選用，存取私有模組
 ```
 
-| 參數 | 類型 | 預設值 | 說明 |
-|------|------|--------|------|
+| 參數              | 類型    | 預設值 | 說明                     |
+| ----------------- | ------- | ------ | ------------------------ |
 | `go_private_full` | boolean | `true` | 設定 GOPRIVATE/GONOSUMDB |
 
 ---
@@ -57,8 +80,8 @@ secrets:
   gh_pat: ${{ secrets.GH_PAT_READ_NICSDP }}
 ```
 
-| 參數 | 類型 | 預設值 | 說明 |
-|------|------|--------|------|
+| 參數              | 類型    | 預設值 | 說明                     |
+| ----------------- | ------- | ------ | ------------------------ |
 | `go_private_full` | boolean | `true` | 設定 GOPRIVATE/GONOSUMDB |
 
 ---
@@ -73,8 +96,8 @@ secrets:
   gh_pat: ${{ secrets.GH_PAT_READ_NICSDP }}
 ```
 
-| 參數 | 類型 | 預設值 | 說明 |
-|------|------|--------|------|
+| 參數              | 類型    | 預設值 | 說明                     |
+| ----------------- | ------- | ------ | ------------------------ |
 | `go_private_full` | boolean | `true` | 設定 GOPRIVATE/GONOSUMDB |
 
 ---
@@ -87,8 +110,8 @@ secrets:
 uses: nics-dp/meta/.github/workflows/go-semgrep.yml@main
 ```
 
-| 參數 | 類型 | 預設值 | 說明 |
-|------|------|--------|------|
+| 參數     | 類型   | 預設值     | 說明                                        |
+| -------- | ------ | ---------- | ------------------------------------------- |
 | `config` | string | `p/golang` | Semgrep config/ruleset (空格分隔，支援多組) |
 
 ---
@@ -100,16 +123,16 @@ uses: nics-dp/meta/.github/workflows/go-semgrep.yml@main
 ```yaml
 uses: nics-dp/meta/.github/workflows/go-test.yml@main
 with:
-  run_report: true  # 選用，產出覆蓋率報告
+  run_report: true # 選用，產出覆蓋率報告
 secrets:
   gh_pat: ${{ secrets.GH_PAT_READ_NICSDP }}
 ```
 
-| 參數 | 類型 | 預設值 | 說明 |
-|------|------|--------|------|
-| `go_private_full` | boolean | `true` | 設定 GOPRIVATE/GONOSUMDB |
-| `test_command` | string | `mise run ci:test` | 測試指令 (需產出 `coverage.out`) |
-| `run_report` | boolean | `false` | 是否執行 report job |
+| 參數              | 類型    | 預設值             | 說明                             |
+| ----------------- | ------- | ------------------ | -------------------------------- |
+| `go_private_full` | boolean | `true`             | 設定 GOPRIVATE/GONOSUMDB         |
+| `test_command`    | string  | `mise run ci:test` | 測試指令 (需產出 `coverage.out`) |
+| `run_report`      | boolean | `false`            | 是否執行 report job              |
 
 **前提:** Consumer repo 的 mise.toml 需有 `ci:test` task，且產出 `coverage.out`。
 
@@ -151,11 +174,11 @@ permissions:
 ```yaml
 uses: nics-dp/meta/.github/workflows/trivy-license.yml@main
 secrets:
-  gh_pat: ${{ secrets.GH_PAT_READ_NICSDP }}  # 選用，Go repos 存取私有模組
+  gh_pat: ${{ secrets.GH_PAT_READ_NICSDP }} # 選用，Go repos 存取私有模組
 ```
 
-| 參數 | 類型 | 預設值 | 說明 |
-|------|------|--------|------|
+| 參數              | 類型    | 預設值 | 說明                     |
+| ----------------- | ------- | ------ | ------------------------ |
 | `go_private_full` | boolean | `true` | 設定 GOPRIVATE/GONOSUMDB |
 
 > Web repos 不需要傳 `gh_pat`，因為不存取私有 Go modules。
@@ -185,8 +208,8 @@ PR 時使用 reviewdog inline annotation，非 PR 時輸出至 step summary。
 uses: nics-dp/meta/.github/workflows/actionlint.yml@main
 ```
 
-| 參數 | 類型 | 預設值 | 說明 |
-|------|------|--------|------|
+| 參數                 | 類型   | 預設值    | 說明                               |
+| -------------------- | ------ | --------- | ---------------------------------- |
 | `actionlint-version` | string | `v1.7.11` | actionlint 版本 (僅非 PR 路徑使用) |
 
 ---
@@ -199,8 +222,8 @@ uses: nics-dp/meta/.github/workflows/actionlint.yml@main
 uses: nics-dp/meta/.github/workflows/check-managed-files.yml@main
 ```
 
-| 參數 | 類型 | 預設值 | 說明 |
-|------|------|--------|------|
+| 參數            | 類型   | 預設值   | 說明                     |
+| --------------- | ------ | -------- | ------------------------ |
 | `managed_files` | string | (見下方) | 逗號分隔的受保護檔案路徑 |
 
 預設受保護檔案: `.github/workflows/codeql.yml`, `.commitlintrc.yml`, `.golangci.yml`, `.prettierrc.json`, `.prettierignore`, `eslint.config.js`, `vitest.config.ts`, `knip.json`, `lighthouserc.json`
@@ -215,10 +238,10 @@ uses: nics-dp/meta/.github/workflows/check-managed-files.yml@main
 uses: nics-dp/meta/.github/workflows/bun-lint.yml@main
 ```
 
-| 參數 | 類型 | 預設值 | 說明 |
-|------|------|--------|------|
-| `task` | string | `ci:lint` | `mise` task 名稱 |
-| `command` | string | `""` | 選用，直接覆寫 shell 指令 |
+| 參數      | 類型   | 預設值    | 說明                      |
+| --------- | ------ | --------- | ------------------------- |
+| `task`    | string | `ci:lint` | `mise` task 名稱          |
+| `command` | string | `""`      | 選用，直接覆寫 shell 指令 |
 
 ---
 
@@ -230,10 +253,10 @@ uses: nics-dp/meta/.github/workflows/bun-lint.yml@main
 uses: nics-dp/meta/.github/workflows/bun-typecheck.yml@main
 ```
 
-| 參數 | 類型 | 預設值 | 說明 |
-|------|------|--------|------|
-| `task` | string | `ci:typecheck` | `mise` task 名稱 |
-| `command` | string | `""` | 選用，直接覆寫 shell 指令 |
+| 參數      | 類型   | 預設值         | 說明                      |
+| --------- | ------ | -------------- | ------------------------- |
+| `task`    | string | `ci:typecheck` | `mise` task 名稱          |
+| `command` | string | `""`           | 選用，直接覆寫 shell 指令 |
 
 ---
 
@@ -245,10 +268,10 @@ uses: nics-dp/meta/.github/workflows/bun-typecheck.yml@main
 uses: nics-dp/meta/.github/workflows/bun-build.yml@main
 ```
 
-| 參數 | 類型 | 預設值 | 說明 |
-|------|------|--------|------|
-| `task` | string | `build` | `mise` task 名稱 |
-| `command` | string | `""` | 選用，直接覆寫 shell 指令 |
+| 參數      | 類型   | 預設值  | 說明                      |
+| --------- | ------ | ------- | ------------------------- |
+| `task`    | string | `build` | `mise` task 名稱          |
+| `command` | string | `""`    | 選用，直接覆寫 shell 指令 |
 
 ---
 
@@ -260,10 +283,10 @@ uses: nics-dp/meta/.github/workflows/bun-build.yml@main
 uses: nics-dp/meta/.github/workflows/bun-audit.yml@main
 ```
 
-| 參數 | 類型 | 預設值 | 說明 |
-|------|------|--------|------|
-| `task` | string | `ci:audit` | `mise` task 名稱 |
-| `command` | string | `""` | 選用，直接覆寫 shell 指令 |
+| 參數      | 類型   | 預設值     | 說明                      |
+| --------- | ------ | ---------- | ------------------------- |
+| `task`    | string | `ci:audit` | `mise` task 名稱          |
+| `command` | string | `""`       | 選用，直接覆寫 shell 指令 |
 
 ---
 
@@ -275,10 +298,10 @@ uses: nics-dp/meta/.github/workflows/bun-audit.yml@main
 uses: nics-dp/meta/.github/workflows/bun-test.yml@main
 ```
 
-| 參數 | 類型 | 預設值 | 說明 |
-|------|------|--------|------|
-| `task` | string | `ci:test` | `mise` task 名稱 |
-| `command` | string | `""` | 選用，直接覆寫 shell 指令 |
+| 參數      | 類型   | 預設值    | 說明                      |
+| --------- | ------ | --------- | ------------------------- |
+| `task`    | string | `ci:test` | `mise` task 名稱          |
+| `command` | string | `""`      | 選用，直接覆寫 shell 指令 |
 
 ---
 
@@ -290,10 +313,10 @@ uses: nics-dp/meta/.github/workflows/bun-test.yml@main
 uses: nics-dp/meta/.github/workflows/bun-format-check.yml@main
 ```
 
-| 參數 | 類型 | 預設值 | 說明 |
-|------|------|--------|------|
-| `task` | string | `ci:format-check` | `mise` task 名稱 |
-| `command` | string | `""` | 選用，直接覆寫 shell 指令 |
+| 參數      | 類型   | 預設值            | 說明                      |
+| --------- | ------ | ----------------- | ------------------------- |
+| `task`    | string | `ci:format-check` | `mise` task 名稱          |
+| `command` | string | `""`              | 選用，直接覆寫 shell 指令 |
 
 ---
 
@@ -305,10 +328,10 @@ uses: nics-dp/meta/.github/workflows/bun-format-check.yml@main
 uses: nics-dp/meta/.github/workflows/bun-knip.yml@main
 ```
 
-| 參數 | 類型 | 預設值 | 說明 |
-|------|------|--------|------|
-| `task` | string | `ci:knip` | `mise` task 名稱 |
-| `command` | string | `""` | 選用，直接覆寫 shell 指令 |
+| 參數      | 類型   | 預設值    | 說明                      |
+| --------- | ------ | --------- | ------------------------- |
+| `task`    | string | `ci:knip` | `mise` task 名稱          |
+| `command` | string | `""`      | 選用，直接覆寫 shell 指令 |
 
 ---
 
@@ -320,10 +343,10 @@ uses: nics-dp/meta/.github/workflows/bun-knip.yml@main
 uses: nics-dp/meta/.github/workflows/bun-lighthouse.yml@main
 ```
 
-| 參數 | 類型 | 預設值 | 說明 |
-|------|------|--------|------|
-| `task` | string | `lighthouse` | `mise` task 名稱 |
-| `command` | string | `""` | 選用，直接覆寫 shell 指令 |
+| 參數      | 類型   | 預設值       | 說明                      |
+| --------- | ------ | ------------ | ------------------------- |
+| `task`    | string | `lighthouse` | `mise` task 名稱          |
+| `command` | string | `""`         | 選用，直接覆寫 shell 指令 |
 
 ---
 
@@ -335,10 +358,10 @@ uses: nics-dp/meta/.github/workflows/bun-lighthouse.yml@main
 uses: nics-dp/meta/.github/workflows/bun-bundle-size.yml@main
 ```
 
-| 參數 | 類型 | 預設值 | 說明 |
-|------|------|--------|------|
-| `task` | string | `bundle-size` | `mise` task 名稱 |
-| `command` | string | `""` | 選用，直接覆寫 shell 指令 |
+| 參數      | 類型   | 預設值        | 說明                      |
+| --------- | ------ | ------------- | ------------------------- |
+| `task`    | string | `bundle-size` | `mise` task 名稱          |
+| `command` | string | `""`          | 選用，直接覆寫 shell 指令 |
 
 ---
 
@@ -350,34 +373,22 @@ uses: nics-dp/meta/.github/workflows/bun-bundle-size.yml@main
 uses: nics-dp/meta/.github/workflows/bun-semgrep.yml@main
 ```
 
-| 參數 | 類型 | 預設值 | 說明 |
-|------|------|--------|------|
+| 參數     | 類型   | 預設值                      | 說明                                        |
+| -------- | ------ | --------------------------- | ------------------------------------------- |
 | `config` | string | `p/javascript p/typescript` | Semgrep config/ruleset (空格分隔，支援多組) |
 
 ---
 
-### codeql.yml — CodeQL 分析 (集中管理)
+### codeql.yml — Meta Repo CodeQL 分析
 
-> **注意:** 大多數 repos 使用 `configs/codeqls/` 下的 per-repo configs (透過 `sync-codeql` 同步)。此 reusable workflow 保留供特殊場景使用。
+`codeql.yml` 是 meta repo 自己的 CodeQL workflow，僅掃描 `actions` 語言（workflow YAML 檔案）。此 workflow 不是 reusable workflow，不供下游 repo 呼叫。
 
-各 repo 的 CodeQL workflow 為**獨立可執行**的 workflow (直接使用 `github/codeql-action`)，集中管理於 `configs/codeqls/<repo-name>.yml`，透過 `sync-codeql.yml` 同步到各 repo 的 `.github/workflows/codeql.yml`。
+**下游 repo 的 CodeQL** 由 `configs/codeqls/<repo-name>.yml` 集中管理，透過 `sync-codeql.yml` 同步到各 repo 的 `.github/workflows/codeql.yml`。每個 repo 的 config 為獨立可執行的 workflow，可依需要自訂語言 matrix、Go build 指令等。
 
-每個 repo 的 codeql.yml 可依需要自訂：語言 matrix、Go build 指令、額外工具安裝等。詳見 `configs/codeqls/` 目錄下各檔案。
+- **Go repos:** 使用 `actions` + `go` language（`manual` build-mode）
+- **Web repos:** 使用 `actions` + `javascript-typescript` language（`none` build-mode）
 
-- **Go repos:** 使用 `go` language + `manual` build-mode
-- **Web repos:** 使用 `javascript-typescript` language + `none` build-mode
-
-私有 repo 可設定 `GH_PAT_READ_NICSDP` 以存取 private modules / private repositories；未設定時，CodeQL 仍會執行，但不會傳 `external-repository-token`，也不會啟用 private module access 設定。PAT 僅限定於需要的 steps (CodeQL init 和 Git URL rewrite)，不會暴露給 caller 提供的 build commands。Git URL rewrite 僅作用於 `github.com/nics-dp` 範圍 (HTTPS 與 SSH)。
-
-#### codeql.yml reusable workflow 參數
-
-| 參數 | 類型 | 預設值 | 說明 |
-|------|------|--------|------|
-| `languages` | string | `[{"language":"actions","build-mode":"none"},{"language":"go","build-mode":"manual"}]` | JSON array of `{language, build-mode}` objects |
-| `go_build_commands` | string | `go mod download`<br>`go build ./...` | Go build 指令 (支援多行) |
-| `go_install_tools` | string | `""` | Build 前安裝工具的指令 (支援多行) |
-| `go_cgo_enabled` | boolean | `false` | 啟用 CGO |
-| `go_install_system_deps` | boolean | `false` | 安裝 `build-essential` 和 `pkg-config` |
+私有 repo 可設定 `GH_PAT_READ_NICSDP` 以存取 private modules / private repositories；未設定時，CodeQL 仍會執行，但不會傳 `external-repository-token`，也不會啟用 private module access 設定。PAT 僅限定於需要的 steps (CodeQL init 和 Git URL rewrite)。Git URL rewrite 僅作用於 `github.com/nics-dp` 範圍 (HTTPS 與 SSH)。
 
 ---
 
@@ -407,23 +418,24 @@ with:
   binary: "tui:./cmd/tui,node:./cmd/node,dataset:./cmd/dataset"
 ```
 
-| 參數 | 類型 | 預設值 | 必要 | 說明 |
-|------|------|--------|------|------|
-| `project_name` | string | — | **是** | 專案名稱 (影響 archive 命名) |
-| `binary` | string | — | **是** | Binary 建置清單 (`name:path,...`) |
-| `platforms` | string | `linux/amd64,linux/arm64,darwin/amd64,darwin/arm64,windows/amd64` | 否 | 目標平台 |
-| `go_version` | string | `stable` | 否 | Go 版本 (`actions/setup-go` 使用的版本字串) |
-| `cgo_enabled` | boolean | `false` | 否 | 啟用 CGO；啟用時建議同時把 `platforms` 覆寫為僅 Linux 目標 |
-| `go_env` | string | `GOEXPERIMENT=jsonv2,simd,runtimesecret,goroutineleakprofile` | 否 | 建置環境變數 |
-| `ldflags` | string | `""` | 否 | 自訂 ldflags (預設注入 version/commit/date) |
-| `extra_build_flags` | string | `-trimpath` | 否 | 額外 go build flags |
-| `go_private_full` | boolean | `true` | 否 | 設定 GOPRIVATE/GONOSUMDB |
-| `notarize` | boolean | `false` | 否 | macOS notarize (需 quill secrets) |
-| `snapshot` | boolean | `false` | 否 | 預覽建置模式；版本會改用 `0.0.0-snapshot+<sha>`，不上傳 GitHub Release |
-| `ref` | string | `""` | 否 | Git ref (預設使用事件 ref) |
-| `runs_on` | string | `"ubuntu-latest"` | 否 | Runner (JSON 格式，經 `fromJSON()` 解析) |
+| 參數                | 類型    | 預設值                                                            | 必要   | 說明                                                                   |
+| ------------------- | ------- | ----------------------------------------------------------------- | ------ | ---------------------------------------------------------------------- |
+| `project_name`      | string  | —                                                                 | **是** | 專案名稱 (影響 archive 命名)                                           |
+| `binary`            | string  | —                                                                 | **是** | Binary 建置清單 (`name:path,...`)                                      |
+| `platforms`         | string  | `linux/amd64,linux/arm64,darwin/amd64,darwin/arm64,windows/amd64` | 否     | 目標平台                                                               |
+| `go_version`        | string  | `stable`                                                          | 否     | Go 版本 (`actions/setup-go` 使用的版本字串)                            |
+| `cgo_enabled`       | boolean | `false`                                                           | 否     | 啟用 CGO；啟用時建議同時把 `platforms` 覆寫為僅 Linux 目標             |
+| `go_env`            | string  | `GOEXPERIMENT=jsonv2,simd,runtimesecret,goroutineleakprofile`     | 否     | 建置環境變數                                                           |
+| `ldflags`           | string  | `""`                                                              | 否     | 自訂 ldflags (預設注入 version/commit/date)                            |
+| `extra_build_flags` | string  | `-trimpath`                                                       | 否     | 額外 go build flags                                                    |
+| `go_private_full`   | boolean | `true`                                                            | 否     | 設定 GOPRIVATE/GONOSUMDB                                               |
+| `notarize`          | boolean | `false`                                                           | 否     | macOS notarize (需 quill secrets)                                      |
+| `snapshot`          | boolean | `false`                                                           | 否     | 預覽建置模式；版本會改用 `0.0.0-snapshot+<sha>`，不上傳 GitHub Release |
+| `ref`               | string  | `""`                                                              | 否     | Git ref (預設使用事件 ref)                                             |
+| `runs_on`           | string  | `"ubuntu-latest"`                                                 | 否     | Runner (JSON 格式，經 `fromJSON()` 解析)                               |
 
 **選用 Secrets:**
+
 - `gh_pat` — 存取私有模組；consumer repo 的 `release.yml` / `snapshot.yml` 通常傳 `GH_PAT_READ_NICSDP`
 - macOS notarize (當 `notarize: true`): `quill_sign_p12`, `quill_sign_password`, `quill_notary_key`, `quill_notary_key_id`, `quill_notary_issuer`
 
@@ -441,28 +453,28 @@ permissions:
   attestations: write
   id-token: write
 with:
-  image_name: dcf-platform                    # 必要
-  runs_on: '{"group":"releasers"}'            # 選用
+  image_name: dcf-platform # 必要
+  runs_on: '{"group":"releasers"}' # 選用
 secrets:
-  dockerhub_username: ${{ secrets.DOCKERHUB_USERNAME }}  # 必要
-  dockerhub_token: ${{ secrets.DOCKERHUB_TOKEN }}        # 必要
-  gh_pat: ${{ secrets.GH_PAT_READ_NICSDP }}              # 選用
+  dockerhub_username: ${{ secrets.DOCKERHUB_USERNAME }} # 必要
+  dockerhub_token: ${{ secrets.DOCKERHUB_TOKEN }} # 必要
+  gh_pat: ${{ secrets.GH_PAT_READ_NICSDP }} # 選用
 ```
 
-| 參數 | 類型 | 預設值 | 必要 | 說明 |
-|------|------|--------|------|------|
-| `image_name` | string | — | **是** | Docker image 名稱 |
-| `platforms` | string | `linux/amd64,linux/arm64` | 否 | 目標平台 |
-| `runs_on` | string | `"ubuntu-latest"` | 否 | Runner (JSON，使用 `fromJSON()` 解析) |
-| `context` | string | `.` | 否 | Docker build context 路徑 |
-| `build_args` | string | `""` | 否 | Docker build-args (多行 key=value) |
-| `env_file` | string | `""` | 否 | Env 檔案路徑 (載入為 build-args) |
-| `sbom` | boolean | `true` | 否 | 啟用 BuildKit SBOM 產生 |
-| `provenance` | boolean | `true` | 否 | 啟用 SLSA provenance attestation |
-| `attest` | boolean | `true` | 否 | 啟用 Sigstore artifact attestation |
-| `cosign` | boolean | `true` | 否 | 使用 cosign 簽章 (keyless) |
-| `snapshot` | boolean | `false` | 否 | 僅使用 SHA tag (不含 semver/latest) |
-| `ref` | string | `""` | 否 | Git ref |
+| 參數         | 類型    | 預設值                    | 必要   | 說明                                  |
+| ------------ | ------- | ------------------------- | ------ | ------------------------------------- |
+| `image_name` | string  | —                         | **是** | Docker image 名稱                     |
+| `platforms`  | string  | `linux/amd64,linux/arm64` | 否     | 目標平台                              |
+| `runs_on`    | string  | `"ubuntu-latest"`         | 否     | Runner (JSON，使用 `fromJSON()` 解析) |
+| `context`    | string  | `.`                       | 否     | Docker build context 路徑             |
+| `build_args` | string  | `""`                      | 否     | Docker build-args (多行 key=value)    |
+| `env_file`   | string  | `""`                      | 否     | Env 檔案路徑 (載入為 build-args)      |
+| `sbom`       | boolean | `true`                    | 否     | 啟用 BuildKit SBOM 產生               |
+| `provenance` | boolean | `true`                    | 否     | 啟用 SLSA provenance attestation      |
+| `attest`     | boolean | `true`                    | 否     | 啟用 Sigstore artifact attestation    |
+| `cosign`     | boolean | `true`                    | 否     | 使用 cosign 簽章 (keyless)            |
+| `snapshot`   | boolean | `false`                   | 否     | 僅使用 SHA tag (不含 semver/latest)   |
+| `ref`        | string  | `""`                      | 否     | Git ref                               |
 
 **Outputs:** `digest` — Image digest (`sha256:...`)，供 `sbom-image.yml` 使用
 
@@ -470,6 +482,7 @@ secrets:
 **選用 Secrets:** `gh_pat` (Dockerfile 中存取私有模組時需要)
 
 **Image 推送目標:**
+
 - `docker.io/nicsdp/<image_name>`
 - `ghcr.io/nics-dp/<image_name>`
 
@@ -477,11 +490,11 @@ secrets:
 
 根據 `snapshot` 輸入和 git ref，依優先順序套用以下三種模式：
 
-| 模式 | 條件 | 產生的 Tag | 範例 |
-|------|------|-----------|------|
-| Snapshot | `inputs.snapshot == true` | commit SHA (短 + 長) | `abc1234`, `abc1234567890def` |
-| Release | ref 是 tag (`refs/tags/v*`) | semver 三層 + `latest` | `v1.2.3`, `v1.2`, `v1` |
-| Fallback | 其他情況 | branch 名稱或 PR 編號 | `main`, `pr-42` |
+| 模式     | 條件                        | 產生的 Tag             | 範例                          |
+| -------- | --------------------------- | ---------------------- | ----------------------------- |
+| Snapshot | `inputs.snapshot == true`   | commit SHA (短 + 長)   | `abc1234`, `abc1234567890def` |
+| Release  | ref 是 tag (`refs/tags/v*`) | semver 三層 + `latest` | `v1.2.3`, `v1.2`, `v1`        |
+| Fallback | 其他情況                    | branch 名稱或 PR 編號  | `main`, `pr-42`               |
 
 > **實作細節：** 因為此 workflow 透過 `workflow_call` 呼叫，`github.event_name` 是 `workflow_call` 而非 `release`，
 > 所以 release 偵測使用 `startsWith(github.ref, 'refs/tags/')` 而非檢查 event name。
@@ -496,12 +509,12 @@ secrets:
 ```yaml
 uses: nics-dp/meta/.github/workflows/release-please.yml@main
 secrets:
-  gh_pat: ${{ secrets.GH_PAT_RELEASE_NICSDP }}  # 必要，GITHUB_TOKEN 不會觸發下游 workflows
+  gh_pat: ${{ secrets.GH_PAT_RELEASE_NICSDP }} # 必要，GITHUB_TOKEN 不會觸發下游 workflows
 ```
 
-| 參數 | 類型 | 預設值 | 必要 | 說明 |
-|------|------|--------|------|------|
-| `release_type` | string | `simple` | 否 | Release type (`simple`, `go`, `node` 等) |
+| 參數           | 類型   | 預設值   | 必要 | 說明                                     |
+| -------------- | ------ | -------- | ---- | ---------------------------------------- |
+| `release_type` | string | `simple` | 否   | Release type (`simple`, `go`, `node` 等) |
 
 **必要 Secrets:** `gh_pat` — 需要 `contents:write` + `pull-requests:write` 的 PAT
 
@@ -520,16 +533,16 @@ permissions:
   contents: write
   security-events: write
 with:
-  project_name: dcf-platform  # 必要
+  project_name: dcf-platform # 必要
 ```
 
-| 參數 | 類型 | 預設值 | 必要 | 說明 |
-|------|------|--------|------|------|
-| `project_name` | string | — | **是** | 專案名稱 (影響 artifact 命名) |
-| `scan_path` | string | `.` | 否 | 掃描目錄 |
-| `ref` | string | `""` | 否 | Git ref |
-| `snapshot` | boolean | `false` | 否 | Snapshot 模式 (不上傳 Release) |
-| `runs_on` | string | `"ubuntu-latest"` | 否 | Runner (JSON 格式) |
+| 參數           | 類型    | 預設值            | 必要   | 說明                           |
+| -------------- | ------- | ----------------- | ------ | ------------------------------ |
+| `project_name` | string  | —                 | **是** | 專案名稱 (影響 artifact 命名)  |
+| `scan_path`    | string  | `.`               | 否     | 掃描目錄                       |
+| `ref`          | string  | `""`              | 否     | Git ref                        |
+| `snapshot`     | boolean | `false`           | 否     | Snapshot 模式 (不上傳 Release) |
+| `runs_on`      | string  | `"ubuntu-latest"` | 否     | Runner (JSON 格式)             |
 
 ---
 
@@ -545,19 +558,19 @@ permissions:
   packages: read
   security-events: write
 with:
-  project_name: dcf-platform                                    # 必要
-  image_name: dcf-platform                                      # 必要
-  digest: ${{ needs.image-build.outputs.digest }}                # 必要
+  project_name: dcf-platform # 必要
+  image_name: dcf-platform # 必要
+  digest: ${{ needs.image-build.outputs.digest }} # 必要
 ```
 
-| 參數 | 類型 | 預設值 | 必要 | 說明 |
-|------|------|--------|------|------|
-| `project_name` | string | — | **是** | 專案名稱 (影響 artifact 命名) |
-| `image_name` | string | — | **是** | Docker image 名稱 |
-| `digest` | string | — | **是** | Image digest (`sha256:...`) |
-| `ref` | string | `""` | 否 | Git ref |
-| `snapshot` | boolean | `false` | 否 | Snapshot 模式 (不上傳 Release) |
-| `runs_on` | string | `"ubuntu-latest"` | 否 | Runner (JSON 格式) |
+| 參數           | 類型    | 預設值            | 必要   | 說明                           |
+| -------------- | ------- | ----------------- | ------ | ------------------------------ |
+| `project_name` | string  | —                 | **是** | 專案名稱 (影響 artifact 命名)  |
+| `image_name`   | string  | —                 | **是** | Docker image 名稱              |
+| `digest`       | string  | —                 | **是** | Image digest (`sha256:...`)    |
+| `ref`          | string  | `""`              | 否     | Git ref                        |
+| `snapshot`     | boolean | `false`           | 否     | Snapshot 模式 (不上傳 Release) |
+| `runs_on`      | string  | `"ubuntu-latest"` | 否     | Runner (JSON 格式)             |
 
 ---
 
@@ -567,47 +580,47 @@ Sync workflows 由 meta repo 的 `cron.yml` 統一排程觸發 (每週一 00:00 
 
 目標 repo 清單定義在 `cron.yml` 頂部：
 
-| 清單 | 說明 | 用於 |
-|------|------|------|
-| `ALL_REPOS` | 所有 DCF repos (含 patroni) | sync-commitlintrc |
-| `GO_REPOS` | Go repos (不含 web repos、patroni) | sync-golangci |
-| `WEB_REPOS` | Web repos | sync-prettier, sync-eslint-config, sync-vitest-config, sync-knip, sync-lighthouserc |
-| `CODEQL_REPOS` | 有 CodeQL 設定的 repos (不含 patroni) | sync-codeql |
+| 清單           | 說明                                  | 用於                                                                                |
+| -------------- | ------------------------------------- | ----------------------------------------------------------------------------------- |
+| `ALL_REPOS`    | 所有 DCF repos (含 patroni)           | sync-commitlintrc                                                                   |
+| `GO_REPOS`     | Go repos (不含 web repos、patroni)    | sync-golangci                                                                       |
+| `WEB_REPOS`    | Web repos                             | sync-prettier, sync-eslint-config, sync-vitest-config, sync-knip, sync-lighthouserc |
+| `CODEQL_REPOS` | 有 CodeQL 設定的 repos (不含 patroni) | sync-codeql                                                                         |
 
 ### All repos
 
-| Workflow | 來源 | 目標 |
-|----------|------|------|
+| Workflow                | 來源                        | 目標                |
+| ----------------------- | --------------------------- | ------------------- |
 | `sync-commitlintrc.yml` | `configs/.commitlintrc.yml` | `.commitlintrc.yml` |
 
 ### CodeQL repos
 
-| Workflow | 來源 | 目標 |
-|----------|------|------|
+| Workflow          | 來源                         | 目標                           |
+| ----------------- | ---------------------------- | ------------------------------ |
 | `sync-codeql.yml` | `configs/codeqls/<repo>.yml` | `.github/workflows/codeql.yml` |
 
 ### Go repos
 
-| Workflow | 來源 | 目標 |
-|----------|------|------|
+| Workflow            | 來源                    | 目標            |
+| ------------------- | ----------------------- | --------------- |
 | `sync-golangci.yml` | `configs/.golangci.yml` | `.golangci.yml` |
 
 ### Web repos
 
-| Workflow | 來源 | 目標 |
-|----------|------|------|
-| `sync-prettier.yml` | `configs/.prettierrc.json` + `configs/.prettierignore` | `.prettierrc.json` + `.prettierignore` |
-| `sync-eslint-config.yml` | `configs/eslint.config.js` | `eslint.config.js` |
-| `sync-vitest-config.yml` | `configs/vitest.config.ts` | `vitest.config.ts` |
-| `sync-knip.yml` | `configs/knip.json` | `knip.json` |
-| `sync-lighthouserc.yml` | `configs/lighthouserc.json` | `lighthouserc.json` |
+| Workflow                 | 來源                                                   | 目標                                   |
+| ------------------------ | ------------------------------------------------------ | -------------------------------------- |
+| `sync-prettier.yml`      | `configs/.prettierrc.json` + `configs/.prettierignore` | `.prettierrc.json` + `.prettierignore` |
+| `sync-eslint-config.yml` | `configs/eslint.config.js`                             | `eslint.config.js`                     |
+| `sync-vitest-config.yml` | `configs/vitest.config.ts`                             | `vitest.config.ts`                     |
+| `sync-knip.yml`          | `configs/knip.json`                                    | `knip.json`                            |
+| `sync-lighthouserc.yml`  | `configs/lighthouserc.json`                            | `lighthouserc.json`                    |
 
 所有 sync workflows 共用相同模式：
 
 ```yaml
 uses: nics-dp/meta/.github/workflows/sync-<name>.yml@main
 with:
-  repo_name: <repo-name>  # 必要，不含 org prefix
+  repo_name: <repo-name> # 必要，不含 org prefix
 secrets:
   gh_token: ${{ secrets.GH_PAT_SYNC_NICSDP }}
 ```
@@ -630,11 +643,12 @@ permissions:
   pull-requests: write
 ```
 
-| 參數 | 類型 | 預設值 | 說明 |
-|------|------|--------|------|
-| `pr_number` | number | `0` | PR 編號 (自動偵測 `pull_request` / `workflow_run` 事件) |
+| 參數        | 類型   | 預設值 | 說明                                                    |
+| ----------- | ------ | ------ | ------------------------------------------------------- |
+| `pr_number` | number | `0`    | PR 編號 (自動偵測 `pull_request` / `workflow_run` 事件) |
 
 會在 PR 上建立或更新同一則 comment，支援兩種情境：
+
 - **`pull_request` 觸發的 workflow** — 自動偵測 PR 編號
 - **`workflow_run` 觸發的 workflow** (如 snapshot) — 從 `workflow_run.pull_requests` 自動偵測
 
@@ -647,13 +661,13 @@ permissions:
 ```yaml
 uses: nics-dp/meta/.github/workflows/notify-gchat.yml@main
 with:
-  type: pr                    # 必要: pr | push | release | issue | ci-failure | ci-success
-  title: "PR #1: Title"       # 必要
-  url: "https://..."          # 必要
-  actor: "username"            # 選用 (預設 github.actor)
-  repository: "org/repo"       # 選用 (預設 github.repository)
-  body: "description"          # 選用
-  extra_fields: '[{"label":"Branch","value":"main"}]'  # 選用
+  type: pr # 必要: pr | push | release | issue | ci-failure | ci-success
+  title: "PR #1: Title" # 必要
+  url: "https://..." # 必要
+  actor: "username" # 選用 (預設 github.actor)
+  repository: "org/repo" # 選用 (預設 github.repository)
+  body: "description" # 選用
+  extra_fields: '[{"label":"Branch","value":"main"}]' # 選用
 secrets:
   google_chat_webhook: ${{ secrets.GOOGLE_CHAT_WEBHOOK }}
 ```
@@ -667,19 +681,19 @@ secrets:
 ```yaml
 uses: nics-dp/meta/.github/workflows/check-upstream-release.yml@main
 with:
-  upstream_repo: patroni/patroni     # 必要
-  version_file: Dockerfile.env       # 必要
-  version_variable: PATRONI_VERSION  # 必要
+  upstream_repo: patroni/patroni # 必要
+  version_file: Dockerfile.env # 必要
+  version_variable: PATRONI_VERSION # 必要
 secrets:
   gh_token: ${{ secrets.GH_PAT_READ_NICSDP }}
 ```
 
-| 參數 | 類型 | 預設值 | 必要 | 說明 |
-|------|------|--------|------|------|
-| `upstream_repo` | string | — | **是** | 上游 repo (例如 `patroni/patroni`) |
-| `version_file` | string | — | **是** | 版本號檔案路徑 |
-| `version_variable` | string | — | **是** | 版本號變數名稱 |
-| `release_suffix` | string | `.dcf` | 否 | Release tag 後綴 |
+| 參數               | 類型   | 預設值 | 必要   | 說明                               |
+| ------------------ | ------ | ------ | ------ | ---------------------------------- |
+| `upstream_repo`    | string | —      | **是** | 上游 repo (例如 `patroni/patroni`) |
+| `version_file`     | string | —      | **是** | 版本號檔案路徑                     |
+| `version_variable` | string | —      | **是** | 版本號變數名稱                     |
+| `release_suffix`   | string | `.dcf` | 否     | Release tag 後綴                   |
 
 ---
 
@@ -687,18 +701,18 @@ secrets:
 
 所有 sync 來源設定檔集中管理於 `configs/` 目錄：
 
-| 檔案 | 同步目標 | 適用 |
-|------|----------|------|
-| `configs/codeqls/<repo>.yml` | `.github/workflows/codeql.yml` | Per-repo |
-| `configs/.commitlintrc.yml` | `.commitlintrc.yml` | All repos |
-| `configs/renovate.json` | `renovate.json` | 手動複製 |
-| `configs/.golangci.yml` | `.golangci.yml` | Go repos |
-| `configs/.prettierrc.json` | `.prettierrc.json` | Web repos |
-| `configs/.prettierignore` | `.prettierignore` | Web repos |
-| `configs/eslint.config.js` | `eslint.config.js` | Web repos |
-| `configs/vitest.config.ts` | `vitest.config.ts` | Web repos |
-| `configs/knip.json` | `knip.json` | Web repos |
-| `configs/lighthouserc.json` | `lighthouserc.json` | Web repos |
+| 檔案                         | 同步目標                       | 適用      |
+| ---------------------------- | ------------------------------ | --------- |
+| `configs/codeqls/<repo>.yml` | `.github/workflows/codeql.yml` | Per-repo  |
+| `configs/.commitlintrc.yml`  | `.commitlintrc.yml`            | All repos |
+| `configs/renovate.json`      | `renovate.json`                | 手動複製  |
+| `configs/.golangci.yml`      | `.golangci.yml`                | Go repos  |
+| `configs/.prettierrc.json`   | `.prettierrc.json`             | Web repos |
+| `configs/.prettierignore`    | `.prettierignore`              | Web repos |
+| `configs/eslint.config.js`   | `eslint.config.js`             | Web repos |
+| `configs/vitest.config.ts`   | `vitest.config.ts`             | Web repos |
+| `configs/knip.json`          | `knip.json`                    | Web repos |
+| `configs/lighthouserc.json`  | `lighthouserc.json`            | Web repos |
 
 ---
 
@@ -708,13 +722,13 @@ secrets:
 
 適用於 Go service、CLI、library 專案。詳見 [`golang-templates/.github/README.md`](golang-templates/.github/README.md)。
 
-包含: CI (lint, sec, vulncheck, semgrep, test, trivy-license；service repo 另含 hadolint / trivy-iac), release, snapshot, codeql, notify, release-please workflows + `mise.toml` + `.golangci.yml`
+包含: CI (lint, sec, vulncheck, semgrep, test, trivy-license；service repo 另含 hadolint / trivy-iac), release, snapshot, codeql, notify, release-please workflows + `mise.toml` (含 `git::` remote task includes) + `.golangci.yml`
 
 ### web-templates/ — Web 專案
 
 適用於 Vue + Vite + TypeScript + Bun 專案。包含 workflow templates 與 `mise.toml`。詳見 [`web-templates/.github/README.md`](web-templates/.github/README.md)。
 
-包含: CI (eslint, typecheck, build, audit；預設也啟用 vitest、prettier、semgrep、trivy-license、knip、lighthouse；有 Dockerfile 的 repo 還可保留 hadolint / trivy-iac), codeql, notify, release-please workflows + `mise.toml` + eslint, prettier, vitest, knip, lighthouse configs。`bundle-size` workflow 仍提供，但需 repo 自行補上 `size-limit` 設定後再啟用
+包含: CI (eslint, typecheck, build, audit；預設也啟用 vitest、prettier、semgrep、trivy-license、knip、lighthouse；有 Dockerfile 的 repo 還可保留 hadolint / trivy-iac), codeql, notify, release-please workflows + `mise.toml` (含 `git::` remote task includes) + eslint, prettier, vitest, knip, lighthouse configs。`bundle-size` workflow 仍提供，但需 repo 自行補上 `size-limit` 設定後再啟用
 
 ---
 
@@ -722,7 +736,7 @@ secrets:
 
 ### Go 專案
 
-1. 從 `golang-templates/.github/` 複製 workflows，並複製 `golang-templates/mise.toml`
+1. 從 `golang-templates/.github/` 複製 workflows，並複製 `golang-templates/mise.toml` (已含 `git::` remote task includes，共用 CI/Go/SBOM 等 tasks)
 2. 從 `configs/` 複製 `.golangci.yml`、`.commitlintrc.yml`、`renovate.json`
 3. 替換 `TODO` 標記 (`project_name`, `binary`, `image_name`)
 4. 新增 `configs/codeqls/<repo-name>.yml`，設定 CodeQL workflow
@@ -734,7 +748,7 @@ secrets:
 
 ### Web 專案
 
-1. 從 `web-templates/.github/` 複製 workflows，並複製 `web-templates/mise.toml`
+1. 從 `web-templates/.github/` 複製 workflows，並複製 `web-templates/mise.toml` (已含 `git::` remote task includes，共用 CI/SBOM 等 tasks)
 2. 從 `configs/` 複製所有 web 設定檔 (`.prettierrc.json`, `.prettierignore`, `eslint.config.js`, `vitest.config.ts`, `knip.json`, `lighthouserc.json`, `.commitlintrc.yml`, `renovate.json`)
 3. 安裝 devDependencies (見 `web-templates/.github/README.md`)
 4. 若 repo 沒有 Dockerfile，先從 `web-templates/.github/workflows/ci.yml` 移除 `hadolint` 與 `trivy-iac` jobs；若不需要 `knip` / `lighthouse`，也可一併移除

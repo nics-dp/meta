@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
-#MISE description="Upgrading Golang dependencies"
+#MISE description="Upgrade Go dependencies"
+#MISE depends_post=["go:mod"]
 
 go get -u ./...
-go mod tidy
-go mod vendor
