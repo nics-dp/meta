@@ -1,3 +1,9 @@
+[settings]
+jobs = 16
+task.output = "keep-order"
+unix_default_inline_shell_args = "bash -c"
+
+# ------------------------------------------------------------------------------
 [tools]
 # Bun related
 bun = "latest"
@@ -7,7 +13,7 @@ hadolint = "latest"
 
 # SBOM generation
 syft = "latest"
-"go:github.com/snyk/parlay" = "latest"
+"github:snyk/parlay" = "latest"
 
 # Deps vuln scanning
 trivy = "latest"
@@ -39,65 +45,17 @@ gum = "latest"
 
 # ------------------------------------------------------------------------------
 [env]  # env for mise tasks
-_.file = ".env"
-
-[shell_alias]
-# Docker Aliases - All Docker commands start with "d" AND Docker Compose commands start with "dc"
-dstop = "docker stop $(sudo docker ps -a -q)"  # stop all running containers
-dstopall = "docker stop $(sudo docker ps -aq)"  # stop all containers
-drm = "docker rm $(sudo docker ps -a -q)"  # remove all containers
-dprunevol = "docker volume prune"  # remove unused volumes
-dprunesys = "docker system prune -a"  # remove unused docker data
-ddelimages = "docker rmi $(sudo docker images -q)"  # remove unused docker images
-derase = "dstop ; drm ; dprunevol ; dprunesys ; ddelimages"  # WARNING: removes everything!
-dprune = "dprunevol ; dprunesys ; ddelimages"  # remove unused data, volumes, and images (perfect for safe clean up)
-dexec = "docker exec -ti"  # usage: dexec container_name (to access container terminal)
-dps = "docker ps -a"  # running docker processes
-ddf = "docker system df"  # docker data usage (/var/lib/docker)
-dlogs = 'docker logs -tf --tail="50" '  # usage: dlogs container_name
-
-dcrun = "docker compose"
-dclogs = 'dcrun logs -tf --tail="50" '  # usage: dclogs container_name
-dcup = "dcrun up -d --build --remove-orphans"  # up the stack
-dcdown = "dcrun down --remove-orphans"  # down the stack
-dcrec = "dcrun up -d --force-recreate --remove-orphans"  # usage: dcrec container_name
-dcstop = "dcrun stop"  # usage: dcstop container_name
-dcrestart = "dcrun restart "  # usage: dcrestart container_name
-dcstart = "dcrun start "  # usage: dcstart container_name
-dcpull = "dcrun pull"  # usage: dcpull to pull all new images or dcpull container_name
 
 # ------------------------------------------------------------------------------
-# ==============================================================================
-#  Compile Ruler
-# ==============================================================================
-[tasks.ruler]  # command: mise run ruler
-description = "Compile ruler to AGENTS.md and CLAUDE.md"
-run = "bunx @intellectronica/ruler apply"
-
-# ==============================================================================
-#  Git Submodules
-# ==============================================================================
-
-[tasks."gs:clone"]
-description = "Clone git submodules"
-raw = true
-run = "git submodule update --init --recursive"
-
-[tasks."gs:update"]
-description = "Update git submodules"
-raw = true
-run = "git submodule update --remote --merge"
+[task_config]
+includes = ["git::https://github.com/nics-dp/meta.git//.mise/tasks"]
 
 # ==============================================================================
 #  Env init Tasks
 # ==============================================================================
 [tasks.init]
 description = "Initialize Environment"
-run = [
-  { task = "ruler" },
-  { task = "gs:clone" },
-  "bun install --frozen-lockfile"
-]
+run = ["ruler", "gs:clone", "bun install --frozen-lockfile"]
 
 # ==============================================================================
 #  Bun Tasks
@@ -137,56 +95,6 @@ echo "Clean completed!"
 # ==============================================================================
 #  CI Tasks
 # ==============================================================================
-[tasks."ci:commitlint"]
-description = "Run commitlint on recent commits"
-raw = true
-run = "bunx commitlint --from HEAD~1 --to HEAD"
-
-[tasks."ci:hadolint"]
-description = "Lint Dockerfiles with hadolint"
-raw = true
-run = "hadolint Dockerfile*"
-
-[tasks."ci:trivy-iac"]
-description = "Run Trivy IaC scan on Dockerfiles and compose files"
-raw = true
-run = "trivy config --exit-code 0 ."
-
-[tasks."ci:trivy-license"]
-description = "Run Trivy license compliance check"
-raw = true
-run = "trivy fs --scanners license --exit-code 0 ."
-
-[tasks."ci:lint"]
-description = "Run ESLint"
-raw = true
-run = "bun run lint"
-
-[tasks."ci:typecheck"]
-description = "Run TypeScript type checking"
-raw = true
-run = "bun run typecheck"
-
-[tasks."ci:audit"]
-description = "Run dependency audit"
-raw = true
-run = "bun audit"
-
-[tasks."ci:format-check"]
-description = "Run Prettier format check"
-raw = true
-run = "bun run format:check"
-
-[tasks."ci:knip"]
-description = "Run Knip dead code analysis"
-raw = true
-run = "bun run knip"
-
-[tasks."ci:semgrep"]
-description = "Run semgrep static analysis for JS/TS"
-raw = true
-run = "semgrep scan --error --enable-nosem --config p/javascript --config p/typescript ."
-
 [tasks."ci:test"]
 description = "Run unit tests with coverage"
 run = "bun run test:coverage"
@@ -197,7 +105,6 @@ depends = [
   "ci:commitlint",
   "ci:hadolint",
   "ci:trivy-iac",
-  "ci:trivy-license",
   "ci:lint",
   "ci:typecheck",
   "ci:format-check",
@@ -213,24 +120,3 @@ depends = [
 [tasks.sbom]
 description = "Run full SBOM pipeline (generate, enrich, scan)"
 depends = ["sbom:trivy", "sbom:grype"]
-
-[tasks."sbom:source"]
-description = "Generate CycloneDX SBOM for source"
-run = "syft scan . -o cyclonedx-json=sbom-source.cdx.json"
-
-[tasks."sbom:enrich"]
-description = "Enrich SBOM with ecosystem metadata"
-depends = ["sbom:source"]
-run = "parlay ecosystems enrich sbom-source.cdx.json > enriched-source.cdx.json"
-
-[tasks."sbom:trivy"]
-description = "Scan SBOM for vulnerabilities with Trivy"
-raw = true
-depends = ["sbom:enrich"]
-run = "trivy sbom enriched-source.cdx.json"
-
-[tasks."sbom:grype"]
-description = "Scan SBOM for vulnerabilities with Grype"
-raw = true
-depends = ["sbom:enrich"]
-run = "grype sbom:enriched-source.cdx.json"

@@ -41,8 +41,11 @@ jobs:
       # cgo_enabled: true       # TODO: 與 release.yml 一致
       #                         # 注意: 若啟用 CGO，請同時在 release.yml / snapshot.yml 覆寫 `platforms`
       #                         # (或改用僅支援 Linux 的 runners)，以避免 darwin/windows 目標的 CGO cross-compilation 失敗
-      runs_on: '{"group":"releasers"}' # TODO: 若無 self-hosted releasers runner，改回 '"ubuntu-latest"'
+      platforms: linux/amd64,linux/arm64
+      go_env: "GOEXPERIMENT=jsonv2,simd,runtimesecret" # remove goroutineleakprofile from release builds
+      extra_build_flags: "-trimpath -mod=vendor"
       snapshot: true
+      runs_on: '{"group":"releasers"}' # TODO: 若無 self-hosted releasers runner，改回 '"ubuntu-latest"'
       ref: ${{ github.event.workflow_run.head_sha || '' }}
     secrets:
       gh_pat: ${{ secrets.GH_PAT_READ_NICSDP }} # snapshot 讀取 private modules 用
@@ -63,6 +66,9 @@ jobs:
     with:
       image_name: TODO # TODO: 與 release.yml 一致
       runs_on: '{"group":"releasers"}' # TODO: 若無 self-hosted releasers runner，改回 '"ubuntu-latest"'
+      go_vendor: true
+      build_args: |
+        GOEXPERIMENT=jsonv2,simd,runtimesecret
       sbom: false # snapshot 不額外產出 BuildKit SBOM
       provenance: false # snapshot 不產生 provenance attestation
       attest: false # snapshot 不產生 artifact attestation
@@ -77,7 +83,7 @@ jobs:
   # 將 artifact 連結回報到 PR；CLI repos 請把 needs 改為 [go-release]
   artifacts-comment:
     if: github.event.workflow_run.event == 'pull_request'
-    needs: [go-release, image-build] # TODO: CLI repos 改為 [go-release]
+    needs: [go-release, image-build] # TODO: CLI repos 改為僅ㄋ [go-release]
     uses: nics-dp/meta/.github/workflows/artifacts-comment.yml@main
     permissions:
       actions: read # 讀取 workflow artifacts
