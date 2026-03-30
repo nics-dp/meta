@@ -23,13 +23,14 @@ if [ -f .golangci.yml ] && ! grep -q '^[[:space:]]*- gomoddirectives$' .golangci
   if [ -n "$anchor" ]; then
     tmp=$(mktemp .golangci.yml.XXXXXX)
     trap 'rm -f "$tmp"' EXIT
-    awk -v anchor="$anchor" '
+    if awk -v anchor="$anchor" '
       match($0, /^[[:space:]]*/) { indent=substr($0, RSTART, RLENGTH) }
       !done && $0 ~ "^[[:space:]]*- " anchor "$" { print; print indent "- gomoddirectives"; done=1; next }
       1
-    ' .golangci.yml > "$tmp" && mv "$tmp" .golangci.yml
-    trap - EXIT
-    echo "Restored gomoddirectives in .golangci.yml"
+    ' .golangci.yml > "$tmp" && mv "$tmp" .golangci.yml; then
+      trap - EXIT
+      echo "Restored gomoddirectives in .golangci.yml"
+    fi
   else
     echo "Warning: could not find anchor linter in .golangci.yml, skipping gomoddirectives restore"
   fi
@@ -39,12 +40,13 @@ fi
 if [ -f .semgrepignore ] && grep -q 'BEGIN mise go:local auto-generated ignore' .semgrepignore; then
   tmp=$(mktemp .semgrepignore.XXXXXX)
   trap 'rm -f "$tmp"' EXIT
-  awk '
+  if awk '
     /^$/ { blank++; next }
     /# BEGIN mise go:local auto-generated ignore/,/# END mise go:local auto-generated ignore/ { blank=0; next }
     { for(i=0;i<blank;i++) print ""; blank=0; print }
-  ' .semgrepignore > "$tmp" && mv "$tmp" .semgrepignore
-  trap - EXIT
+  ' .semgrepignore > "$tmp" && mv "$tmp" .semgrepignore; then
+    trap - EXIT
+  fi
   # Remove file if it's now empty (only whitespace)
   if [ ! -s .semgrepignore ] || ! grep -q '[^[:space:]]' .semgrepignore; then
     rm .semgrepignore
