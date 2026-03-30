@@ -12,8 +12,8 @@ echo "Fetching remote dev branches..."
 go get github.com/nics-dp/libdcf@dev github.com/nics-dp/ZenQuery@dev
 
 # Restore gomoddirectives lint if missing (insert after godot in sorted enable list)
-if [ -f .golangci.yml ] && ! grep -q 'gomoddirectives' .golangci.yml; then
-  if grep -q '^\s*- godot' .golangci.yml; then
+if [ -f .golangci.yml ] && ! grep -q '^[[:space:]]*- gomoddirectives$' .golangci.yml; then
+  if grep -q '^[[:space:]]*- godot$' .golangci.yml; then
     tmp=$(mktemp) && awk '/^[[:space:]]*- godot$/{print; print "    - gomoddirectives"; next}1' .golangci.yml > "$tmp" && mv "$tmp" .golangci.yml
     echo "Restored gomoddirectives in .golangci.yml"
   else
