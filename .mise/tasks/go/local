@@ -9,7 +9,10 @@ go mod edit -replace=github.com/nics-dp/ZenQuery=../ZenQuery
 
 # Disable gomoddirectives lint (rejects local replace directives)
 if [ -f .golangci.yml ] && grep -q '^[[:space:]]*- gomoddirectives$' .golangci.yml; then
-  tmp=$(mktemp .golangci.yml.XXXXXX) && grep -v '^[[:space:]]*- gomoddirectives$' .golangci.yml > "$tmp" && mv "$tmp" .golangci.yml
+  tmp=$(mktemp .golangci.yml.XXXXXX)
+  trap 'rm -f "$tmp"' EXIT
+  grep -v '^[[:space:]]*- gomoddirectives$' .golangci.yml > "$tmp" && mv "$tmp" .golangci.yml
+  trap - EXIT
   echo "Disabled gomoddirectives in .golangci.yml"
 fi
 
