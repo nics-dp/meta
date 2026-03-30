@@ -11,9 +11,10 @@ go mod edit -replace=github.com/nics-dp/ZenQuery=../ZenQuery
 if [ -f .golangci.yml ] && grep -q '^[[:space:]]*- gomoddirectives$' .golangci.yml; then
   tmp=$(mktemp .golangci.yml.XXXXXX)
   trap 'rm -f "$tmp"' EXIT
-  grep -v '^[[:space:]]*- gomoddirectives$' .golangci.yml > "$tmp" && mv "$tmp" .golangci.yml
-  trap - EXIT
-  echo "Disabled gomoddirectives in .golangci.yml"
+  if grep -v '^[[:space:]]*- gomoddirectives$' .golangci.yml > "$tmp" && mv "$tmp" .golangci.yml; then
+    trap - EXIT
+    echo "Disabled gomoddirectives in .golangci.yml"
+  fi
 fi
 
 # Add vendored local libs to .semgrepignore (preserves existing content).
