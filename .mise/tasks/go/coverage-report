@@ -1,0 +1,82 @@
+#!/usr/bin/env bash
+#MISE description="Generate HTML + Markdown coverage reports from coverage.out"
+#MISE raw=true
+
+set -euo pipefail
+# shellcheck disable=SC1091
+source "$(dirname "$0")/../lib/logs"
+
+MERGED_COV="coverage.out"
+HTML_REPORT="coverage.html"
+MD_REPORT="coverage.md"
+
+if [ ! -f "$MERGED_COV" ]; then
+    log_warn "$MERGED_COV not found. Please run tests first."
+    exit 0
+fi
+
+log_step "Generating HTML report: $HTML_REPORT"
+go tool cover -html="$MERGED_COV" -o "$HTML_REPORT"
+
+# Cache func output once to avoid repeated parsing
+FUNC_OUTPUT=$(go tool cover -func="$MERGED_COV")
+FUNC_NO_TOTAL=$(echo "$FUNC_OUTPUT" | grep -v "total:")
+TOTAL_COV=$(echo "$FUNC_OUTPUT" | grep "total:" | awk '{print $NF}')
+
+# Generate component coverage data (TSV: component\tavg_coverage)
+COMP_DATA=$(echo "$FUNC_NO_TOTAL" | awk '
+{
+    coverage_str = $NF
+    gsub(/%/, "", coverage_str)
+    coverage = coverage_str + 0
+    split($1, parts, "/")
+    if (length(parts) >= 3) {
+        comp = parts[3]
+        if (!(comp in seen)) {
+            seen[comp] = 1
+            order[++comp_count] = comp
+        }
+        func_count[comp]++
+        coverage_sum[comp] += coverage
+    }
+}
+END {
+    for (i = 1; i <= comp_count; i++) {
+        comp = order[i]
+        printf "%s\t%.1f\n", comp, coverage_sum[comp] / func_count[comp]
+    }
+}
+')
+
+# Generate Markdown report
+{
+    echo "# Test Coverage Report"
+    echo ""
+    echo "## Summary"
+    echo ""
+    echo "**Total Project Coverage**: **$TOTAL_COV**"
+    echo ""
+    echo "### Component Coverage"
+    echo ""
+    echo "| Component | Coverage |"
+    echo "|---|---|"
+    echo "$COMP_DATA" | awk -F'\t' '{
+        if ($2 == "N/A") printf "| %s | N/A |\n", $1
+        else printf "| %s | %s%% |\n", $1, $2
+    }'
+    echo ""
+    echo "## Details"
+    echo "| File | Coverage |"
+    echo "|---|---|"
+    echo "$FUNC_NO_TOTAL" | awk '{printf "| %s | %s |\n", $1, $NF}'
+} > "$MD_REPORT"
+
+# Print terminal summary
+echo ""
+echo "=== Coverage Summary ==="
+echo "Total: $TOTAL_COV"
+echo "$COMP_DATA" | awk -F'\t' '{
+    if ($2 == "N/A") printf "  %-16s N/A\n", $1
+    else printf "  %-16s %s%%\n", $1, $2
+}'
+echo "========================"
