@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+#MISE description="Switch to remote dev branches for libdcf and ZenQuery"
+#MISE raw=true
+#MISE depends_post=["go:mod"]
+
+echo "Disabling local replacements..."
+go mod edit -dropreplace=github.com/nics-dp/libdcf
+go mod edit -droprequire=github.com/nics-dp/libdcf
+go mod edit -dropreplace=github.com/nics-dp/ZenQuery
+go mod edit -droprequire=github.com/nics-dp/ZenQuery
+echo "Fetching remote dev branches..."
+go get github.com/nics-dp/libdcf@dev github.com/nics-dp/ZenQuery@dev
+echo "Local replacements disabled"
+echo "go.mod now uses remote dev branches"
+echo ""
+echo "Current replace directives:"
+grep -E "^replace" go.mod || echo "(none)"

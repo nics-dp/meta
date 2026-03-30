@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+#MISE description="Enable local replacements for libdcf and ZenQuery"
+#MISE raw=true
+#MISE depends_post=["go:mod"]
+
+echo "Enabling local replacements..."
+go mod edit -replace=github.com/nics-dp/libdcf=../libdcf
+go mod edit -replace=github.com/nics-dp/ZenQuery=../ZenQuery
+echo "Local replacements enabled"
+echo "go.mod now uses: ../libdcf, ../ZenQuery"
+echo "Current replace directives:"
+grep -E "^replace" go.mod || echo "(none)"

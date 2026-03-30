@@ -1,0 +1,9 @@
+# Shared log functions — sourced by mise tasks, not executable
+# Requires gum (install via mise.toml tools).
+
+log_step() { gum log --level info "$1"; }
+log_info() { gum log --level info "$1"; }
+log_warn() { gum log --level warn "$1"; }
+log_error() { gum log --level error "$1"; }
+
+# vim: ft=sh

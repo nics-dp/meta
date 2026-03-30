@@ -1,8 +1,31 @@
 #!/usr/bin/env bash
-#MISE description="Build a binary"
-#MISE hide=true
+#MISE description="Build Go binary from cmd/"
 #MISE raw=true
-#USAGE arg "<name>" help="Binary name"
+#USAGE arg "<name>" help="Binary name (auto-detected if cmd/ has only one entry)"
+# shellcheck disable=SC2154 # usage_name is set by mise USAGE
 
-echo "Building ${usage_name?}..."
-go build -o "bin/${usage_name?}" ${EXTRA_BUILD_FLAGS} -ldflags "${LDFLAGS}" "./cmd/${usage_name?}/main.go"
+build_one() {
+  echo "Building $1..."
+  # Split EXTRA_BUILD_FLAGS into array to support multiple flags (e.g. "-race -v")
+  # and avoid passing an empty "" argument when unset.
+  # Using read -ra instead of bare expansion so shellharden won't re-quote it.
+  IFS=' ' read -ra extra_flags <<< "${EXTRA_BUILD_FLAGS:-}"
+  go build -o "bin/$1" "${extra_flags[@]}" -ldflags "$LDFLAGS" "./cmd/$1"
+}
+
+if [ "$usage_name" = "" ]; then
+  entries=(cmd/*/main.go)
+  if [ ${#entries[@]} -eq 0 ]; then
+    echo "Error: no cmd/*/main.go found"
+    exit 1
+  fi
+  for e in "${entries[@]}"; do
+    build_one "$(basename "$(dirname "$e")")"
+  done
+else
+  if [ ! -f "cmd/$usage_name/main.go" ]; then
+    echo "Error: cmd/$usage_name/main.go not found"
+    exit 1
+  fi
+  build_one "$usage_name"
+fi

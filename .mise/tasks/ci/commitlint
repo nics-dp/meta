@@ -2,4 +2,4 @@
 #MISE description="Run commitlint on recent commits"
 #MISE raw=true
 
-bunx commitlint --from HEAD~1 --to HEAD
+bun install --no-save @commitlint/cli @commitlint/config-conventional && bunx commitlint --from HEAD~1 --to HEAD

@@ -1,6 +1,24 @@
+[settings]
+jobs = 16
+task.output = "keep-order"
+unix_default_inline_shell_args = "bash -c"
+
+# ------------------------------------------------------------------------------
 [tools]
-actionlint = "latest"
+# GitHub action tools
 act = "latest"
+actionlint = "latest"
+
+# SBOM generation
+syft = "latest"
+"github:snyk/parlay" = "latest"
+
+# Deps vuln scanning
+trivy = "latest"
+grype = "latest"
+
+# Static scanning
+"pipx:semgrep" = "latest"
 codeql = { version = "latest", bin_path = "codeql", platforms = """
 [linux-x64]
 asset_pattern = "codeql-linux64.zip"
@@ -15,25 +33,30 @@ asset_pattern = "codeql-osx64.zip"
 asset_pattern = "codeql-win64.zip"
 """ }
 
+# MISC
 bun = "latest"
 
+# ------------------------------------------------------------------------------
+[task_config]
+includes = [
+  ".mise/tasks",
+]
+
 # ==============================================================================
-#  Aggregator Tasks (cannot be file tasks — name conflicts with ci/ and sbom/ dirs)
+#  CI Tasks
 # ==============================================================================
 [tasks.ci]
 description = "Run all CI checks"
 depends = [
   "ci:commitlint",
-  "ci:hadolint",
   "ci:trivy-iac",
   "ci:trivy-license",
-  "ci:go-lint",
-  "ci:go-sec",
-  "ci:go-vulncheck",
   "ci:semgrep",
-  "ci:test",
 ]
 
+# ==============================================================================
+#  SBOM Tasks
+# ==============================================================================
 [tasks.sbom]
 description = "Run full SBOM pipeline (generate, enrich, scan)"
 depends = ["sbom:trivy", "sbom:grype"]

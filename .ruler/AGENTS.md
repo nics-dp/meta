@@ -7,9 +7,10 @@ This file provides guidance to Codex (Codex.ai/code) when working with code in t
 This is a **meta-configuration repository** for the nics-dp organization. It contains shared, reusable configuration files that are consumed by other nics-dp repositories:
 
 - **Reusable GitHub Actions workflows** (`.github/workflows/`) - called via `workflow_call`
+- **Shared mise task files** (`.mise/tasks/`) - consumed by consumer repos via `git::` remote includes
 - **Shared config files** (`configs/`) - synced to consumer repos via sync workflows
 - **Per-repo CodeQL configs** (`configs/codeqls/`) - synced to repos via the sync-codeql workflow
-- **Project templates** (`golang-templates/`, `web-templates/`) - reference workflow files for new repos
+- **Project templates** (`golang-templates/`, `web-templates/`) - reference workflow and mise config files for new repos
 - **Renovate preset** (`renovate-preset.json`) - org-level Renovate configuration
 
 There is no buildable code in this repo. It is purely configuration and CI/CD infrastructure.
@@ -36,6 +37,13 @@ jobs:
 ```
 `ignoreDeps` is set in downstream repos (not in the preset), because `actions/checkout` and `github/codeql-action` are centrally managed by sync-codeql. The 11 repos with synced codeql.yml need this setting; patroni does not (no codeql.yml).
 
+**Mise task sharing**: Consumer repos pull shared task files from this repo via `git::` remote includes in their `mise.toml`:
+```toml
+[task_config]
+includes = ["git::https://github.com/nics-dp/meta.git//.mise/tasks?ref=main"]
+```
+This provides shared tasks for CI (`ci:*`), Docker Compose (`dc:*`), Go builds (`go:*`), git submodules (`gs:*`), SBOM (`sbom:*`), and ruler. Consumer repos can override or extend these with local task definitions.
+
 **PAT split**:
 - `GH_PAT_READ_NICSDP` is used for private module access, CodeQL private-repo access, and snapshot builds
 - `GH_PAT_RELEASE_NICSDP` is used by `release-please.yml` and release workflows so downstream release activity can be triggered
@@ -51,8 +59,9 @@ Key files:
 - `configs/vitest.config.ts` - Shared Vitest config (web repos)
 - `configs/knip.json` - Shared Knip config (web repos)
 - `configs/lighthouserc.json` - Shared Lighthouse CI config (web repos)
+- `.mise/tasks/` - Shared mise task files (ci, dc, go, gs, sbom, ruler) consumed via `git::` remote includes
 - `renovate-preset.json` - Org-level Renovate preset (replaces Dependabot)
-- `mise.toml` - Tool version management (actionlint, act)
+- `mise.toml` - Tool version management and CI/SBOM aggregator tasks
 
 ## Workflow Architecture
 
@@ -87,7 +96,7 @@ The reusable workflows in `.github/workflows/` accept inputs and secrets via `wo
 - **`check-managed-files.yml`** - Blocks PRs that modify centrally-managed files (skips `feature/sync-ci-*` branches)
 
 ### Release & Build
-- **`release-please.yml`** - Automated release management via googleapis/release-please-action (conventional commits -> Release PR with changelog -> GitHub Release + tag). Supports both `workflow_call` (reusable) and `push` (meta repo self-use); on push, `release_type` defaults to `simple` via event-name gating. Requires PAT (`gh_pat` or `GH_PAT_RELEASE_NICSDP` fallback) to trigger downstream workflows
+- **`release-please.yml`** - Automated release management via googleapis/release-please-action (conventional commits -> Release PR with changelog -> GitHub Release + tag). `workflow_call` only (reusable by consumer repos). Requires PAT (`gh_pat` or `GH_PAT_RELEASE_NICSDP` fallback) to trigger downstream workflows
 - **`go-release.yml`** - Go binary release pipeline (multi-arch cross-compile, cosign checksums, macOS notarize via quill, GitHub Release)
 - **`image-release.yml`** - Container image build with dual registry (DockerHub + GHCR), attestations, cosign image signing (keyless). Outputs `digest` for sbom-image
 - **`sbom-source.yml`** - Source code SBOM (CycloneDX 1.6 via anchore/sbom-action + parlay enrich) + Trivy + Grype vulnerability scan -> GitHub Release + Security tab
@@ -119,7 +128,8 @@ The reusable workflows in `.github/workflows/` accept inputs and secrets via `wo
 - Config source files live in `configs/`; changes are synced to consumer repos via sync workflows + `cron.yml`
 - Per-repo CodeQL workflow configs live in `configs/codeqls/<github-repo-name>.yml` (must match GitHub repo name, e.g. `dcf-platform.yml`)
 - To add a new repo to sync, update the repo lists in `.github/workflows/cron.yml` (`ALL_REPOS`, `GO_REPOS`, `WEB_REPOS`, `CODEQL_REPOS`)
-- Project templates in `golang-templates/` and `web-templates/` are reference files for new repo setup
+- Shared mise task files live in `.mise/tasks/`; consumer repos include them via `git::` remote includes in `mise.toml`
+- Project templates in `golang-templates/` and `web-templates/` are reference files for new repo setup (workflow YAML + mise.toml)
 - Renovate preset changes in `renovate-preset.json` automatically apply to all consumer repos; `ignoreDeps` is set in downstream repos, not in the preset
 - Consumer repos need `.commitlintrc.yml` and `renovate.json` copied from `configs/`
 

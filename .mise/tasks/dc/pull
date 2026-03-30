@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+#MISE description="Pull Docker Compose service images"
+#MISE raw=true
+#USAGE arg "[services]" var=#true var_min=0 help="Services to pull (default: all)"
+# shellcheck disable=SC2154 # usage_services is set by mise USAGE
+
+docker compose pull "${usage_services[@]}"
