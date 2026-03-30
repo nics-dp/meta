@@ -25,7 +25,7 @@ if [ -f .golangci.yml ] && ! grep -q '^[[:space:]]*- gomoddirectives$' .golangci
     trap 'rm -f "$tmp"' EXIT
     awk -v anchor="$anchor" '
       match($0, /^[[:space:]]*/) { indent=substr($0, RSTART, RLENGTH) }
-      $0 ~ "^[[:space:]]*- " anchor "$" { print; print indent "- gomoddirectives"; next }
+      !done && $0 ~ "^[[:space:]]*- " anchor "$" { print; print indent "- gomoddirectives"; done=1; next }
       1
     ' .golangci.yml > "$tmp" && mv "$tmp" .golangci.yml
     trap - EXIT
