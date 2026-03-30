@@ -6,6 +6,40 @@
 echo "Enabling local replacements..."
 go mod edit -replace=github.com/nics-dp/libdcf=../libdcf
 go mod edit -replace=github.com/nics-dp/ZenQuery=../ZenQuery
+
+# Disable gomoddirectives lint (rejects local replace directives)
+if [ -f .golangci.yml ] && grep -q '^[[:space:]]*- gomoddirectives$' .golangci.yml; then
+  tmp=$(mktemp .golangci.yml.XXXXXX)
+  trap 'rm -f "$tmp"' EXIT
+  grep -v '^[[:space:]]*- gomoddirectives$' .golangci.yml > "$tmp" && mv "$tmp" .golangci.yml
+  trap - EXIT
+  echo "Disabled gomoddirectives in .golangci.yml"
+fi
+
+# Add vendored local libs to .semgrepignore (preserves existing content).
+# Assumes consumer repos use `go mod vendor` to vendor dependencies.
+MARKER="BEGIN mise go:local auto-generated ignore"
+if [ ! -f .semgrepignore ]; then
+  cat > .semgrepignore << 'EOF'
+# BEGIN mise go:local auto-generated ignore
+vendor/github.com/nics-dp/libdcf/
+vendor/github.com/nics-dp/ZenQuery/
+# END mise go:local auto-generated ignore
+EOF
+  echo "Created .semgrepignore"
+elif ! grep -q "$MARKER" .semgrepignore; then
+  cat >> .semgrepignore << 'EOF'
+
+# BEGIN mise go:local auto-generated ignore
+vendor/github.com/nics-dp/libdcf/
+vendor/github.com/nics-dp/ZenQuery/
+# END mise go:local auto-generated ignore
+EOF
+  echo "Updated .semgrepignore with go:local ignores"
+else
+  echo ".semgrepignore already contains go:local ignores"
+fi
+
 echo "Local replacements enabled"
 echo "go.mod now uses: ../libdcf, ../ZenQuery"
 echo "Current replace directives:"
