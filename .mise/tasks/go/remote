@@ -10,6 +10,20 @@ go mod edit -dropreplace=github.com/nics-dp/ZenQuery
 go mod edit -droprequire=github.com/nics-dp/ZenQuery
 echo "Fetching remote dev branches..."
 go get github.com/nics-dp/libdcf@dev github.com/nics-dp/ZenQuery@dev
+
+# Restore gomoddirectives lint if missing
+if [ -f .golangci.yml ] && ! grep -q 'gomoddirectives' .golangci.yml; then
+  sed -i '' '/- godot/a\
+    - gomoddirectives' .golangci.yml
+  echo "Restored gomoddirectives in .golangci.yml"
+fi
+
+# Remove .semgrepignore (no longer needed)
+if [ -f .semgrepignore ]; then
+  rm .semgrepignore
+  echo "Removed .semgrepignore"
+fi
+
 echo "Local replacements disabled"
 echo "go.mod now uses remote dev branches"
 echo ""
