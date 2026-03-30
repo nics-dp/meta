@@ -11,14 +11,17 @@ go mod edit -droprequire=github.com/nics-dp/ZenQuery
 echo "Fetching remote dev branches..."
 go get github.com/nics-dp/libdcf@dev github.com/nics-dp/ZenQuery@dev
 
-# Restore gomoddirectives lint if missing
+# Restore gomoddirectives lint if missing (insert after godot in sorted enable list)
 if [ -f .golangci.yml ] && ! grep -q 'gomoddirectives' .golangci.yml; then
-  sed -i '' '/- godot/a\
-    - gomoddirectives' .golangci.yml
-  echo "Restored gomoddirectives in .golangci.yml"
+  if grep -q '^\s*- godot' .golangci.yml; then
+    tmp=$(mktemp) && awk '/^[[:space:]]*- godot$/{print; print "    - gomoddirectives"; next}1' .golangci.yml > "$tmp" && mv "$tmp" .golangci.yml
+    echo "Restored gomoddirectives in .golangci.yml"
+  else
+    echo "Warning: could not find '- godot' anchor in .golangci.yml, skipping gomoddirectives restore"
+  fi
 fi
 
-# Remove .semgrepignore (no longer needed)
+# Remove .semgrepignore (no longer needed when not using local libs)
 if [ -f .semgrepignore ]; then
   rm .semgrepignore
   echo "Removed .semgrepignore"
