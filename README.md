@@ -43,9 +43,10 @@ includes = ["git::https://github.com/nics-dp/meta.git//.mise/tasks?ref=main"]
 | -------- | -------------------------------------------------------------------------------------- | ----------------------------------- |
 | `ci:*`   | commitlint, go-lint, go-sec, go-vulncheck, hadolint, semgrep, trivy-iac, trivy-license | CI 檢查                             |
 | `dc:*`   | clean, down, pull, rec, up                                                             | Docker Compose 生命週期管理         |
-| `go:*`   | build, local, mod, remote, run, upgrade                                                | Go 建置與模組管理                   |
+| `go:*`   | build, coverage-report, local, mod, remote, run, upgrade                               | Go 建置與模組管理                   |
 | `gs:*`   | clone, update                                                                          | Git submodules                      |
 | `sbom:*` | source, enrich, trivy, grype                                                           | SBOM 產生與漏洞掃描                 |
+| `lib/*`  | logs                                                                                   | 共用函式庫 (供 tasks source 使用)   |
 | `ruler`  | —                                                                                      | 編譯 ruler 至 AGENTS.md / CLAUDE.md |
 
 Consumer repos 可在自己的 `mise.toml` 中定義同名 task 來覆寫或擴充。
