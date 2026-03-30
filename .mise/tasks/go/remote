@@ -9,7 +9,10 @@ go mod edit -droprequire=github.com/nics-dp/libdcf
 go mod edit -dropreplace=github.com/nics-dp/ZenQuery
 go mod edit -droprequire=github.com/nics-dp/ZenQuery
 echo "Fetching remote dev branches..."
-go get github.com/nics-dp/libdcf@dev github.com/nics-dp/ZenQuery@dev
+go get github.com/nics-dp/libdcf@dev github.com/nics-dp/ZenQuery@dev || {
+  echo "Error: go get failed. Aborting config changes to preserve consistency." >&2
+  exit 1
+}
 
 # Restore gomoddirectives lint if missing (insert in sorted enable list)
 if [ -f .golangci.yml ] && ! grep -q '^[[:space:]]*- gomoddirectives$' .golangci.yml; then
