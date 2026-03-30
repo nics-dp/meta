@@ -21,10 +21,16 @@ if [ -f .golangci.yml ] && ! grep -q 'gomoddirectives' .golangci.yml; then
   fi
 fi
 
-# Remove .semgrepignore (no longer needed when not using local libs)
-if [ -f .semgrepignore ]; then
-  rm .semgrepignore
-  echo "Removed .semgrepignore"
+# Remove go:local auto-generated block from .semgrepignore (preserves user content)
+if [ -f .semgrepignore ] && grep -q 'BEGIN mise go:local auto-generated ignore' .semgrepignore; then
+  tmp=$(mktemp) && sed '/# BEGIN mise go:local auto-generated ignore/,/# END mise go:local auto-generated ignore/d' .semgrepignore > "$tmp" && mv "$tmp" .semgrepignore
+  # Remove file if it's now empty (only whitespace)
+  if [ ! -s .semgrepignore ] || ! grep -q '[^[:space:]]' .semgrepignore; then
+    rm .semgrepignore
+    echo "Removed .semgrepignore (was empty after cleanup)"
+  else
+    echo "Removed go:local ignores from .semgrepignore"
+  fi
 fi
 
 echo "Local replacements disabled"
