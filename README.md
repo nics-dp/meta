@@ -51,6 +51,8 @@ includes = ["git::https://github.com/nics-dp/meta.git//.mise/tasks?ref=main"]
 
 Consumer repos 可在自己的 `mise.toml` 中定義同名 task 來覆寫或擴充。
 
+> **`go:local` / `go:remote` 注意事項：** `go:local` 會自動停用 `.golangci.yml` 中的 `gomoddirectives` 規則，並建立 `.semgrepignore` 以排除 vendored local libs。`go:remote` 會還原這些變更。`.semgrepignore` 不應被 commit（`golang-templates/.gitignore` 已預設忽略；現有 repo 需手動將 `.semgrepignore` 加入 `.gitignore`）。
+
 ---
 
 ## CI Workflows

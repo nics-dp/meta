@@ -4,12 +4,71 @@
 #MISE depends_post=["go:mod"]
 
 echo "Disabling local replacements..."
+cp go.mod go.mod.bak
+[ -f go.sum ] && cp go.sum go.sum.bak
 go mod edit -dropreplace=github.com/nics-dp/libdcf
 go mod edit -droprequire=github.com/nics-dp/libdcf
 go mod edit -dropreplace=github.com/nics-dp/ZenQuery
 go mod edit -droprequire=github.com/nics-dp/ZenQuery
 echo "Fetching remote dev branches..."
-go get github.com/nics-dp/libdcf@dev github.com/nics-dp/ZenQuery@dev
+go get github.com/nics-dp/libdcf@dev github.com/nics-dp/ZenQuery@dev || {
+  echo "Error: go get failed. Restoring go.mod/go.sum to preserve consistency." >&2
+  mv go.mod.bak go.mod
+  [ -f go.sum.bak ] && mv go.sum.bak go.sum
+  exit 1
+}
+rm -f go.mod.bak go.sum.bak
+
+# Restore gomoddirectives lint if missing (insert in sorted enable list)
+# Subshell isolates trap scope so EXIT traps don't overwrite each other
+(
+  if [ -f .golangci.yml ] && ! grep -q '^[[:space:]]*- gomoddirectives$' .golangci.yml; then
+    anchor=""
+    for candidate in godot goconst; do
+      if grep -q "^[[:space:]]*- ${candidate}$" .golangci.yml; then
+        anchor="$candidate"
+        break
+      fi
+    done
+    if [ -n "$anchor" ]; then
+      tmp_lint=$(mktemp .golangci.yml.XXXXXX)
+      trap 'rm -f "$tmp_lint"' EXIT
+      if awk -v anchor="$anchor" '
+        match($0, /^[[:space:]]*/) { indent=substr($0, RSTART, RLENGTH) }
+        !done && $0 ~ "^[[:space:]]*- " anchor "$" { print; print indent "- gomoddirectives"; done=1; next }
+        1
+      ' .golangci.yml > "$tmp_lint" && mv "$tmp_lint" .golangci.yml; then
+        echo "Restored gomoddirectives in .golangci.yml"
+      fi
+    else
+      echo "Warning: could not find anchor linter in .golangci.yml, skipping gomoddirectives restore"
+    fi
+  fi
+)
+
+# Remove go:local auto-generated block from .semgrepignore (preserves user content)
+(
+  if [ -f .semgrepignore ] && grep -q 'BEGIN mise go:local auto-generated ignore' .semgrepignore; then
+    tmp_semgrep=$(mktemp .semgrepignore.XXXXXX)
+    trap 'rm -f "$tmp_semgrep"' EXIT
+    if awk '
+      /^$/ { blank++; next }
+      /# BEGIN mise go:local auto-generated ignore/,/# END mise go:local auto-generated ignore/ { blank=0; next }
+      { for(i=0;i<blank;i++) print ""; blank=0; print }
+    ' .semgrepignore > "$tmp_semgrep" && mv "$tmp_semgrep" .semgrepignore; then
+      # Remove file if it's now empty (only whitespace)
+      if [ ! -s .semgrepignore ] || ! grep -q '[^[:space:]]' .semgrepignore; then
+        rm .semgrepignore
+        echo "Removed .semgrepignore (was empty after cleanup)"
+      else
+        echo "Removed go:local ignores from .semgrepignore"
+      fi
+    else
+      echo "Warning: failed to clean .semgrepignore; original file preserved" >&2
+    fi
+  fi
+)
+
 echo "Local replacements disabled"
 echo "go.mod now uses remote dev branches"
 echo ""
