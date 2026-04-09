@@ -7,8 +7,8 @@ on:
       actionlint-version:
         required: false
         type: string
-        default: "v1.7.11"
-        description: "actionlint version tag (e.g., v1.7.11)"
+        default: "v1.7.12"
+        description: "actionlint version tag (e.g., v1.7.12)"
 
 permissions:
   contents: read
