@@ -192,7 +192,7 @@ jobs:
 
       - name: Cache vendor directory
         if: contains(inputs.extra_build_flags, '-mod=vendor')
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: vendor
           key: go-vendor-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('go.sum') }}
