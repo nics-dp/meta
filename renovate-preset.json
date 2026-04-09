@@ -6,6 +6,9 @@
     ":timezone(Asia/Taipei)",
     "schedule:earlyMondays"
   ],
+  "registryAliases": {
+    "dhi.io": "dhi.io"
+  },
   "packageRules": [
     {
       "description": "Group Go module updates",
