@@ -6,7 +6,7 @@ unix_default_inline_shell_args = "bash -c"
 # ------------------------------------------------------------------------------
 [tools]
 # Golang related
-go = "1.26.1"
+go = "1.26.2"
 golangci-lint = "latest"
 "github:securego/gosec" = "latest"
 "go:golang.org/x/vuln/cmd/govulncheck" = "latest"
