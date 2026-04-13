@@ -1,0 +1,68 @@
+[tools]
+python = "3.12"
+uv = "latest"
+
+# ==============================================================================
+#  Env init Tasks
+# ==============================================================================
+[tasks.init]
+description = "Initialize environment (install dependencies)"
+run = "uv sync --group test"
+
+# ==============================================================================
+#  CI Tasks (called by reusable workflows in meta)
+# ==============================================================================
+[tasks."ci:lint"]
+description = "Run ruff linter and formatter check"
+run = [
+    "ruff check .",
+    "ruff format --check .",
+]
+
+[tasks."ci:test"]
+description = "Run tests with coverage"
+run = """
+coverage run -m pytest tests/ -v
+coverage report
+coverage xml -o coverage.xml
+"""
+
+[tasks."ci:security"]
+description = "Run security scans (SAST + dependency audit)"
+run = [
+    "bandit -r . --exclude ./.venv",
+    "pip-audit",
+]
+
+[tasks."ci:semgrep"]
+description = "Run semgrep static analysis for Python"
+run = "semgrep scan --error --enable-nosem --config p/python ."
+
+# ==============================================================================
+#  Local dev tasks (use uv run for on-the-fly dependency resolution)
+# ==============================================================================
+[tasks.lint]
+description = "Run ruff linter and formatter check"
+run = [
+    "uv run --group test ruff check .",
+    "uv run --group test ruff format --check .",
+]
+
+[tasks.safe-check]
+description = "Run security scans (SAST + dependency audit)"
+run = [
+    "uv run --group test bandit -r . --exclude ./.venv",
+    "uv run --group test pip-audit",
+]
+
+[tasks.sbom]
+description = "Generate CycloneDX SBOM"
+run = "uv run --group test cyclonedx-py environment -o sbom.json"
+
+[tasks.test]
+description = "Run tests with coverage"
+run = "uv run --group test coverage run -m pytest tests/ && uv run --group test coverage report"
+
+[tasks.check]
+description = "Run all checks (lint + security + tests)"
+depends = ["lint", "safe-check", "test"]

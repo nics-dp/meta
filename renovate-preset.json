@@ -40,6 +40,14 @@
       "automerge": false
     },
     {
+      "description": "Group Python dependency updates",
+      "matchManagers": ["pep621", "uv"],
+      "groupName": "python dependencies",
+      "commitMessagePrefix": "chore(py.deps):",
+      "labels": ["dependencies", "python"],
+      "automerge": false
+    },
+    {
       "description": "Group mise dev tool updates",
       "matchManagers": ["mise"],
       "groupName": "mise dev tools",

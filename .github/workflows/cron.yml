@@ -13,13 +13,15 @@ permissions:
 
 env:
   # All DCF repos (commitlintrc)
-  ALL_REPOS: '["dcf-platform","dcf-access","dcf-service","dcf-access-cli","dcf-platform-cli","dcf-access-web","dcf-platform-web","libdcf","otel-bundle","ZenQuery","patroni"]'
+  ALL_REPOS: '["dcf-platform","dcf-access","dcf-service","dcf-access-cli","dcf-platform-cli","dcf-access-web","dcf-platform-web","libdcf","otel-bundle","ZenQuery","patroni","dcf-synthetic-data-cli"]'
   # Go repos only (golangci-lint)
   GO_REPOS: '["dcf-platform","dcf-access","dcf-service","dcf-access-cli","dcf-platform-cli","libdcf","otel-bundle","ZenQuery"]'
   # Web repos only (prettier, eslint, vitest, knip, lighthouserc)
   WEB_REPOS: '["dcf-access-web","dcf-platform-web"]'
+  # Python repos only
+  PYTHON_REPOS: '["dcf-synthetic-data-cli"]'
   # Repos with per-repo CodeQL configs in configs/codeqls/
-  CODEQL_REPOS: '["dcf-platform","dcf-access","dcf-service","dcf-access-cli","dcf-platform-cli","dcf-access-web","dcf-platform-web","libdcf","otel-bundle","ZenQuery"]'
+  CODEQL_REPOS: '["dcf-platform","dcf-access","dcf-service","dcf-access-cli","dcf-platform-cli","dcf-access-web","dcf-platform-web","libdcf","otel-bundle","ZenQuery","dcf-synthetic-data-cli"]'
 
 jobs:
   setup:
@@ -28,6 +30,7 @@ jobs:
       all_repos: ${{ steps.repos.outputs.all }}
       go_repos: ${{ steps.repos.outputs.go }}
       web_repos: ${{ steps.repos.outputs.web }}
+      python_repos: ${{ steps.repos.outputs.python }}
       codeql_repos: ${{ steps.repos.outputs.codeql }}
     steps:
       - id: repos
@@ -36,6 +39,7 @@ jobs:
             echo "all=$ALL_REPOS"
             echo "go=$GO_REPOS"
             echo "web=$WEB_REPOS"
+            echo "python=$PYTHON_REPOS"
             echo "codeql=$CODEQL_REPOS"
           } >> "$GITHUB_OUTPUT"
 

@@ -1,0 +1,78 @@
+# yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
+#
+# 標準 CI workflow 模板 (Python)
+# 適用於所有 Python repos
+#
+# 使用方式: 複製到新 repo 的 .github/workflows/ci.yml
+# 根據專案需求調整:
+# - 有 Dockerfile: 保留 trivy-iac job
+# - 無 Dockerfile: 可移除 trivy-iac job
+# - 有自訂 semgrep 規則: 在 python-semgrep 的 config 加入路徑 (e.g., "p/python .semgrep/rules.yml")
+# - 不需要 semgrep: 移除 python-semgrep job
+
+name: ci
+
+on:
+  push:
+    branches: [main, dev, "release/**", "feature/**"]
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches: [main, dev, "release/**"]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions: {}
+
+jobs:
+  check-managed:
+    uses: nics-dp/meta/.github/workflows/check-managed-files.yml@main
+    permissions:
+      pull-requests: read
+
+  commitlint:
+    uses: nics-dp/meta/.github/workflows/commitlint.yml@main
+    permissions:
+      contents: read
+      pull-requests: read
+
+  trivy-iac:
+    uses: nics-dp/meta/.github/workflows/trivy-iac.yml@main
+    permissions:
+      actions: read
+      contents: read
+      pull-requests: write
+      security-events: write
+
+  trivy-license:
+    uses: nics-dp/meta/.github/workflows/trivy-license.yml@main
+    permissions:
+      contents: read
+      pull-requests: write
+
+  python-lint:
+    uses: nics-dp/meta/.github/workflows/python-lint.yml@main
+    permissions:
+      contents: read
+      pull-requests: write
+
+  python-security:
+    uses: nics-dp/meta/.github/workflows/python-security.yml@main
+    permissions:
+      contents: read
+      pull-requests: write
+
+  python-semgrep:
+    uses: nics-dp/meta/.github/workflows/python-semgrep.yml@main
+    permissions:
+      contents: read
+      pull-requests: write
+
+  python-test:
+    needs: [python-lint]
+    uses: nics-dp/meta/.github/workflows/python-test.yml@main
+    permissions:
+      contents: read
+      pull-requests: write

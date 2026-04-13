@@ -1,0 +1,39 @@
+# yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
+
+name: python-lint
+
+on:
+  workflow_call:
+    inputs:
+      lint_command:
+        required: false
+        type: string
+        default: "mise run ci:lint"
+        description: "Command to run linting (e.g., ruff check + ruff format --check)"
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  lint:
+    name: Lint (Python)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Install mise
+        uses: jdx/mise-action@c1ecc8f748cd28cdeabf76dab3cccde4ce692fe4 # v4.0.0
+        with:
+          cache: true
+          experimental: true
+          log_level: "info"
+
+      - name: Initialize environment
+        run: mise run init
+
+      - name: Run lint
+        env:
+          LINT_COMMAND: ${{ inputs.lint_command }}
+        run: |
+          bash -euo pipefail -lc "$LINT_COMMAND"

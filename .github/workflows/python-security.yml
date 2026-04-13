@@ -1,0 +1,72 @@
+# yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
+
+name: python-security
+
+on:
+  workflow_call:
+    inputs:
+      security_command:
+        required: false
+        type: string
+        default: "mise run ci:security"
+        description: "Command to run security scans (e.g., bandit + pip-audit)"
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  security:
+    name: Security Scan (Python)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Install mise
+        uses: jdx/mise-action@c1ecc8f748cd28cdeabf76dab3cccde4ce692fe4 # v4.0.0
+        with:
+          cache: true
+          experimental: true
+          log_level: "info"
+
+      - name: Initialize environment
+        run: mise run init
+
+      - name: Run security scans
+        id: security
+        env:
+          SECURITY_COMMAND: ${{ inputs.security_command }}
+        run: |
+          bash -euo pipefail -lc "$SECURITY_COMMAND" 2>&1 | tee security-output.txt
+          echo "exit_code=${PIPESTATUS[0]}" >> "$GITHUB_OUTPUT"
+
+      - name: Write summary
+        if: always()
+        run: |
+          {
+            echo "## Security Scan (Python)"
+            echo ""
+            if [ -s security-output.txt ]; then
+              echo '```'
+              tail -80 security-output.txt
+              echo '```'
+            else
+              echo "No output captured."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Post PR comment
+        if: always() && github.event_name == 'pull_request'
+        uses: marocchino/sticky-pull-request-comment@70d2764d1a7d5d9560b100cbea0077fc8f633987 # v3.0.2
+        with:
+          header: python-security
+          message: |
+            ## Security Scan (Python)
+            <details>
+            <summary>Results</summary>
+
+            ```
+            ${{ steps.security.outputs.exit_code == '0' && 'All checks passed.' || 'Issues detected. See CI log for details.' }}
+            ```
+
+            </details>
