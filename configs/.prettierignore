@@ -3,3 +3,5 @@ node_modules
 bun.lock
 *.min.js
 *.min.css
+*.yml
+*.json
