@@ -23,3 +23,6 @@
 /web-templates/CLAUDE.md
 /web-templates/CLAUDE.md.bak
 # END Ruler Generated Files
+
+# Auto-fetched from meta@main by mise/CI
+.commitlintrc.yml
