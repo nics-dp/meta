@@ -30,11 +30,6 @@ concurrency:
 permissions: {}
 
 jobs:
-  check-managed:
-    uses: nics-dp/meta/.github/workflows/check-managed-files.yml@main
-    permissions:
-      pull-requests: read
-
   commitlint:
     uses: nics-dp/meta/.github/workflows/commitlint.yml@main
     permissions:
