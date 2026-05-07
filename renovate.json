@@ -2,7 +2,7 @@
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": ["github>nics-dp/meta:renovate-preset"],
   "github-actions": {
-    "managerFilePatterns": [".github/workflows/**", "configs/codeqls/**", "golang-templates/**", "web-templates/**"]
+    "managerFilePatterns": [".github/workflows/**", "golang-templates/**", "web-templates/**"]
   },
   "customManagers": [
     {
@@ -33,16 +33,6 @@
       ],
       "matchStrings": ["go install github\\.com/snyk/parlay@(?<currentValue>v\\d+\\.\\d+\\.\\d+)"],
       "depNameTemplate": "snyk/parlay",
-      "datasourceTemplate": "github-releases"
-    },
-    {
-      "customType": "regex",
-      "description": "Update swag version in CodeQL configs",
-      "managerFilePatterns": [
-        "/^configs/codeqls/.+\\.yml$/"
-      ],
-      "matchStrings": ["go install github\\.com/swaggo/swag/cmd/swag@(?<currentValue>v\\d+\\.\\d+\\.\\d+)"],
-      "depNameTemplate": "swaggo/swag",
       "datasourceTemplate": "github-releases"
     },
     {
