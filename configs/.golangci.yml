@@ -36,6 +36,8 @@ linters:
     presets:
       - common-false-positives
   settings:
+    gomoddirectives:
+      replace-local: true
     exhaustive:
       default-signifies-exhaustive: true
     nestif:
@@ -56,7 +58,14 @@ issues:
   max-same-issues: 0
 formatters:
   enable:
+    - gci
     - gofumpt
-    - goimports
+  settings:
+    gci:
+      sections:
+        - standard
+        - default
+        - localmodule
+      custom-order: true
   exclusions:
     generated: lax

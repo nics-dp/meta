@@ -21,6 +21,7 @@ on:
 
 env:
   MISE_AUTO_INSTALL: "false"
+  META_CONFIG_BASE: https://raw.githubusercontent.com/nics-dp/meta/main/configs
 
 permissions:
   contents: read
@@ -47,6 +48,10 @@ jobs:
 
       - name: Initialize environment
         run: mise run init
+
+      - name: Fetch shared eslint.config.js from meta@main
+        run: |
+          curl -fsSL "$META_CONFIG_BASE/eslint.config.js" -o eslint.config.js
 
       - name: Run lint
         env:

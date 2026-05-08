@@ -2,4 +2,8 @@
 #MISE description="Run golangci-lint"
 #MISE raw=true
 
+META_CONFIG_BASE="${META_CONFIG_BASE:-https://raw.githubusercontent.com/nics-dp/meta/main/configs}"
+trap 'rc=$?; rm -f .golangci.yml; exit $rc' EXIT
+curl -fsSL "$META_CONFIG_BASE/.golangci.yml" -o .golangci.yml
+
 golangci-lint run ./...

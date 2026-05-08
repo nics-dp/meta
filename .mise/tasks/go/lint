@@ -2,6 +2,12 @@
 #MISE description="Run golangci-lint"
 #MISE raw=true
 
+# Always fetch the org-shared golangci-lint config from meta@main.
+# Local copy is removed on exit so it is never committed by accident.
+META_CONFIG_BASE="${META_CONFIG_BASE:-https://raw.githubusercontent.com/nics-dp/meta/main/configs}"
+trap 'rc=$?; rm -f .golangci.yml; exit $rc' EXIT
+curl -fsSL "$META_CONFIG_BASE/.golangci.yml" -o .golangci.yml
+
 golangci-lint fmt ./...
 
 if ! git diff --exit-code -- . >/dev/null; then

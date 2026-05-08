@@ -1,55 +1,171 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "description": "nics-dp org-level Renovate preset",
+  "description": "nics-dp org-level Renovate preset. registryAliases declares dhi.io as a standalone Docker registry; without this Renovate would parse 'dhi.io/python' as Docker Hub user 'dhi.io' and query index.docker.io. See https://github.com/renovatebot/renovate/discussions/40077",
   "extends": [
     "config:recommended",
     ":timezone(Asia/Taipei)",
     "schedule:earlyMondays"
   ],
+  "registryAliases": {
+    "dhi.io": "dhi.io"
+  },
   "packageRules": [
     {
-      "description": "Group Go module updates",
-      "matchManagers": ["gomod"],
+      "description": "Group Go module updates (dashboard-only, no PR until approved)",
+      "matchManagers": [
+        "gomod"
+      ],
       "groupName": "go dependencies",
       "commitMessagePrefix": "chore(go.deps):",
-      "labels": ["dependencies", "go"],
-      "automerge": false
+      "labels": [
+        "dependencies",
+        "go"
+      ],
+      "automerge": false,
+      "dependencyDashboardApproval": true
     },
     {
       "description": "Group GitHub Actions updates",
-      "matchManagers": ["github-actions"],
+      "matchManagers": [
+        "github-actions"
+      ],
       "groupName": "github-actions dependencies",
       "commitMessagePrefix": "chore(ci.deps):",
-      "labels": ["dependencies", "github-actions"],
-      "automerge": false
+      "labels": [
+        "dependencies",
+        "github-actions"
+      ],
+      "automerge": false,
+      "assignees": [
+        "charliie-dev"
+      ]
     },
     {
       "description": "Group Docker updates",
-      "matchManagers": ["dockerfile", "docker-compose"],
+      "matchManagers": [
+        "dockerfile",
+        "docker-compose"
+      ],
       "groupName": "docker dependencies",
       "commitMessagePrefix": "chore(docker.deps):",
-      "labels": ["dependencies", "docker"],
-      "automerge": false
+      "labels": [
+        "dependencies",
+        "docker"
+      ],
+      "automerge": false,
+      "assignees": [
+        "charliie-dev"
+      ]
     },
     {
-      "description": "Group npm updates",
-      "matchManagers": ["npm"],
+      "description": "Group npm and bun updates (dashboard-only, no PR until approved)",
+      "matchManagers": [
+        "npm",
+        "bun"
+      ],
       "groupName": "npm dependencies",
       "commitMessagePrefix": "chore(npm.deps):",
-      "labels": ["dependencies", "npm"],
-      "automerge": false
+      "labels": [
+        "dependencies",
+        "npm"
+      ],
+      "automerge": false,
+      "dependencyDashboardApproval": true
     },
     {
-      "description": "Group mise dev tool updates",
-      "matchManagers": ["mise"],
+      "description": "Group Python updates (dashboard-only, no PR until approved)",
+      "matchManagers": [
+        "pep621",
+        "poetry",
+        "pip_requirements",
+        "pipenv",
+        "setup-cfg"
+      ],
+      "groupName": "python dependencies",
+      "commitMessagePrefix": "chore(py.deps):",
+      "labels": [
+        "dependencies",
+        "python"
+      ],
+      "automerge": false,
+      "dependencyDashboardApproval": true
+    },
+    {
+      "description": "Group mise and pyenv dev tool updates",
+      "matchManagers": [
+        "mise",
+        "pyenv"
+      ],
       "groupName": "mise dev tools",
-      "commitMessagePrefix": "chore(mise.deps):",
-      "labels": ["dependencies", "mise"],
-      "automerge": false
+      "commitMessagePrefix": "chore(mise.tools):",
+      "labels": [
+        "dependencies",
+        "mise"
+      ],
+      "automerge": false,
+      "assignees": [
+        "charliie-dev"
+      ]
+    },
+    {
+      "description": "Group Helm chart updates",
+      "matchManagers": [
+        "helmv3",
+        "helm-values",
+        "helmfile"
+      ],
+      "groupName": "helm dependencies",
+      "commitMessagePrefix": "chore(helm.deps):",
+      "labels": [
+        "dependencies",
+        "helm"
+      ],
+      "automerge": false,
+      "assignees": [
+        "charliie-dev"
+      ]
+    },
+    {
+      "description": "Group Kubernetes manifest updates",
+      "matchManagers": [
+        "kubernetes",
+        "flux",
+        "argocd"
+      ],
+      "groupName": "k8s dependencies",
+      "commitMessagePrefix": "chore(k8s.deps):",
+      "labels": [
+        "dependencies",
+        "k8s"
+      ],
+      "automerge": false,
+      "assignees": [
+        "charliie-dev"
+      ]
+    },
+    {
+      "description": "Group Terraform updates",
+      "matchManagers": [
+        "terraform",
+        "terragrunt",
+        "terraform-version"
+      ],
+      "groupName": "terraform dependencies",
+      "commitMessagePrefix": "chore(tf.deps):",
+      "labels": [
+        "dependencies",
+        "terraform"
+      ],
+      "automerge": false,
+      "assignees": [
+        "charliie-dev"
+      ]
     },
     {
       "description": "Automerge patch updates",
-      "matchUpdateTypes": ["patch"],
+      "matchUpdateTypes": [
+        "patch"
+      ],
       "automerge": true,
       "automergeType": "pr"
     }
