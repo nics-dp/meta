@@ -16,6 +16,7 @@ on:
 
 env:
   MISE_AUTO_INSTALL: "false"
+  META_CONFIG_BASE: https://raw.githubusercontent.com/nics-dp/meta/main/configs
 
 permissions:
   contents: read
@@ -33,6 +34,12 @@ jobs:
         with:
           submodules: recursive
           token: ${{ secrets.gh_pat }}
+
+      - name: Fetch shared .golangci.yml from meta@main
+        # Required for the reviewdog step below (does not invoke mise);
+        # mise run ci:go-lint also self-fetches but the redundancy is harmless.
+        run: |
+          curl -fsSL "$META_CONFIG_BASE/.golangci.yml" -o .golangci.yml
 
       - name: Configure private git repository
         if: env.HAS_GH_PAT == 'true'

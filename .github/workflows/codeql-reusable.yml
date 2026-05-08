@@ -1,21 +1,32 @@
 # yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
 
-name: "CodeQL Advanced"
+name: codeql-reusable
 
 on:
-  push:
-    branches: ["main", "dev"]
-    paths-ignore:
-      - "**/*.md"
-      - "**/*.txt"
-  pull_request:
-    branches: ["main", "dev"]
-    paths-ignore:
-      - "**/*.md"
-      - "**/*.txt"
-  schedule:
-    - cron: "0 0 * * 1" # Every Monday 08:00 on UTC+8
-  workflow_dispatch:
+  workflow_call:
+    inputs:
+      matrix-include:
+        description: 'JSON array of {language, build-mode} entries. Example: [{"language":"actions","build-mode":"none"},{"language":"go","build-mode":"manual"}]'
+        required: true
+        type: string
+      go-cgo-enabled:
+        description: 'CGO_ENABLED env (0 or 1) for the Manual Go build step'
+        required: false
+        type: string
+        default: "0"
+      use-private-go-modules:
+        description: 'Configure GOPRIVATE/GH_PAT for nics-dp private modules'
+        required: false
+        type: boolean
+        default: false
+      submodules:
+        description: 'Submodule checkout mode: "false", "true", or "recursive". Typed as string (not boolean) so callers can request recursive checkout.'
+        required: false
+        type: string
+        default: "false"
+    secrets:
+      GH_PAT_READ_NICSDP:
+        required: false
 
 jobs:
   analyze:
@@ -28,22 +39,24 @@ jobs:
       contents: read
     env:
       HAS_GH_PAT: ${{ secrets.GH_PAT_READ_NICSDP != '' }}
+      USE_PRIVATE_GO: ${{ inputs.use-private-go-modules }}
 
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - language: actions
-            build-mode: none
-          - language: go
-            build-mode: manual
+        include: ${{ fromJSON(inputs.matrix-include) }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          submodules: ${{ inputs.submodules }}
+          # Use PAT only when checking out submodules (likely private nics-dp repos);
+          # default github.token suffices for the main repo and reduces token surface.
+          token: ${{ inputs.submodules != 'false' && secrets.GH_PAT_READ_NICSDP || github.token }}
 
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@95e58e9a2cdfd71adc6e0353d5c52f41a045d225 # v4.35.2
+        uses: github/codeql-action/init@e46ed2cbd01164d986452f91f178727624ae40d7 # v4.35.3
         with:
           languages: ${{ matrix.language }}
           build-mode: ${{ matrix.build-mode }}
@@ -52,7 +65,7 @@ jobs:
           external-repository-token: ${{ secrets.GH_PAT_READ_NICSDP }}
 
       - name: Configure access to private Go modules
-        if: matrix.language == 'go' && env.HAS_GH_PAT == 'true'
+        if: matrix.language == 'go' && env.USE_PRIVATE_GO == 'true' && env.HAS_GH_PAT == 'true'
         env:
           GH_PAT: ${{ secrets.GH_PAT_READ_NICSDP }}
         run: |
@@ -67,14 +80,14 @@ jobs:
       - name: Manual Go build for CodeQL
         if: matrix.language == 'go'
         env:
-          CGO_ENABLED: "1"
+          CGO_ENABLED: ${{ inputs.go-cgo-enabled }}
           GOOS: linux
         run: |
           go mod vendor
           go build -mod=vendor ./...
 
       - name: Revoke private module access
-        if: always() && matrix.language == 'go' && env.HAS_GH_PAT == 'true'
+        if: always() && matrix.language == 'go' && env.USE_PRIVATE_GO == 'true' && env.HAS_GH_PAT == 'true'
         env:
           GH_PAT: ${{ secrets.GH_PAT_READ_NICSDP }}
         run: |
@@ -82,6 +95,6 @@ jobs:
           git config --global --remove-section "url.https://${GH_PAT}@github.com/nics-dp/" 2>/dev/null || true
 
       - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@95e58e9a2cdfd71adc6e0353d5c52f41a045d225 # v4.35.2
+        uses: github/codeql-action/analyze@e46ed2cbd01164d986452f91f178727624ae40d7 # v4.35.3
         with:
           category: "/language:${{matrix.language}}"

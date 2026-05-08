@@ -21,6 +21,7 @@ on:
 
 env:
   MISE_AUTO_INSTALL: "false"
+  META_CONFIG_BASE: https://raw.githubusercontent.com/nics-dp/meta/main/configs
 
 permissions:
   contents: read
@@ -47,6 +48,11 @@ jobs:
 
       - name: Initialize environment
         run: mise run init
+
+      - name: Fetch shared prettier configs from meta@main
+        run: |
+          curl -fsSL "$META_CONFIG_BASE/.prettierrc.json" -o .prettierrc.json
+          curl -fsSL "$META_CONFIG_BASE/.prettierignore" -o .prettierignore
 
       - name: Run format check
         env:

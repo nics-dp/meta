@@ -1,11 +1,11 @@
 # yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
 #
-# 標準 CodeQL workflow 模板 (Web 專案)
+# CodeQL workflow 模板 (Web 專案)
+# Thin wrapper of nics-dp/meta codeql-reusable.yml
 #
-# 使用方式:
-# 1. 將此檔案複製到 meta/configs/codeqls/<repo-name>.yml
-# 2. sync-codeql workflow 會自動同步到 consumer repo 的 .github/workflows/codeql.yml
-# 3. 一般 Web repo 維持 actions + javascript-typescript 即可，通常不需要額外 build steps
+# 使用方式: 複製到新 repo 的 .github/workflows/codeql.yml
+# 一般 Web repo 使用 javascript-typescript 即可；如需多語言，於 matrix-include
+# 加入 (e.g. python)。actions language 僅 dev-cluster / patroni 啟用。
 
 name: "CodeQL Advanced"
 
@@ -26,38 +26,8 @@ on:
 
 jobs:
   analyze:
-    name: Analyze (${{ matrix.language }})
-    runs-on: ubuntu-latest
-    permissions:
-      security-events: write
-      packages: read
-      actions: read
-      contents: read
-
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - language: actions
-            build-mode: none
-          - language: javascript-typescript
-            build-mode: none
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          fetch-depth: 0
-
-      - name: Initialize CodeQL
-        uses: github/codeql-action/init@95e58e9a2cdfd71adc6e0353d5c52f41a045d225 # v4.35.2
-        with:
-          languages: ${{ matrix.language }}
-          build-mode: ${{ matrix.build-mode }}
-          dependency-caching: true
-          queries: security-extended,security-and-quality
-
-      - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@95e58e9a2cdfd71adc6e0353d5c52f41a045d225 # v4.35.2
-        with:
-          category: "/language:${{matrix.language}}"
+    uses: nics-dp/meta/.github/workflows/codeql-reusable.yml@main
+    with:
+      matrix-include: '[{"language":"javascript-typescript","build-mode":"none"}]'
+    secrets:
+      GH_PAT_READ_NICSDP: ${{ secrets.GH_PAT_READ_NICSDP }}
