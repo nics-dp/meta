@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+#MISE description="Show Python dep tree via uv tree (lock-aware, more accurate than pipdeptree)"
+#MISE hide=true
+#MISE raw=true
+#USAGE arg "[package]" help="Filter to subtree under this package (uses --invert)"
+#USAGE flag "--depth <n>" help="Max depth to display"
+#USAGE flag "--outdated" help="Show outdated deps"
+
+# shellcheck disable=SC2154
+
+set -euo pipefail
+
+cmd=(uv tree)
+[ -n "${usage_depth:-}" ] && cmd+=(--depth "$usage_depth")
+[ "${usage_outdated:-false}" = "true" ] && cmd+=(--outdated)
+
+if [ -n "${usage_package:-}" ]; then
+  cmd+=(--invert "$usage_package")
+fi
+
+"${cmd[@]}"

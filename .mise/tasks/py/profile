@@ -1,0 +1,75 @@
+#!/usr/bin/env bash
+#MISE description="Profile Python target. Modes: default=cProfile, --instrument (pyinstrument), --spy (py-spy), --mem (memray), --scalene"
+#MISE hide=true
+#MISE raw=true
+#USAGE arg "<target>" help="Module (e.g., my_pkg) or script path (e.g., scripts/foo.py)"
+#USAGE flag "--instrument" help="Use pyinstrument (low-overhead sampling, HTML report)"
+#USAGE flag "--spy" help="Use py-spy (external sampling, SVG flamegraph; can attach to running PID via PY_SPY_PID env)"
+#USAGE flag "--mem" help="Use memray (memory profiling, flamegraph)"
+#USAGE flag "--scalene" help="Use scalene (CPU+memory+GPU profiler, HTML)"
+
+# All usage_* vars are populated by mise USAGE; suppress shellcheck SC2154 globally for them.
+# shellcheck disable=SC2154
+
+set -euo pipefail
+# shellcheck disable=SC1091
+source "$(dirname "$0")/../lib/py-env"
+
+target="$usage_target"
+
+# Pre-build "module-or-file" invocation tail for tools that take "<file>" or "-m <module>"
+target_args=()
+spy_target_args=()
+if [ -f "$target" ]; then
+  target_args=("$target")
+  spy_target_args=(python "$target")
+else
+  target_args=(-m "$target")
+  spy_target_args=(python -m "$target")
+fi
+
+RUN=("${PY_RUNNER_ARR[@]}")
+
+mode_instrument="${usage_instrument:-false}"
+mode_spy="${usage_spy:-false}"
+mode_mem="${usage_mem:-false}"
+mode_scalene="${usage_scalene:-false}"
+
+if [ "$mode_instrument" = "true" ]; then
+  out="profile-pyinstrument.html"
+  "${RUN[@]}" --with pyinstrument pyinstrument -r html -o "$out" "${target_args[@]}"
+  echo "Saved: $out"
+
+elif [ "$mode_spy" = "true" ]; then
+  out="profile-pyspy.svg"
+  if [ -n "${PY_SPY_PID:-}" ]; then
+    uvx py-spy record -o "$out" --pid "$PY_SPY_PID" --duration "${PY_SPY_DURATION:-30}"
+  else
+    uvx py-spy record -o "$out" -- "${spy_target_args[@]}"
+  fi
+  echo "Saved: $out"
+
+elif [ "$mode_mem" = "true" ]; then
+  bin="profile-memray.bin"
+  html="profile-memray.html"
+  "${RUN[@]}" --with memray memray run -f -o "$bin" "${target_args[@]}"
+  "${RUN[@]}" --with memray memray flamegraph -f -o "$html" "$bin"
+  echo "Saved: $bin + $html"
+
+elif [ "$mode_scalene" = "true" ]; then
+  out="profile-scalene.html"
+  "${RUN[@]}" --with scalene scalene --html --outfile "$out" "${target_args[@]}"
+  echo "Saved: $out"
+
+else
+  out="profile.prof"
+  "${RUN[@]}" python -m cProfile -o "$out" "${target_args[@]}"
+  echo "Saved: $out"
+  echo ""
+  echo "=== Top 20 by cumulative time ==="
+  "${RUN[@]}" python -c "
+import pstats
+p = pstats.Stats('$out')
+p.sort_stats('cumulative').print_stats(20)
+"
+fi

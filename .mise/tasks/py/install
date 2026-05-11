@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+#MISE description="Install Python deps via uv (uses dependency-groups.test if defined)"
+#MISE hide=true
+#MISE raw=true
+
+set -euo pipefail
+
+if [ -f pyproject.toml ] && grep -q '\[dependency-groups\]' pyproject.toml && grep -q '^test' pyproject.toml; then
+  uv sync --group test
+else
+  uv sync
+fi

@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+#MISE description="Update Python deps via uv (lock + sync)"
+#MISE hide=true
+#MISE raw=true
+
+set -euo pipefail
+
+uv lock --upgrade
+uv sync

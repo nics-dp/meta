@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+#MISE description="Run pip-audit dependency vulnerability check"
+#MISE hide=true
+#MISE raw=true
+
+set -euo pipefail
+# shellcheck disable=SC1091
+source "$(dirname "$0")/../lib/py-env"
+
+"${PY_RUNNER_ARR[@]}" pip-audit

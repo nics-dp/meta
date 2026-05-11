@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+#MISE description="Run a Python module or script via uv"
+#MISE hide=true
+#MISE raw=true
+#USAGE arg "<target>" help="Module (e.g., my_pkg) or script path (e.g., scripts/foo.py)"
+# shellcheck disable=SC2154
+
+set -euo pipefail
+# shellcheck disable=SC1091
+source "$(dirname "$0")/../lib/py-env"
+
+if [ -f "$usage_target" ]; then
+  "${PY_RUNNER_ARR[@]}" python "$usage_target"
+else
+  "${PY_RUNNER_ARR[@]}" python -m "$usage_target"
+fi

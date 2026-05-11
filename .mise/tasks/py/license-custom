@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+#MISE description="Audit Python deps licenses via pip-licenses (Python-native, more accurate than trivy-license for wheels)"
+#MISE hide=true
+#MISE raw=true
+#USAGE flag "--format <fmt>" help="Output format: markdown / json / csv / plain / html" default="markdown"
+#USAGE flag "--fail-on <licenses>" help="Comma-sep list of disallowed license substrings (e.g., GPL,AGPL)" default=""
+
+set -euo pipefail
+# shellcheck disable=SC2154
+fmt="${usage_format:-markdown}"
+# shellcheck disable=SC2154
+fail_on="${usage_fail_on:-}"
+
+if [ -n "$fail_on" ]; then
+  uvx pip-licenses --format=json | bun -e "
+    const d = JSON.parse(require('fs').readFileSync(0,'utf8'));
+    const banned = '$fail_on'.split(',').map(s => s.trim().toUpperCase()).filter(Boolean);
+    const hits = d.filter(p => banned.some(b => (p.License || '').toUpperCase().includes(b)));
+    if (hits.length) {
+      console.error('Disallowed licenses found:');
+      for (const h of hits) console.error('  ' + h.Name + '@' + h.Version + ' -> ' + h.License);
+      process.exit(1);
+    }
+    console.log('No disallowed licenses (' + d.length + ' deps checked).');
+  " 2>/dev/null || {
+    # Fallback when bun not available: rely on pip-licenses --fail-on
+    IFS=',' read -ra arr <<< "$fail_on"
+    args=()
+    for l in "${arr[@]}"; do args+=("--fail-on" "$l"); done
+    uvx pip-licenses "${args[@]}" --format="$fmt" --with-urls
+  }
+else
+  uvx pip-licenses --format="$fmt" --with-urls --with-license-file
+fi
