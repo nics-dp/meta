@@ -2,19 +2,9 @@
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": ["github>nics-dp/meta:renovate-preset"],
   "github-actions": {
-    "managerFilePatterns": [".github/workflows/**", "golang-templates/**", "web-templates/**"]
+    "managerFilePatterns": [".github/workflows/**"]
   },
   "customManagers": [
-    {
-      "customType": "regex",
-      "description": "Update actionlint version in reusable workflow",
-      "managerFilePatterns": [
-        "/^\\.github/workflows/actionlint\\.yml$/"
-      ],
-      "matchStrings": ["default:\\s*\"(?<currentValue>v\\d+\\.\\d+\\.\\d+)\"\\s*\\n\\s*description:\\s*\"actionlint version[^\"]*\""],
-      "depNameTemplate": "rhysd/actionlint",
-      "datasourceTemplate": "github-releases"
-    },
     {
       "customType": "regex",
       "description": "Update quill version in go-release workflow",
@@ -27,24 +17,13 @@
     },
     {
       "customType": "regex",
-      "description": "Update parlay version in SBOM workflows",
+      "description": "Update parlay version in SBOM image workflow",
       "managerFilePatterns": [
-        "/^\\.github/workflows/sbom-(?:source|image)\\.yml$/"
+        "/^\\.github/workflows/sbom-image\\.yml$/"
       ],
       "matchStrings": ["go install github\\.com/snyk/parlay@(?<currentValue>v\\d+\\.\\d+\\.\\d+)"],
       "depNameTemplate": "snyk/parlay",
       "datasourceTemplate": "github-releases"
-    },
-    {
-      "customType": "regex",
-      "description": "Update semgrep container image version",
-      "managerFilePatterns": [
-        "/^\\.github/workflows/(?:go|bun)-semgrep\\.yml$/"
-      ],
-      "matchStrings": ["image:\\s*semgrep/semgrep:(?<currentValue>\\d+\\.\\d+\\.\\d+)"],
-      "depNameTemplate": "semgrep/semgrep",
-      "datasourceTemplate": "github-releases",
-      "extractVersionTemplate": "^v(?<version>.+)$"
     }
   ]
 }
