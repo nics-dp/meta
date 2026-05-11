@@ -1,26 +1,49 @@
 #!/usr/bin/env bash
-#MISE description="Switch to remote dev branches for libdcf and ZenQuery"
+#MISE description="Switch Go modules from local replace to remote refs (driven by GO_LIB_REMOTE env)"
+#MISE hide=true
 #MISE raw=true
-#MISE depends_post=["go:mod"]
+#MISE depends_post=["go:install"]
+#USAGE arg "[targets]" var=#true var_min=0 help="<module>@<ref> pairs (override GO_LIB_REMOTE env)"
+
+# shellcheck disable=SC2154
+set -euo pipefail
+eval "targets=(${usage_targets:-${GO_LIB_REMOTE:-}})"
+
+if [ ${#targets[@]} -eq 0 ]; then
+  cat >&2 <<EOF
+Error: no remote targets. Pass as args or set GO_LIB_REMOTE env.
+
+Example mise.toml:
+  [env]
+  GO_LIB_REMOTE = "github.com/foo/bar@dev github.com/foo/baz@v1.2.3"
+
+Or one-shot:
+  mise run go:lib-remote 'github.com/foo/bar@dev'
+EOF
+  exit 1
+fi
 
 echo "Disabling local replacements..."
 cp go.mod go.mod.bak
 [ -f go.sum ] && cp go.sum go.sum.bak
-go mod edit -dropreplace=github.com/nics-dp/libdcf
-go mod edit -droprequire=github.com/nics-dp/libdcf
-go mod edit -dropreplace=github.com/nics-dp/ZenQuery
-go mod edit -droprequire=github.com/nics-dp/ZenQuery
-echo "Fetching remote dev branches..."
-go get github.com/nics-dp/libdcf@dev github.com/nics-dp/ZenQuery@dev || {
+
+for t in "${targets[@]}"; do
+  module="${t%%@*}"
+  go mod edit -dropreplace="$module"
+  go mod edit -droprequire="$module"
+  echo "  dropped replace: $module"
+done
+
+echo "Fetching remote refs..."
+if ! go get "${targets[@]}"; then
   echo "Error: go get failed. Restoring go.mod/go.sum to preserve consistency." >&2
   mv go.mod.bak go.mod
   [ -f go.sum.bak ] && mv go.sum.bak go.sum
   exit 1
-}
+fi
 rm -f go.mod.bak go.sum.bak
 
-# Restore gomoddirectives lint if missing (insert in sorted enable list)
-# Subshell isolates trap scope so EXIT traps don't overwrite each other
+# Restore gomoddirectives lint if missing (subshell isolates trap)
 (
   if [ -f .golangci.yml ] && ! grep -q '^[[:space:]]*- gomoddirectives$' .golangci.yml; then
     anchor=""
@@ -41,36 +64,32 @@ rm -f go.mod.bak go.sum.bak
         echo "Restored gomoddirectives in .golangci.yml"
       fi
     else
-      echo "Warning: could not find anchor linter in .golangci.yml, skipping gomoddirectives restore"
+      echo "Warning: could not find anchor linter in .golangci.yml; skipping gomoddirectives restore" >&2
     fi
   fi
 )
 
-# Remove go:local auto-generated block from .semgrepignore (preserves user content)
+# Remove go:lib-local auto-generated block from .semgrepignore (preserves user content)
 (
-  if [ -f .semgrepignore ] && grep -q 'BEGIN mise go:local auto-generated ignore' .semgrepignore; then
+  if [ -f .semgrepignore ] && grep -q 'BEGIN mise go:lib-local auto-generated ignore' .semgrepignore; then
     tmp_semgrep=$(mktemp .semgrepignore.XXXXXX)
     trap 'rm -f "$tmp_semgrep"' EXIT
     if awk '
       /^$/ { blank++; next }
-      /# BEGIN mise go:local auto-generated ignore/,/# END mise go:local auto-generated ignore/ { blank=0; next }
+      /# BEGIN mise go:lib-local auto-generated ignore/,/# END mise go:lib-local auto-generated ignore/ { blank=0; next }
       { for(i=0;i<blank;i++) print ""; blank=0; print }
     ' .semgrepignore > "$tmp_semgrep" && mv "$tmp_semgrep" .semgrepignore; then
-      # Remove file if it's now empty (only whitespace)
       if [ ! -s .semgrepignore ] || ! grep -q '[^[:space:]]' .semgrepignore; then
         rm .semgrepignore
-        echo "Removed .semgrepignore (was empty after cleanup)"
+        echo "Removed .semgrepignore (empty after cleanup)"
       else
-        echo "Removed go:local ignores from .semgrepignore"
+        echo "Removed go:lib-local block from .semgrepignore"
       fi
-    else
-      echo "Warning: failed to clean .semgrepignore; original file preserved" >&2
     fi
   fi
 )
 
-echo "Local replacements disabled"
-echo "go.mod now uses remote dev branches"
 echo ""
+echo "Local replacements disabled"
 echo "Current replace directives:"
 grep -E "^replace" go.mod || echo "(none)"

@@ -1,11 +1,36 @@
 #!/usr/bin/env bash
-#MISE description="Enable local replacements for libdcf and ZenQuery"
+#MISE description="Enable local replace directives for Go modules (driven by GO_LIB_LOCAL env)"
+#MISE hide=true
 #MISE raw=true
-#MISE depends_post=["go:mod"]
+#MISE depends_post=["go:install"]
+#USAGE arg "[targets]" var=#true var_min=0 help="<module>=<path> pairs (override GO_LIB_LOCAL env)"
+
+# shellcheck disable=SC2154
+set -euo pipefail
+eval "targets=(${usage_targets:-${GO_LIB_LOCAL:-}})"
+
+if [ ${#targets[@]} -eq 0 ]; then
+  cat >&2 <<EOF
+Error: no replace targets. Pass as args or set GO_LIB_LOCAL env.
+
+Example mise.toml:
+  [env]
+  GO_LIB_LOCAL = "github.com/foo/bar=../bar github.com/foo/baz=../baz"
+
+Or one-shot:
+  mise run go:lib-local 'github.com/foo/bar=../bar'
+EOF
+  exit 1
+fi
 
 echo "Enabling local replacements..."
-go mod edit -replace=github.com/nics-dp/libdcf=../libdcf
-go mod edit -replace=github.com/nics-dp/ZenQuery=../ZenQuery
+modules=()
+for t in "${targets[@]}"; do
+  module="${t%%=*}"
+  modules+=("$module")
+  go mod edit -replace="$t"
+  echo "  $t"
+done
 
 # Disable gomoddirectives lint (rejects local replace directives)
 if [ -f .golangci.yml ] && grep -q '^[[:space:]]*- gomoddirectives$' .golangci.yml; then
@@ -17,31 +42,25 @@ if [ -f .golangci.yml ] && grep -q '^[[:space:]]*- gomoddirectives$' .golangci.y
   fi
 fi
 
-# Add vendored local libs to .semgrepignore (preserves existing content).
-# Assumes consumer repos use `go mod vendor` to vendor dependencies.
-MARKER="BEGIN mise go:local auto-generated ignore"
+# Generate .semgrepignore block from modules
+MARKER="BEGIN mise go:lib-local auto-generated ignore"
+ignore_block=$(
+  echo "# BEGIN mise go:lib-local auto-generated ignore"
+  for m in "${modules[@]}"; do echo "vendor/$m/"; done
+  echo "# END mise go:lib-local auto-generated ignore"
+)
+
 if [ ! -f .semgrepignore ]; then
-  cat > .semgrepignore << 'EOF'
-# BEGIN mise go:local auto-generated ignore
-vendor/github.com/nics-dp/libdcf/
-vendor/github.com/nics-dp/ZenQuery/
-# END mise go:local auto-generated ignore
-EOF
+  echo "$ignore_block" > .semgrepignore
   echo "Created .semgrepignore"
 elif ! grep -q "$MARKER" .semgrepignore; then
-  cat >> .semgrepignore << 'EOF'
-
-# BEGIN mise go:local auto-generated ignore
-vendor/github.com/nics-dp/libdcf/
-vendor/github.com/nics-dp/ZenQuery/
-# END mise go:local auto-generated ignore
-EOF
-  echo "Updated .semgrepignore with go:local ignores"
+  printf "\n%s\n" "$ignore_block" >> .semgrepignore
+  echo "Updated .semgrepignore with go:lib-local ignores"
 else
-  echo ".semgrepignore already contains go:local ignores"
+  echo ".semgrepignore already contains go:lib-local block"
 fi
 
+echo ""
 echo "Local replacements enabled"
-echo "go.mod now uses: ../libdcf, ../ZenQuery"
 echo "Current replace directives:"
 grep -E "^replace" go.mod || echo "(none)"
