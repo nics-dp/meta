@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+#MISE description="Lint GitHub Actions workflow YAML files with actionlint"
+#MISE hide=true
+#MISE raw=true
+
+actionlint
