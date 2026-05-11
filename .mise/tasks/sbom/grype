@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 #MISE description="Scan SBOM for vulnerabilities with Grype"
+#MISE hide=true
 #MISE raw=true
 #MISE depends=["sbom:enrich"]
+#MISE tools={grype="latest"}
 
 grype sbom:enriched-source.cdx.json

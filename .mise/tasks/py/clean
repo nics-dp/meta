@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+#MISE description="Remove Python transient artifacts (caches, coverage, build outputs)"
+#MISE hide=true
+#MISE raw=true
+#MISE silent="stdout"
+#USAGE flag "--deep" help="Also remove .venv/ (forces uv sync)"
+
+set -euo pipefail
+shopt -s nullglob
+
+removed=0
+to_remove=(
+  .pytest_cache
+  .ruff_cache
+  .mypy_cache
+  .coverage
+  coverage.xml
+  htmlcov
+  dist
+  build
+  sbom.json
+  sbom-py.json
+  __pycache__
+  .benchmarks
+  enriched-source.cdx.json
+  sbom-source.cdx.json
+)
+
+# shellcheck disable=SC2154
+if [ "${usage_deep:-false}" = "true" ]; then
+  to_remove+=(.venv)
+fi
+
+for pattern in "${to_remove[@]}"; do
+  for f in $pattern; do
+    if [ -e "$f" ]; then
+      echo "Removing $f"
+      rm -rf "$f"
+      removed=$((removed + 1))
+    fi
+  done
+done
+
+# Wipe stray __pycache__ across the tree (keep at fixed depth to avoid scanning .venv/.git)
+find . -type d -name "__pycache__" -not -path "./.venv/*" -not -path "./.git/*" -exec rm -rf {} + 2>/dev/null || true
+
+echo "Done: $removed top-level item(s) removed."

@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+#MISE description="Run Python tests. Modes: default=pytest, --coverage (writes coverage.xml), --bench"
+#MISE hide=true
+#MISE raw=true
+#USAGE flag "--coverage" help="Run with coverage (writes coverage.xml)"
+#USAGE flag "--bench" help="Run pytest-benchmark mode"
+#USAGE flag "--pattern <regex>" help="Filter tests by name (-k)" default=""
+
+set -euo pipefail
+# shellcheck disable=SC1091
+source "$(dirname "$0")/../lib/py-env"
+# shellcheck disable=SC2154
+pattern="${usage_pattern:-}"
+
+base=("${PY_RUNNER_ARR[@]}")
+
+if [ "${usage_bench:-false}" = "true" ]; then
+  cmd=("${base[@]}" pytest "$PY_TEST_PATHS" --benchmark-only)
+  [ -n "$pattern" ] && cmd+=("-k" "$pattern")
+  "${cmd[@]}"
+elif [ "${usage_coverage:-false}" = "true" ]; then
+  cov_cmd=("${base[@]}" coverage run -m pytest "$PY_TEST_PATHS")
+  [ -n "$pattern" ] && cov_cmd+=("-k" "$pattern")
+  "${cov_cmd[@]}"
+  "${base[@]}" coverage xml -o "$PY_COVERAGE_FILE"
+  "${base[@]}" coverage report
+else
+  cmd=("${base[@]}" pytest "$PY_TEST_PATHS")
+  [ -n "$pattern" ] && cmd+=("-k" "$pattern")
+  "${cmd[@]}"
+fi

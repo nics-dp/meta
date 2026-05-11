@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+#MISE description="Audit JS/TS deps for vulnerabilities"
+#MISE hide=true
+#MISE raw=true
+#MISE tools={bun="latest"}
+
+bun audit

@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+# Sourced helper. Sets defaults for Python atoms.
+# Vars (override via env if needed):
+#   PY_RUNNER         tool runner prefix          default: "uv run --group test"
+#   PY_TEST_PATHS     pytest target paths         default: tests/ if exists, else .
+#   PY_LINT_PATHS     lint target paths           default: .
+#   PY_BANDIT_PATHS   bandit target paths         default: .
+#   PY_BANDIT_EXCLUDE bandit exclude paths        default: ./.venv,./tests
+#   PY_COVERAGE_FILE  coverage output file        default: coverage.xml
+
+: "${PY_RUNNER:=uv run --group test}"
+: "${PY_LINT_PATHS:=.}"
+: "${PY_BANDIT_PATHS:=.}"
+: "${PY_BANDIT_EXCLUDE:=./.venv,./tests}"
+: "${PY_COVERAGE_FILE:=coverage.xml}"
+
+if [ -z "${PY_TEST_PATHS:-}" ]; then
+  if [ -d "tests" ]; then
+    PY_TEST_PATHS="tests"
+  else
+    PY_TEST_PATHS="."
+  fi
+fi
+
+# Split runner into array for safe expansion
+# shellcheck disable=SC2206
+PY_RUNNER_ARR=($PY_RUNNER)

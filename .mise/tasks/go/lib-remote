@@ -1,0 +1,96 @@
+#!/usr/bin/env bash
+#MISE description="Switch Go modules from local replace to remote refs (driven by GO_LIB_REMOTE env)"
+#MISE hide=true
+#MISE raw=true
+#MISE depends_post=["go:install"]
+#MISE silent="stdout"
+#USAGE arg "[targets]" var=#true var_min=0 help="<module>@<ref> pairs (override GO_LIB_REMOTE env)"
+
+# shellcheck disable=SC2154
+set -euo pipefail
+eval "targets=(${usage_targets:-${GO_LIB_REMOTE:-}})"
+
+if [ ${#targets[@]} -eq 0 ]; then
+  cat >&2 <<EOF
+Error: no remote targets. Pass as args or set GO_LIB_REMOTE env.
+
+Example mise.toml:
+  [env]
+  GO_LIB_REMOTE = "github.com/foo/bar@dev github.com/foo/baz@v1.2.3"
+
+Or one-shot:
+  mise run go:lib-remote 'github.com/foo/bar@dev'
+EOF
+  exit 1
+fi
+
+echo "Disabling local replacements..."
+cp go.mod go.mod.bak
+[ -f go.sum ] && cp go.sum go.sum.bak
+
+for t in "${targets[@]}"; do
+  module="${t%%@*}"
+  go mod edit -dropreplace="$module"
+  go mod edit -droprequire="$module"
+  echo "  dropped replace: $module"
+done
+
+echo "Fetching remote refs..."
+if ! go get "${targets[@]}"; then
+  echo "Error: go get failed. Restoring go.mod/go.sum to preserve consistency." >&2
+  mv go.mod.bak go.mod
+  [ -f go.sum.bak ] && mv go.sum.bak go.sum
+  exit 1
+fi
+rm -f go.mod.bak go.sum.bak
+
+# Restore gomoddirectives lint if missing (subshell isolates trap)
+(
+  if [ -f .golangci.yml ] && ! grep -q '^[[:space:]]*- gomoddirectives$' .golangci.yml; then
+    anchor=""
+    for candidate in godot goconst; do
+      if grep -q "^[[:space:]]*- ${candidate}$" .golangci.yml; then
+        anchor="$candidate"
+        break
+      fi
+    done
+    if [ -n "$anchor" ]; then
+      tmp_lint=$(mktemp .golangci.yml.XXXXXX)
+      trap 'rm -f "$tmp_lint"' EXIT
+      if awk -v anchor="$anchor" '
+        match($0, /^[[:space:]]*/) { indent=substr($0, RSTART, RLENGTH) }
+        !done && $0 ~ "^[[:space:]]*- " anchor "$" { print; print indent "- gomoddirectives"; done=1; next }
+        1
+      ' .golangci.yml > "$tmp_lint" && mv "$tmp_lint" .golangci.yml; then
+        echo "Restored gomoddirectives in .golangci.yml"
+      fi
+    else
+      echo "Warning: could not find anchor linter in .golangci.yml; skipping gomoddirectives restore" >&2
+    fi
+  fi
+)
+
+# Remove go:lib-local auto-generated block from .semgrepignore (preserves user content)
+(
+  if [ -f .semgrepignore ] && grep -q 'BEGIN mise go:lib-local auto-generated ignore' .semgrepignore; then
+    tmp_semgrep=$(mktemp .semgrepignore.XXXXXX)
+    trap 'rm -f "$tmp_semgrep"' EXIT
+    if awk '
+      /^$/ { blank++; next }
+      /# BEGIN mise go:lib-local auto-generated ignore/,/# END mise go:lib-local auto-generated ignore/ { blank=0; next }
+      { for(i=0;i<blank;i++) print ""; blank=0; print }
+    ' .semgrepignore > "$tmp_semgrep" && mv "$tmp_semgrep" .semgrepignore; then
+      if [ ! -s .semgrepignore ] || ! grep -q '[^[:space:]]' .semgrepignore; then
+        rm .semgrepignore
+        echo "Removed .semgrepignore (empty after cleanup)"
+      else
+        echo "Removed go:lib-local block from .semgrepignore"
+      fi
+    fi
+  fi
+)
+
+echo ""
+echo "Local replacements disabled"
+echo "Current replace directives:"
+grep -E "^replace" go.mod || echo "(none)"

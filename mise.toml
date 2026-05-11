@@ -4,37 +4,11 @@ task.output = "keep-order"
 unix_default_inline_shell_args = "bash -c"
 
 # ------------------------------------------------------------------------------
+# Tools needed by mise tasks are declared inline via `#MISE tools={...}` in each
+# task file under `.mise/tasks/`. Only project-level tools (not consumed by any
+# task) belong here.
 [tools]
-# GitHub action tools
 act = "latest"
-actionlint = "latest"
-
-# SBOM generation
-syft = "latest"
-"github:snyk/parlay" = "latest"
-
-# Deps vuln scanning
-trivy = "latest"
-grype = "latest"
-
-# Static scanning
-"pipx:semgrep" = "latest"
-codeql = { version = "latest", bin_path = "codeql", platforms = """
-[linux-x64]
-asset_pattern = "codeql-linux64.zip"
-
-[macos-arm64]
-asset_pattern = "codeql-osx64.zip"
-
-[macos-x64]
-asset_pattern = "codeql-osx64.zip"
-
-[windows-x64]
-asset_pattern = "codeql-win64.zip"
-""" }
-
-# MISC
-bun = "latest"
 
 # ------------------------------------------------------------------------------
 [task_config]
@@ -48,8 +22,7 @@ includes = [
 [tasks.ci]
 description = "Run all CI checks"
 depends = [
-  "ci:commitlint",
-  "ci:trivy-iac",
+  "iac:trivy",
   "ci:trivy-license",
   "ci:semgrep",
 ]

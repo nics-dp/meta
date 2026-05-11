@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+#MISE description="Detect unused Python code via vulture"
+#MISE hide=true
+#MISE raw=true
+#USAGE flag "--min-confidence <n>" help="Minimum confidence (0-100, higher = fewer false positives)" default="80"
+
+set -euo pipefail
+# shellcheck disable=SC1091
+source "$(dirname "$0")/../lib/py-env"
+# shellcheck disable=SC2154
+conf="${usage_min_confidence:-80}"
+
+uvx vulture --min-confidence "$conf" "$PY_LINT_PATHS"

@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+# Sourced helper. Sets defaults for Go test/bench atoms based on repo layout.
+# Vars (override via env if needed):
+#   GO_TEST_TAGS     build tags                   default: test
+#   GO_TEST_PATHS    test target paths            default: ./test/... if test/ exists, else ./...
+#   GO_TEST_MOD      module mode                  default: vendor if vendor/ exists, else mod
+#   GO_COVERPKG      coverage instrumentation     default: <module>/internal/... if internal/ exists, else empty
+#   CGO_ENABLED      cgo on/off (race needs 1)    default: 1
+
+: "${GO_TEST_TAGS:=test}"
+: "${CGO_ENABLED:=1}"
+export CGO_ENABLED
+
+if [ -z "${GO_TEST_PATHS:-}" ]; then
+  if [ -d "test" ]; then
+    GO_TEST_PATHS="./test/..."
+  else
+    GO_TEST_PATHS="./..."
+  fi
+fi
+
+if [ -z "${GO_TEST_MOD:-}" ]; then
+  if [ -d "vendor" ]; then
+    GO_TEST_MOD="vendor"
+  else
+    GO_TEST_MOD="mod"
+  fi
+fi
+
+if [ -z "${GO_COVERPKG:-}" ]; then
+  _module=$(awk '/^module / {print $2; exit}' go.mod 2>/dev/null || echo "")
+  if [ -n "$_module" ] && [ -d "internal" ]; then
+    GO_COVERPKG="${_module}/internal/..."
+  fi
+fi

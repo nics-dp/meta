@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+#MISE description="Benchmark + compare with benchstat. --save <label> to capture; no flag to diff old vs new"
+#MISE hide=true
+#MISE raw=true
+#MISE tools={"go:golang.org/x/perf/cmd/benchstat"="latest"}
+#USAGE flag "--save <label>" help="Save bench results to bench-<label>.txt (typically 'old' or 'new')"
+#USAGE flag "--count <n>" help="Bench iterations for statistical significance" default="5"
+#USAGE flag "--pattern <regex>" help="Benchmark name pattern" default="."
+
+set -euo pipefail
+# shellcheck disable=SC1091
+source "$(dirname "$0")/../lib/go-env"
+# shellcheck disable=SC2154
+count="${usage_count:-5}"
+# shellcheck disable=SC2154
+pattern="${usage_pattern:-.}"
+# shellcheck disable=SC2154
+label="${usage_save:-}"
+
+if [ -n "$label" ]; then
+  out="bench-${label}.txt"
+  cmd=(go test)
+  [ -n "$GO_TEST_TAGS" ] && cmd+=("-tags=$GO_TEST_TAGS")
+  cmd+=("-mod=$GO_TEST_MOD" "-run=^$" "-bench=$pattern" -benchmem "-count=$count" "$GO_TEST_PATHS")
+  echo "Running benchmarks (count=$count, pattern=$pattern) -> $out"
+  "${cmd[@]}" | tee "$out"
+else
+  if [ ! -f bench-old.txt ] || [ ! -f bench-new.txt ]; then
+    echo "Error: bench-old.txt and bench-new.txt required."
+    echo ""
+    echo "Workflow:"
+    echo "  1. (on baseline)  mise run go:bench-compare --save old"
+    echo "  2. <make changes>"
+    echo "  3. (on new code)  mise run go:bench-compare --save new"
+    echo "  4. mise run go:bench-compare    # show diff"
+    exit 1
+  fi
+  benchstat bench-old.txt bench-new.txt
+fi

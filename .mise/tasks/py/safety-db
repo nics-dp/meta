@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+#MISE description="Dep CVE check via safety (free no-login mode pins v2.x; SAFETY_API_KEY enables v3 scan)"
+#MISE hide=true
+#MISE raw=true
+
+set -euo pipefail
+
+# safety v3+ requires login for `safety scan`. Without API key, pin to v2.x to keep
+# free no-login DB (note: v2 DB is older than upstream — use as compl to pip-audit).
+if [ -n "${SAFETY_API_KEY:-}" ]; then
+  uvx safety scan --output text
+else
+  uvx 'safety<3' check --output text
+fi

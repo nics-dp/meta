@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+#MISE description="Run gosec security scanner"
+#MISE hide=true
+#MISE raw=true
+#MISE tools={"github:securego/gosec"="latest"}
+
+gosec -quiet ./...

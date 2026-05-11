@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+#MISE description="Format Python (ruff format)"
+#MISE hide=true
+#MISE raw=true
+#MISE silent="stdout"
+
+set -euo pipefail
+# shellcheck disable=SC1091
+source "$(dirname "$0")/../lib/py-env"
+
+"${PY_RUNNER_ARR[@]}" ruff format "$PY_LINT_PATHS"
+
+if ! git diff --exit-code -- . >/dev/null; then
+  echo ""
+  echo "⚠ Formatting changes detected. Please commit the result."
+  git diff --stat -- .
+fi

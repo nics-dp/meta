@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+#MISE description="Remove Go transient artifacts (coverage, bench, build outputs)"
+#MISE hide=true
+#MISE raw=true
+#MISE silent="stdout"
+#USAGE flag "--deep" help="Also run go clean -cache -testcache"
+
+set -euo pipefail
+shopt -s nullglob
+
+removed=0
+to_remove=(
+  coverage.out
+  coverage.html
+  coverage.md
+  bin
+  bench-*.txt
+  enriched-source.cdx.json
+  sbom-source.cdx.json
+)
+
+for pattern in "${to_remove[@]}"; do
+  for f in $pattern; do
+    if [ -e "$f" ]; then
+      echo "Removing $f"
+      rm -rf "$f"
+      removed=$((removed + 1))
+    fi
+  done
+done
+
+# shellcheck disable=SC2154
+if [ "${usage_deep:-false}" = "true" ]; then
+  echo "Cleaning Go build/test cache..."
+  go clean -cache -testcache
+fi
+
+echo "Done: $removed item(s) removed."

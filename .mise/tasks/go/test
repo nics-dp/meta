@@ -1,0 +1,50 @@
+#!/usr/bin/env bash
+#MISE description="Run Go tests. Modes: default=unit, --race, --coverage, --bench, --full=race+coverage+bench"
+#MISE hide=true
+#MISE raw=true
+#USAGE flag "--race" help="Enable race detector"
+#USAGE flag "--coverage" help="Enable coverage (writes coverage.out)"
+#USAGE flag "--bench" help="Run benchmarks instead of tests"
+#USAGE flag "--full" help="Run race+coverage tests, then full benchmarks (two passes)"
+#USAGE flag "--pattern <regex>" help="Filter tests or benchmarks by name" default="."
+
+set -euo pipefail
+# shellcheck disable=SC1091
+source "$(dirname "$0")/../lib/go-env"
+# shellcheck disable=SC2154
+pattern="${usage_pattern:-.}"
+
+base=(go test)
+[ -n "$GO_TEST_TAGS" ] && base+=("-tags=$GO_TEST_TAGS")
+base+=("-mod=$GO_TEST_MOD")
+
+run_tests() {
+  local race="$1" cover="$2"
+  local cmd=("${base[@]}")
+  [ "$race"  = "true" ] && cmd+=(-race)
+  if [ "$cover" = "true" ]; then
+    cmd+=(-coverprofile=coverage.out -covermode=atomic)
+    [ -n "$GO_COVERPKG" ] && cmd+=("-coverpkg=$GO_COVERPKG")
+  fi
+  [ "$pattern" != "." ] && cmd+=("-run=$pattern")
+  cmd+=("$GO_TEST_PATHS")
+  "${cmd[@]}"
+}
+
+run_bench() {
+  local bench_pattern="$1"
+  local cmd=("${base[@]}" "-run=^$" "-bench=$bench_pattern" -benchmem "$GO_TEST_PATHS")
+  "${cmd[@]}"
+}
+
+if [ "${usage_full:-false}" = "true" ]; then
+  echo "==> Pass 1: tests with race + coverage"
+  run_tests true true
+  echo ""
+  echo "==> Pass 2: full benchmarks"
+  run_bench "."
+elif [ "${usage_bench:-false}" = "true" ]; then
+  run_bench "$pattern"
+else
+  run_tests "${usage_race:-false}" "${usage_coverage:-false}"
+fi

@@ -13,7 +13,7 @@ on:
         required: false
         type: string
         default: "."
-        description: "Directory to scan for dependencies"
+        description: "Directory to scan"
       ref:
         required: false
         type: string
@@ -23,12 +23,16 @@ on:
         required: false
         type: boolean
         default: false
-        description: "Snapshot mode (skip release upload and dependency snapshot)"
+        description: "Snapshot mode (skip release upload)"
       runs_on:
         required: false
         type: string
         default: '"ubuntu-latest"'
         description: 'Runner as JSON (e.g., ''"ubuntu-latest"'' or ''{"group":"releasers"}'')'
+    secrets:
+      gh_pat:
+        required: false
+        description: "Optional PAT for private Go module access"
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
@@ -45,6 +49,15 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           ref: ${{ inputs.ref }}
+          fetch-depth: 1
+
+      - name: Configure git for private modules
+        env:
+          GH_PAT: ${{ secrets.gh_pat }}
+        run: |
+          if [ -n "$GH_PAT" ]; then
+            git config --global url."https://x-access-token:${GH_PAT}@github.com/".insteadOf "https://github.com/"
+          fi
 
       - name: Compute version
         id: version
@@ -60,14 +73,14 @@ jobs:
             echo "version_tag=${TAG}" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Generate SBOM (CycloneDX JSON 1.6)
+      - name: Generate source SBOM (CycloneDX JSON 1.6)
         uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
         with:
           path: ${{ inputs.scan_path }}
           format: cyclonedx-json
           output-file: sbom-source.cdx.json
-          dependency-snapshot: ${{ !inputs.snapshot }}
           upload-artifact: false
+          dependency-snapshot: ${{ !inputs.snapshot }}
 
       - name: Set up Go (for tooling)
         uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
@@ -96,7 +109,7 @@ jobs:
           mv trivy-source-fixed.sarif trivy-source.sarif
 
       - name: Upload Trivy SARIF to GitHub Security tab
-        uses: github/codeql-action/upload-sarif@e46ed2cbd01164d986452f91f178727624ae40d7 # v4.35.3
+        uses: github/codeql-action/upload-sarif@68bde559dea0fdcac2102bfdf6230c5f70eb485e # v4.35.4
         with:
           sarif_file: trivy-source.sarif
           category: trivy-source
@@ -119,7 +132,7 @@ jobs:
           severity-cutoff: high
 
       - name: Upload Grype SARIF to GitHub Security tab
-        uses: github/codeql-action/upload-sarif@e46ed2cbd01164d986452f91f178727624ae40d7 # v4.35.3
+        uses: github/codeql-action/upload-sarif@68bde559dea0fdcac2102bfdf6230c5f70eb485e # v4.35.4
         with:
           sarif_file: ${{ steps.grype-sarif.outputs.sarif }}
           category: grype-source
