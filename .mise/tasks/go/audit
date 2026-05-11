@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 #MISE description="Run govulncheck vulnerability check"
+#MISE hide=true
 #MISE raw=true
 
 govulncheck ./...

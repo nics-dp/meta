@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 #MISE description="Enrich SBOM with ecosystem metadata"
+#MISE hide=true
 #MISE depends=["sbom:source"]
 
 parlay ecosystems enrich sbom-source.cdx.json > enriched-source.cdx.json

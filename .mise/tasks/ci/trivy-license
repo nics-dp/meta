@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 #MISE description="Run Trivy license compliance check"
+#MISE hide=true
 #MISE raw=true
 
 trivy fs --scanners license --exit-code 0 .

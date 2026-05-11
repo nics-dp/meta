@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 #MISE description="Scan SBOM for vulnerabilities with Grype"
+#MISE hide=true
 #MISE raw=true
 #MISE depends=["sbom:enrich"]
 

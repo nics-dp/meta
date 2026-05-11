@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 #MISE description="Update git submodules"
+#MISE hide=true
 #MISE raw=true
 
 git submodule update --remote --merge

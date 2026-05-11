@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
 #MISE description="Compile ruler to AGENTS.md and CLAUDE.md"
+#MISE hide=true
 
 bunx @intellectronica/ruler apply
