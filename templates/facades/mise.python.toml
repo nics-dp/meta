@@ -1,0 +1,100 @@
+# Python facade. Requires uv + ruff + pytest + coverage + bandit + pip-audit
+# in pyproject.toml [dependency-groups].test (or equivalent).
+
+[settings]
+jobs = 16
+task.output = "keep-order"
+unix_default_inline_shell_args = "bash -c"
+
+# ------------------------------------------------------------------------------
+[tools]
+# Python toolchain
+python = "3.13"
+uv = "latest"
+
+# SBOM
+syft = "latest"
+"github:snyk/parlay" = "latest"
+
+# Vuln scan
+trivy = "latest"
+grype = "latest"
+
+# Static scanning
+"pipx:semgrep" = "latest"
+
+# ------------------------------------------------------------------------------
+[env]
+# Override meta config base if forking nics-dp/meta
+# META_CONFIG_BASE = "https://raw.githubusercontent.com/your-org/meta/main/configs"
+
+# Override py-env defaults if needed:
+# PY_RUNNER         = "uv run --group test"             # default
+# PY_TEST_PATHS     = "tests"                           # auto-detect tests/ or .
+# PY_LINT_PATHS     = "."
+# PY_BANDIT_PATHS   = "."
+# PY_BANDIT_EXCLUDE = "./.venv,./tests"
+# PY_COVERAGE_FILE  = "coverage.xml"
+
+# ------------------------------------------------------------------------------
+[task_config]
+includes = ["git::https://github.com/nics-dp/meta.git//.mise/tasks?ref=main"]
+
+# ==============================================================================
+# Facade tasks
+# ==============================================================================
+[tasks.init]
+description = "Install Python deps"
+depends = ["py:install"]
+
+[tasks.clean]
+description = "Wipe Python artifacts and caches"
+depends = ["py:clean"]
+
+[tasks.build]
+description = "Build wheel + sdist"
+depends = ["py:build"]
+
+[tasks.test]
+description = "Run pytest with coverage and HTML report"
+depends = ["py:test --coverage"]
+depends_post = ["py:report"]
+
+[tasks.run]
+description = "Run a Python module or script"
+usage = 'arg "<target>"'
+depends = ["py:run {{usage.target}}"]
+
+[tasks.bench]
+description = "Run pytest benchmarks (single pass)"
+depends = ["py:test --bench"]
+
+[tasks.update]
+description = "Bump deps and refresh shared atoms"
+depends = ["py:update", "meta:bump"]
+
+[tasks.ci]
+description = "Run all CI checks"
+depends = [
+  "py:lint-fix",
+  "py:format-fix",
+  "py:typecheck",
+  "py:sast",
+  "py:audit",
+  "py:safety-db",
+  "py:complexity",
+  "py:dead-code",
+  "py:deptree",
+  "py:license-custom",
+  "ci:semgrep python",
+]
+
+[tasks.sbom]
+description = "Generate enriched SBOM, scan vulnerabilities, audit licenses"
+depends = [
+  "py:license-custom",
+]
+
+[tasks.all]
+description = "init -> build -> test -> ci"
+depends = ["init", "build", "test", "ci"]

@@ -1,0 +1,114 @@
+# Go service facade — copy into repo's mise.toml.
+# Atoms come from nics-dp/meta. Override per-task with [tasks.<name>] depends.
+
+[settings]
+jobs = 16
+task.output = "keep-order"
+unix_default_inline_shell_args = "bash -c"
+
+# ------------------------------------------------------------------------------
+[tools]
+# Go toolchain
+go = "1.26.3"
+golangci-lint = "latest"
+"github:securego/gosec" = "latest"
+"go:golang.org/x/vuln/cmd/govulncheck" = "latest"
+
+# Image / IaC
+hadolint = "latest"
+
+# SBOM
+syft = "latest"
+"github:snyk/parlay" = "latest"
+
+# Vuln / IaC scan
+trivy = "latest"
+grype = "latest"
+
+# Static scanning
+"pipx:semgrep" = "latest"
+
+# ------------------------------------------------------------------------------
+[env]
+# Override meta config base if forking nics-dp/meta
+# META_CONFIG_BASE = "https://raw.githubusercontent.com/your-org/meta/main/configs"
+
+# Go private modules
+GOPRIVATE = "github.com/nics-dp"
+GONOPROXY = "github.com/nics-dp"
+GONOSUMDB = "github.com/nics-dp"
+
+# Go build flags
+CGO_ENABLED = "1"  # cgo for race detector / native deps
+EXTRA_BUILD_FLAGS = "-trimpath -mod=vendor"
+LDFLAGS = "-s -w"  # strip symbols + DWARF
+
+# Optional: declare local-replace pairs for go:lib-local / go:lib-remote
+# GO_LIB_LOCAL  = "github.com/nics-dp/libdcf=../libdcf github.com/nics-dp/ZenQuery=../ZenQuery"
+# GO_LIB_REMOTE = "github.com/nics-dp/libdcf@dev github.com/nics-dp/ZenQuery@dev"
+
+# ------------------------------------------------------------------------------
+[task_config]
+includes = ["git::https://github.com/nics-dp/meta.git//.mise/tasks?ref=main"]
+
+# ==============================================================================
+# Facade tasks
+# ==============================================================================
+[tasks.init]
+description = "Bootstrap deps and submodules"
+depends = ["go:install", "gs:clone"]
+
+[tasks.clean]
+description = "Wipe build artifacts and compose state"
+depends = ["go:clean"]
+run = "docker compose down --volumes --remove-orphans 2>/dev/null || true"
+
+[tasks.build]
+description = "Build Go binary from cmd/"
+depends = ["go:build"]
+
+[tasks.run]
+description = "Run Go service from cmd/"
+depends = ["go:run"]
+
+[tasks.bench]
+description = "Run Go benchmarks (single pass)"
+depends = ["go:test --bench"]
+
+[tasks.test]
+description = "Run Go tests with race + coverage and generate report"
+depends = ["go:test --race --coverage"]
+depends_post = ["go:report"]
+
+[tasks."lib:local"]
+description = "Use local replace directives (set GO_LIB_LOCAL env first)"
+depends = ["go:lib-local"]
+
+[tasks."lib:remote"]
+description = "Switch to remote refs (set GO_LIB_REMOTE env first)"
+depends = ["go:lib-remote"]
+
+[tasks.update]
+description = "Bump deps, refresh shared atoms, update submodules"
+depends = ["go:update", "gs:update", "meta:bump"]
+
+[tasks.ci]
+description = "Run all CI checks"
+depends = [
+  "go:lint-fix",
+  "go:sast",
+  "go:audit",
+  "go:dead-code",
+  "go:deptree",
+  "iac:img:hadolint",
+  "ci:semgrep golang",
+  "iac:trivy",
+]
+
+[tasks.sbom]
+description = "Generate enriched SBOM and scan"
+depends = ["sbom:trivy", "sbom:grype"]
+
+[tasks.all]
+description = "init -> generate -> api-fix -> build -> test -> ci"
+depends = ["init", "go:generate", "go:api-fix", "build", "test", "ci"]
