@@ -2,6 +2,7 @@
 #MISE description="Install Python deps via uv (uses dependency-groups.test if defined)"
 #MISE hide=true
 #MISE raw=true
+#MISE silent="stdout"
 
 set -euo pipefail
 

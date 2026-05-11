@@ -2,6 +2,7 @@
 #MISE description="Format Python (ruff format)"
 #MISE hide=true
 #MISE raw=true
+#MISE silent="stdout"
 
 set -euo pipefail
 # shellcheck disable=SC1091

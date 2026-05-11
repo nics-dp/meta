@@ -2,5 +2,7 @@
 #MISE description="Build JS/TS frontend via bun run build"
 #MISE hide=true
 #MISE raw=true
+#MISE silent="stdout"
+#MISE tools={bun="latest"}
 
 bun run build

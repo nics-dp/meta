@@ -4,24 +4,11 @@ task.output = "keep-order"
 unix_default_inline_shell_args = "bash -c"
 
 # ------------------------------------------------------------------------------
+# Tools needed by mise tasks are declared inline via `#MISE tools={...}` in each
+# task file under `.mise/tasks/`. Only project-level tools (not consumed by any
+# task) belong here.
 [tools]
-# GitHub action tools
 act = "latest"
-actionlint = "latest"
-
-# SBOM generation
-syft = "latest"
-"github:snyk/parlay" = "latest"
-
-# Deps vuln scanning
-trivy = "latest"
-grype = "latest"
-
-# Static scanning
-"pipx:semgrep" = "latest"
-
-# MISC
-bun = "latest"
 
 # ------------------------------------------------------------------------------
 [task_config]

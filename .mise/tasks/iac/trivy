@@ -2,5 +2,6 @@
 #MISE description="Run Trivy IaC scan on Dockerfiles and compose files"
 #MISE hide=true
 #MISE raw=true
+#MISE tools={trivy="latest"}
 
 trivy config --exit-code 0 .

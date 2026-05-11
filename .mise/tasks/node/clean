@@ -2,6 +2,7 @@
 #MISE description="Remove Node transient artifacts (build, coverage, test outputs, caches)"
 #MISE hide=true
 #MISE raw=true
+#MISE silent="stdout"
 #USAGE flag "--deep" help="Also remove node_modules/ (forces reinstall)"
 
 set -euo pipefail

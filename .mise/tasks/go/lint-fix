@@ -2,6 +2,8 @@
 #MISE description="Lint Go with autofix (golangci-lint fmt)"
 #MISE hide=true
 #MISE raw=true
+#MISE silent="stdout"
+#MISE tools={golangci-lint="latest"}
 
 golangci-lint fmt ./...
 

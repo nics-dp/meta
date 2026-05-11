@@ -2,5 +2,6 @@
 #MISE description="Update git submodules"
 #MISE hide=true
 #MISE raw=true
+#MISE silent="stdout"
 
 git submodule update --remote --merge

@@ -2,5 +2,7 @@
 #MISE description="Install JS deps via bun (frozen lockfile)"
 #MISE hide=true
 #MISE raw=true
+#MISE silent="stdout"
+#MISE tools={bun="latest"}
 
 bun install --frozen-lockfile

@@ -2,6 +2,7 @@
 #MISE description="Show JS/TS dep tree via bun pm ls / bun why"
 #MISE hide=true
 #MISE raw=true
+#MISE tools={bun="latest"}
 #USAGE arg "[package]" help="Filter to substring (or use --why for reverse query)"
 #USAGE flag "--why" help="Show why <package> is installed (uses 'bun why')"
 #USAGE flag "--all" help="Include transitive deps (default: direct only)"

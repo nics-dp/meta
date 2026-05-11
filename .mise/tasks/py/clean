@@ -2,6 +2,7 @@
 #MISE description="Remove Python transient artifacts (caches, coverage, build outputs)"
 #MISE hide=true
 #MISE raw=true
+#MISE silent="stdout"
 #USAGE flag "--deep" help="Also remove .venv/ (forces uv sync)"
 
 set -euo pipefail

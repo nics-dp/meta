@@ -2,6 +2,7 @@
 #MISE description="Remove Go transient artifacts (coverage, bench, build outputs)"
 #MISE hide=true
 #MISE raw=true
+#MISE silent="stdout"
 #USAGE flag "--deep" help="Also run go clean -cache -testcache"
 
 set -euo pipefail

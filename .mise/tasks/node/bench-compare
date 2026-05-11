@@ -2,6 +2,7 @@
 #MISE description="JS/TS benchmark + compare via vitest bench. --save <label> to capture (multiple runs); no flag to diff old vs new"
 #MISE hide=true
 #MISE raw=true
+#MISE tools={bun="latest"}
 #USAGE flag "--save <label>" help="Save bench results to bench-<label>.json (typically 'old' or 'new')"
 #USAGE flag "--count <n>" help="Number of runs for statistical significance" default="5"
 #USAGE flag "--pattern <regex>" help="Filter by bench name pattern" default=""

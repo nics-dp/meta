@@ -2,6 +2,7 @@
 #MISE description="Migrate Go source to new APIs via go fix (rewrites deprecated stdlib paths/calls)"
 #MISE hide=true
 #MISE raw=true
+#MISE silent="stdout"
 
 set -euo pipefail
 

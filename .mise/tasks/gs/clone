@@ -2,5 +2,6 @@
 #MISE description="Clone git submodules"
 #MISE hide=true
 #MISE raw=true
+#MISE silent="stdout"
 
 git submodule update --init --recursive

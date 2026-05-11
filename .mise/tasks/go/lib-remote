@@ -3,6 +3,7 @@
 #MISE hide=true
 #MISE raw=true
 #MISE depends_post=["go:install"]
+#MISE silent="stdout"
 #USAGE arg "[targets]" var=#true var_min=0 help="<module>@<ref> pairs (override GO_LIB_REMOTE env)"
 
 # shellcheck disable=SC2154

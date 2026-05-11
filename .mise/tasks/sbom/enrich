@@ -2,5 +2,7 @@
 #MISE description="Enrich SBOM with ecosystem metadata"
 #MISE hide=true
 #MISE depends=["sbom:source"]
+#MISE silent="stdout"
+#MISE tools={"github:snyk/parlay"="latest"}
 
 parlay ecosystems enrich sbom-source.cdx.json > enriched-source.cdx.json

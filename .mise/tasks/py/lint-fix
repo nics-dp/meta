@@ -2,6 +2,7 @@
 #MISE description="Lint Python with autofix (ruff check --fix)"
 #MISE hide=true
 #MISE raw=true
+#MISE silent="stdout"
 
 set -euo pipefail
 # shellcheck disable=SC1091

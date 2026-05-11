@@ -3,5 +3,6 @@
 #MISE hide=true
 #MISE raw=true
 #MISE depends=["sbom:enrich"]
+#MISE tools={trivy="latest"}
 
 trivy sbom enriched-source.cdx.json
