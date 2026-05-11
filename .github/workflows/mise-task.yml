@@ -80,14 +80,14 @@ jobs:
             echo "::warning::private-modules=true but gh_pat secret is empty"
             exit 0
           fi
-          git config --global url."https://x-access-token:${GH_PAT}@github.com/".insteadOf "https://github.com/"
+          git config --global url."https://x-access-token:${GH_PAT}@github.com/nics-dp/".insteadOf "https://github.com/nics-dp/"
 
       - id: check
         name: Run ${{ inputs.task }}
         run: |
           set +e
           mise run ${{ inputs.task }} 2>&1 | tee /tmp/output.log
-          exit ${PIPESTATUS[0]}
+          exit "${PIPESTATUS[0]}"
         continue-on-error: true
 
       - name: Job summary
