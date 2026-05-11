@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 #MISE description="Generate HTML + Markdown coverage reports from coverage.out"
+#MISE hide=true
 #MISE raw=true
 
 set -euo pipefail
@@ -18,20 +19,37 @@ fi
 log_step "Generating HTML report: $HTML_REPORT"
 go tool cover -html="$MERGED_COV" -o "$HTML_REPORT"
 
+# Read module path from go.mod so we can normalize coverage paths regardless of
+# whether the module uses a short name (e.g., "dcf-access") or a full hostname
+# path (e.g., "github.com/nics-dp/libdcf"). Component extraction logic:
+#   1. Strip "<module>/" prefix from each cover line's path.
+#   2. Strip leading "internal/" (services nest components under internal/).
+#   3. The first remaining path segment is the component.
+MODULE=$(awk '/^module / {print $2; exit}' go.mod 2>/dev/null || echo "")
+
 # Cache func output once to avoid repeated parsing
 FUNC_OUTPUT=$(go tool cover -func="$MERGED_COV")
 FUNC_NO_TOTAL=$(echo "$FUNC_OUTPUT" | grep -v "total:")
 TOTAL_COV=$(echo "$FUNC_OUTPUT" | grep "total:" | awk '{print $NF}')
 
 # Generate component coverage data (TSV: component\tavg_coverage)
-COMP_DATA=$(echo "$FUNC_NO_TOTAL" | awk '
+COMP_DATA=$(echo "$FUNC_NO_TOTAL" | awk -v module="$MODULE" '
 {
     coverage_str = $NF
     gsub(/%/, "", coverage_str)
     coverage = coverage_str + 0
-    split($1, parts, "/")
-    if (length(parts) >= 3) {
-        comp = parts[3]
+
+    path = $1
+    # Strip module prefix if present
+    if (module != "" && index(path, module "/") == 1) {
+        path = substr(path, length(module) + 2)
+    }
+    # Strip optional internal/ layer
+    sub(/^internal\//, "", path)
+
+    split(path, parts, "/")
+    if (length(parts) >= 2) {
+        comp = parts[1]
         if (!(comp in seen)) {
             seen[comp] = 1
             order[++comp_count] = comp
