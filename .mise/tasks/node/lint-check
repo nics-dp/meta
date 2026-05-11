@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+#MISE description="Lint JS/TS (read-only)"
+#MISE hide=true
+#MISE raw=true
+
+META_CONFIG_BASE="${META_CONFIG_BASE:-https://raw.githubusercontent.com/nics-dp/meta/main/configs}"
+cleanup() {
+  rc=$?
+  rm -f eslint.config.js
+  exit "$rc"
+}
+trap cleanup EXIT
+curl -fsSL "$META_CONFIG_BASE/eslint.config.js" -o eslint.config.js
+
+# Warn if eslint plugins required by shared config are missing.
+REQUIRED_PLUGINS=(
+  eslint-plugin-vue
+  eslint-plugin-security
+  '@vue/eslint-config-typescript'
+)
+missing=()
+for pkg in "${REQUIRED_PLUGINS[@]}"; do
+  if [ ! -d "node_modules/$pkg" ] && ! grep -q "\"$pkg\"" package.json 2>/dev/null; then
+    missing+=("$pkg")
+  fi
+done
+if [ ${#missing[@]} -gt 0 ]; then
+  echo ""
+  echo "⚠ Missing eslint plugins (required by shared config):"
+  for p in "${missing[@]}"; do echo "  - $p"; done
+  echo ""
+  echo "  Install:"
+  echo "      bun add -D ${missing[*]}"
+  echo ""
+fi
+
+bunx eslint .

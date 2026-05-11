@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+#MISE description="Run JS/TS tests via vitest"
+#MISE hide=true
+#MISE raw=true
+
+META_CONFIG_BASE="${META_CONFIG_BASE:-https://raw.githubusercontent.com/nics-dp/meta/main/configs}"
+cleanup() {
+  rc=$?
+  rm -f vitest.config.ts
+  exit "$rc"
+}
+trap cleanup EXIT
+curl -fsSL "$META_CONFIG_BASE/vitest.config.ts" -o vitest.config.ts
+
+bunx vitest run

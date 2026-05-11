@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+#MISE description="Remove Node transient artifacts (build, coverage, test outputs, caches)"
+#MISE hide=true
+#MISE raw=true
+#USAGE flag "--deep" help="Also remove node_modules/ (forces reinstall)"
+
+set -euo pipefail
+shopt -s nullglob
+
+removed=0
+to_remove=(
+  dist
+  build
+  .next
+  .turbo
+  .vite
+  coverage
+  playwright-report
+  test-results
+  .lighthouseci
+  .eslintcache
+  bench-*.json
+  enriched-source.cdx.json
+  sbom-source.cdx.json
+)
+
+# shellcheck disable=SC2154
+if [ "${usage_deep:-false}" = "true" ]; then
+  to_remove+=(node_modules)
+fi
+
+for pattern in "${to_remove[@]}"; do
+  for f in $pattern; do
+    if [ -e "$f" ]; then
+      echo "Removing $f"
+      rm -rf "$f"
+      removed=$((removed + 1))
+    fi
+  done
+done
+
+echo "Done: $removed item(s) removed."

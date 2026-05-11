@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+#MISE description="Report bundle size (uses size-limit if .size-limit config exists, else du+gzip on dist/)"
+#MISE hide=true
+#MISE raw=true
+
+set -euo pipefail
+
+DIST="${BUNDLE_SIZE_DIR:-dist}"
+
+if [ ! -d "$DIST" ]; then
+  echo "Error: $DIST/ not found. Run 'mise run node:build' first." >&2
+  exit 1
+fi
+
+if [ -f .size-limit.json ] || [ -f .size-limit.cjs ] || [ -f .size-limit.js ]; then
+  echo "Detected size-limit config -> bunx size-limit"
+  bunx size-limit
+  exit 0
+fi
+
+# Fallback: simple measurement
+hr() {
+  awk -v n="$1" 'BEGIN {
+    s[1]="B"; s[2]="K"; s[3]="M"; s[4]="G"
+    i = 1
+    while (n >= 1024 && i < 4) { n /= 1024; i++ }
+    if (i == 1) printf "%d %s", n, s[i]
+    else printf "%.2f %s", n, s[i]
+  }'
+}
+
+printf "%-60s %12s %12s\n" "file" "raw" "gzipped"
+printf '%s\n' "----------------------------------------------------------------------------------------"
+total=0
+total_gz=0
+while IFS= read -r f; do
+  size=$(wc -c < "$f" | tr -d ' ')
+  size_gz=$(gzip -cn "$f" | wc -c | tr -d ' ')
+  rel="${f#"$DIST"/}"
+  printf "%-60s %12s %12s\n" "$rel" "$(hr "$size")" "$(hr "$size_gz")"
+  total=$((total + size))
+  total_gz=$((total_gz + size_gz))
+done < <(find "$DIST" -type f \( -name '*.js' -o -name '*.mjs' -o -name '*.css' -o -name '*.html' \) | sort)
+printf '%s\n' "----------------------------------------------------------------------------------------"
+printf "%-60s %12s %12s\n" "TOTAL" "$(hr "$total")" "$(hr "$total_gz")"
+echo ""
+echo "Tip: create .size-limit.json to set per-asset limits and CI enforcement."
+echo "Override scan dir with BUNDLE_SIZE_DIR=<path>."

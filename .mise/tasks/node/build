@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+#MISE description="Build JS/TS frontend via bun run build"
+#MISE hide=true
+#MISE raw=true
+
+bun run build

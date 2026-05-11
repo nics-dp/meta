@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+#MISE description="Type check JS/TS (vue-tsc when present, else tsc)"
+#MISE hide=true
+#MISE raw=true
+
+if [ -f package.json ] && grep -q '"vue-tsc"' package.json; then
+  bunx vue-tsc -b --noEmit
+else
+  bunx tsc --noEmit
+fi

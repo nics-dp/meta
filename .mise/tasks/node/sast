@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+#MISE description="Node.js SAST via njsscan (NowSecure; OWASP Top 10 + npm/Express patterns)"
+#MISE hide=true
+#MISE raw=true
+#USAGE flag "--json" help="Emit JSON output to njsscan-report.json"
+
+# shellcheck disable=SC2154
+set -euo pipefail
+
+if [ "${usage_json:-false}" = "true" ]; then
+  uvx njsscan --json -o njsscan-report.json .
+  echo "Saved: njsscan-report.json"
+else
+  uvx njsscan .
+fi

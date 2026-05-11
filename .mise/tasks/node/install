@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+#MISE description="Install JS deps via bun (frozen lockfile)"
+#MISE hide=true
+#MISE raw=true
+
+bun install --frozen-lockfile

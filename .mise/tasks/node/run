@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+#MISE description="Run a bun script with optional args. Mirrors 'bun run <script> [args...]'"
+#MISE hide=true
+#MISE raw=true
+#USAGE arg "[args]" var=#true var_min=0 help="bun run args (default: 'dev'). e.g., 'start' or 'dev --port 3001'"
+
+# shellcheck disable=SC2154
+set -euo pipefail
+
+eval "args=(${usage_args:-dev})"
+
+bun run "${args[@]}"

@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+#MISE description="Detect unused JS/TS deps and exports (knip)"
+#MISE hide=true
+#MISE raw=true
+
+META_CONFIG_BASE="${META_CONFIG_BASE:-https://raw.githubusercontent.com/nics-dp/meta/main/configs}"
+cleanup() {
+  rc=$?
+  rm -f knip.json
+  exit "$rc"
+}
+trap cleanup EXIT
+curl -fsSL "$META_CONFIG_BASE/knip.json" -o knip.json
+
+bunx knip
