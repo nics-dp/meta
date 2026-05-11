@@ -1,0 +1,115 @@
+# yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
+# Reusable workflow: run a single mise task on a fresh runner.
+#
+# Centralizes the checkout + jdx/mise-action setup so downstream repos pin one
+# ref (this file's @ref) instead of pinning each action SHA themselves.
+#
+# Usage in downstream `.github/workflows/ci.yml`:
+#   jobs:
+#     checks:
+#       name: ${{ matrix.name }}
+#       strategy:
+#         fail-fast: false
+#         matrix:
+#           include:
+#             - { name: "Go Lint", task: "go:lint-check" }
+#       uses: nics-dp/meta/.github/workflows/mise-task.yml@main
+#       with:
+#         name: ${{ matrix.name }}
+#         task: ${{ matrix.task }}
+#         private-modules: true
+#       secrets:
+#         gh_pat: ${{ secrets.GH_PAT_READ_NICSDP }}
+
+name: mise-task
+
+on:
+  workflow_call:
+    inputs:
+      task:
+        description: "Mise task to run (e.g. 'go:lint-check', 'ci:semgrep golang')"
+        required: true
+        type: string
+      name:
+        description: "Display name for the GH job summary section (defaults to task)"
+        required: false
+        type: string
+        default: ""
+      runs_on:
+        description: 'Runner as JSON (e.g., ''"ubuntu-latest"'' or ''{"group":"releasers"}'')'
+        required: false
+        type: string
+        default: '"ubuntu-latest"'
+      fetch-depth:
+        description: "Git fetch depth (use 0 for full history; default 1)"
+        required: false
+        type: number
+        default: 1
+      private-modules:
+        description: "Configure git to authenticate to private GitHub repos via gh_pat secret"
+        required: false
+        type: boolean
+        default: false
+    secrets:
+      gh_pat:
+        description: "GitHub PAT with read access to private modules (required when private-modules=true)"
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  run:
+    name: ${{ inputs.name != '' && inputs.name || inputs.task }}
+    runs-on: ${{ fromJSON(inputs.runs_on) }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: ${{ inputs.fetch-depth }}
+
+      - uses: jdx/mise-action@1648a7812b9aeae629881980618f079932869151 # v4.0.1
+        with:
+          cache: true
+
+      - name: Configure git for private modules
+        if: ${{ inputs.private-modules }}
+        env:
+          GH_PAT: ${{ secrets.gh_pat }}
+        run: |
+          if [ -z "$GH_PAT" ]; then
+            echo "::warning::private-modules=true but gh_pat secret is empty"
+            exit 0
+          fi
+          git config --global url."https://x-access-token:${GH_PAT}@github.com/".insteadOf "https://github.com/"
+
+      - id: check
+        name: Run ${{ inputs.task }}
+        run: |
+          set +e
+          mise run ${{ inputs.task }} 2>&1 | tee /tmp/output.log
+          exit ${PIPESTATUS[0]}
+        continue-on-error: true
+
+      - name: Job summary
+        if: always()
+        env:
+          JOB_NAME: ${{ inputs.name != '' && inputs.name || inputs.task }}
+          OUTCOME: ${{ steps.check.outcome }}
+        run: |
+          {
+            echo "## $JOB_NAME"
+            echo
+            if [ "$OUTCOME" = "success" ]; then echo "✅ pass"; else echo "❌ fail"; fi
+            echo
+            echo '<details><summary>output</summary>'
+            echo
+            echo '```'
+            tail -n 300 /tmp/output.log
+            echo '```'
+            echo
+            echo '</details>'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Enforce
+        if: steps.check.outcome == 'failure'
+        run: exit 1

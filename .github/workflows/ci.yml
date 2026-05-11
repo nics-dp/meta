@@ -15,12 +15,16 @@ concurrency:
 
 permissions:
   contents: read
-  checks: write
-  pull-requests: write
 
 jobs:
-  commitlint:
-    uses: ./.github/workflows/commitlint.yml
-
-  actionlint:
-    uses: ./.github/workflows/actionlint.yml
+  checks:
+    name: ${{ matrix.name }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: "Actionlint", task: "iac:actionlint" }
+    uses: ./.github/workflows/mise-task.yml
+    with:
+      name: ${{ matrix.name }}
+      task: ${{ matrix.task }}
