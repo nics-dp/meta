@@ -17,9 +17,9 @@
     },
     {
       "customType": "regex",
-      "description": "Update parlay version in SBOM image workflow",
+      "description": "Update parlay version in SBOM workflows",
       "managerFilePatterns": [
-        "/^\\.github/workflows/sbom-image\\.yml$/"
+        "/^\\.github/workflows/sbom-(?:source|image)\\.yml$/"
       ],
       "matchStrings": ["go install github\\.com/snyk/parlay@(?<currentValue>v\\d+\\.\\d+\\.\\d+)"],
       "depNameTemplate": "snyk/parlay",
