@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+#MISE description="Generate Python-native CycloneDX SBOM via cyclonedx-py (better PURL/wheel metadata than syft)"
+#MISE hide=true
+#MISE raw=true
+#MISE tools={"github:snyk/parlay"="latest", trivy="latest", grype="latest"}
+#USAGE flag "--output <path>" help="Output file path" default="sbom-py.json"
+#USAGE flag "--source <type>" help="Source: environment / requirements / poetry / pipenv" default="environment"
+
+set -euo pipefail
+# shellcheck disable=SC2154
+out="${usage_output:-sbom-py.json}"
+# shellcheck disable=SC2154
+src="${usage_source:-environment}"
+
+uvx --from cyclonedx-bom cyclonedx-py "$src" -o sbom-source.cdx.json
+# parlay enrich
+parlay ecosystems enrich sbom-source.cdx.json > enriched-source.cdx.json
+# trivy scan vuln deps
+trivy sbom enriched-source.cdx.json
+# grype scan vuln deps
+grype sbom:enriched-source.cdx.json
+
+mv enriched-source.cdx.json "$out"
+
+echo "Saved: $out"

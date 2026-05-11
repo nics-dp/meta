@@ -1,0 +1,67 @@
+#!/usr/bin/env bash
+#MISE description="Enable local replace directives for Go modules (driven by GO_LIB_LOCAL env)"
+#MISE hide=true
+#MISE raw=true
+#MISE depends_post=["go:install"]
+#MISE silent="stdout"
+#USAGE arg "[targets]" var=#true var_min=0 help="<module>=<path> pairs (override GO_LIB_LOCAL env)"
+
+# shellcheck disable=SC2154
+set -euo pipefail
+eval "targets=(${usage_targets:-${GO_LIB_LOCAL:-}})"
+
+if [ ${#targets[@]} -eq 0 ]; then
+  cat >&2 <<EOF
+Error: no replace targets. Pass as args or set GO_LIB_LOCAL env.
+
+Example mise.toml:
+  [env]
+  GO_LIB_LOCAL = "github.com/foo/bar=../bar github.com/foo/baz=../baz"
+
+Or one-shot:
+  mise run go:lib-local 'github.com/foo/bar=../bar'
+EOF
+  exit 1
+fi
+
+echo "Enabling local replacements..."
+modules=()
+for t in "${targets[@]}"; do
+  module="${t%%=*}"
+  modules+=("$module")
+  go mod edit -replace="$t"
+  echo "  $t"
+done
+
+# Disable gomoddirectives lint (rejects local replace directives)
+if [ -f .golangci.yml ] && grep -q '^[[:space:]]*- gomoddirectives$' .golangci.yml; then
+  tmp=$(mktemp .golangci.yml.XXXXXX)
+  trap 'rm -f "$tmp"' EXIT
+  if grep -v '^[[:space:]]*- gomoddirectives$' .golangci.yml > "$tmp" && mv "$tmp" .golangci.yml; then
+    trap - EXIT
+    echo "Disabled gomoddirectives in .golangci.yml"
+  fi
+fi
+
+# Generate .semgrepignore block from modules
+MARKER="BEGIN mise go:lib-local auto-generated ignore"
+ignore_block=$(
+  echo "# BEGIN mise go:lib-local auto-generated ignore"
+  for m in "${modules[@]}"; do echo "vendor/$m/"; done
+  echo "# END mise go:lib-local auto-generated ignore"
+)
+
+if [ ! -f .semgrepignore ]; then
+  echo "$ignore_block" > .semgrepignore
+  echo "Created .semgrepignore"
+elif ! grep -q "$MARKER" .semgrepignore; then
+  printf "\n%s\n" "$ignore_block" >> .semgrepignore
+  echo "Updated .semgrepignore with go:lib-local ignores"
+else
+  echo ".semgrepignore already contains go:lib-local block"
+fi
+
+echo ""
+echo "Local replacements enabled"
+echo "Current replace directives:"
+grep -E "^replace" go.mod || echo "(none)"

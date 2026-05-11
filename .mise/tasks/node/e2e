@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+#MISE description="Run E2E tests via Playwright"
+#MISE hide=true
+#MISE raw=true
+#MISE tools={bun="latest"}
+
+META_CONFIG_BASE="${META_CONFIG_BASE:-https://raw.githubusercontent.com/nics-dp/meta/main/configs}"
+cleanup() {
+  rc=$?
+  rm -f playwright.config.ts
+  exit "$rc"
+}
+trap cleanup EXIT
+curl -fsSL "$META_CONFIG_BASE/playwright.config.ts" -o playwright.config.ts
+
+bunx playwright test

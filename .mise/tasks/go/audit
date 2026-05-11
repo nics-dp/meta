@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+#MISE description="Run govulncheck vulnerability check"
+#MISE hide=true
+#MISE raw=true
+#MISE tools={"go:golang.org/x/vuln/cmd/govulncheck"="latest"}
+
+govulncheck ./...

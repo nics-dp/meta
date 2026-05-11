@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+#MISE description="Lint Python with autofix (ruff check --fix)"
+#MISE hide=true
+#MISE raw=true
+#MISE silent="stdout"
+
+set -euo pipefail
+# shellcheck disable=SC1091
+source "$(dirname "$0")/../lib/py-env"
+
+"${PY_RUNNER_ARR[@]}" ruff check --fix "$PY_LINT_PATHS"
+
+if ! git diff --exit-code -- . >/dev/null; then
+  echo ""
+  echo "⚠ Lint autofix changes detected. Please commit the result."
+  git diff --stat -- .
+fi

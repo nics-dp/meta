@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 #MISE description="Run Go script from cmd/"
+#MISE hide=true
 #MISE raw=true
 #USAGE arg "[name]" help="Script name to run (auto-detected if cmd/ has only one entry)"
 #USAGE arg "[args]" var=#true var_min=0 help="Arguments to pass to the script"

@@ -1,5 +1,0 @@
-#!/usr/bin/env bash
-#MISE description="Upgrade Go dependencies"
-#MISE depends_post=["go:mod"]
-
-go get -u ./...

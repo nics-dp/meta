@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+#MISE description="Update JS/TS deps via bun update"
+#MISE hide=true
+#MISE raw=true
+#MISE silent="stdout"
+#MISE tools={bun="latest"}
+
+bun update

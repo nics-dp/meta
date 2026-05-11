@@ -4,134 +4,97 @@ This file provides guidance to Codex (Codex.ai/code) when working with code in t
 
 ## Repository Purpose
 
-This is a **meta-configuration repository** for the nics-dp organization. It contains shared, reusable configuration files that are consumed by other nics-dp repositories:
+This is a **meta-configuration repository** for the nics-dp organization. It contains:
 
-- **Reusable GitHub Actions workflows** (`.github/workflows/`) - called via `workflow_call`
-- **Shared mise task files** (`.mise/tasks/`) - consumed by consumer repos via `git::` remote includes
-- **Shared config files** (`configs/`) - synced to consumer repos via sync workflows
-- **Per-repo CodeQL configs** (`configs/codeqls/`) - synced to repos via the sync-codeql workflow
-- **Project templates** (`golang-templates/`, `web-templates/`) - reference workflow and mise config files for new repos
-- **Renovate preset** (`renovate-preset.json`) - org-level Renovate configuration
+- **Reusable GitHub Actions workflows** (`.github/workflows/`) — called via `workflow_call`. Core is `mise-task.yml`, which centralizes checkout + jdx/mise-action + mise atom invocation + GH step summary. Release / SBOM-image / CodeQL / utility workflows live here too.
+- **Shared mise atomic tasks** (`.mise/tasks/`) — consumed by consumer repos via `git::` remote includes. All atoms hidden (`#MISE hide=true`).
+- **Facade templates** (`templates/facades/`) — five `mise.<archetype>.toml` files (`go-service`, `go-lib`, `frontend`, `python`, `image`) that consumer repos copy as their `mise.toml`.
+- **Shared config files** (`configs/`) — fetched on demand by atoms via `curl` (no sync workflow; META_CONFIG_BASE override available). `.golangci.yml` is **excluded** — each Go consumer repo commits its own to encode `gofumpt.module-path` per module.
+- **Renovate preset** (`renovate-preset.json`) — org-level Renovate configuration.
 
 There is no buildable code in this repo. It is purely configuration and CI/CD infrastructure.
 
 ## How Configs Are Consumed
 
-**GitHub Actions workflows**: Other repos call workflows via `uses`:
+**GitHub Actions workflows**: Consumer repos call workflows via `uses`:
 ```yaml
 jobs:
-  ci:
-    uses: nics-dp/meta/.github/workflows/go-lint.yml@main
+  checks:
+    name: ${{ matrix.name }}
+    strategy:
+      matrix:
+        include:
+          - { name: "Go Lint", task: "go:lint-check" }
+          - { name: "Go Test", task: "go:test --race --coverage" }
+    uses: nics-dp/meta/.github/workflows/mise-task.yml@main
+    with:
+      name: ${{ matrix.name }}
+      task: ${{ matrix.task }}
 ```
 
-**Centralized config sync**: Sync workflows copy config files from `configs/` to consumer repos via PRs. Triggered weekly by `cron.yml` via matrix strategy, with repo-type-specific lists (`ALL_REPOS`, `GO_REPOS`, `WEB_REPOS`, `CODEQL_REPOS`).
-
-**CodeQL config sync**: The `sync-codeql.yml` workflow copies `configs/codeqls/<github-repo-name>.yml` directly as the repo's `.github/workflows/codeql.yml`. File names must match the GitHub repo name (e.g. `dcf-platform.yml` for `nics-dp/dcf-platform`).
-
-**Renovate**: Consumer repos reference the org preset via `renovate.json`:
-```json
-{
-  "extends": ["github>nics-dp/meta:renovate-preset"],
-  "ignoreDeps": ["actions/checkout", "github/codeql-action"]
-}
-```
-`ignoreDeps` is set in downstream repos (not in the preset), because `actions/checkout` and `github/codeql-action` are centrally managed by sync-codeql. The 11 repos with synced codeql.yml need this setting; patroni does not (no codeql.yml).
-
-**Mise task sharing**: Consumer repos pull shared task files from this repo via `git::` remote includes in their `mise.toml`:
+**Mise task sharing**: Consumer repos pull shared atomic tasks via `git::` remote include in their `mise.toml`:
 ```toml
 [task_config]
 includes = ["git::https://github.com/nics-dp/meta.git//.mise/tasks?ref=main"]
 ```
-This provides shared tasks for CI (`ci:*`), Docker Compose (`dc:*`), Go builds (`go:*`), git submodules (`gs:*`), SBOM (`sbom:*`), and ruler. Consumer repos can override or extend these with local task definitions.
+
+**Renovate**: Consumer repos reference the org preset via `renovate.json`:
+```json
+{
+  "extends": ["github>nics-dp/meta:renovate-preset"]
+}
+```
+
+**Shared configs (`configs/`)**: Atoms fetch raw URLs at runtime (no commit to consumer repos). Trap cleanup removes the downloaded config when atom exits. Note: `.golangci.yml` is **per-repo committed** (not shared via curl) — `go:lint-check` / `go:lint-fix` read consumer's own file because gofumpt requires per-module `module-path` setting.
 
 **PAT split**:
-- `GH_PAT_READ_NICSDP` is used for private module access, CodeQL private-repo access, and snapshot builds
-- `GH_PAT_RELEASE_NICSDP` is used by `release-please.yml` and release workflows so downstream release activity can be triggered
-- `GH_PAT_SYNC_NICSDP` is used by sync workflows (`cron.yml` + `sync-*.yml`) to create cross-repo PRs
+- `GH_PAT_READ_NICSDP` — private module access, CodeQL private-repo access, release/snapshot builds, `mise-task.yml` private-modules flag
+- `GH_PAT_RELEASE_NICSDP` — release-please.yml + release workflows (triggers downstream)
+- `DOCKERHUB_USERNAME` / `DOCKERHUB_TOKEN` — image-release.yml (Docker image push)
 
-Key files:
-- `configs/codeqls/<repo-name>.yml` - Per-repo CodeQL workflow configs (synced to `.github/workflows/codeql.yml`)
-- `configs/.golangci.yml` - Shared golangci-lint v2 config (gofumpt + goimports formatting, extensive linter set)
-- `configs/.commitlintrc.yml` - Shared commitlint config (conventional commits)
-- `configs/renovate.json` - Consumer repo Renovate config (manually copied to new repos)
-- `configs/.prettierrc.json` + `configs/.prettierignore` - Shared Prettier config (web repos)
-- `configs/eslint.config.js` - Shared ESLint flat config (web repos)
-- `configs/vitest.config.ts` - Shared Vitest config (web repos)
-- `configs/knip.json` - Shared Knip config (web repos)
-- `configs/lighthouserc.json` - Shared Lighthouse CI config (web repos)
-- `.mise/tasks/` - Shared mise task files (ci, dc, go, gs, sbom, ruler) consumed via `git::` remote includes
-- `renovate-preset.json` - Org-level Renovate preset (replaces Dependabot)
-- `mise.toml` - Tool version management and CI/SBOM aggregator tasks
+## Key Files
+
+- `.mise/tasks/{ci,iac,go,node,py,sbom,gs,meta,lib,ruler}/` — atomic tasks (all hidden)
+- `templates/facades/mise.<archetype>.toml` — facade templates for go-service / go-lib / frontend / python / image
+- `configs/eslint.config.js` — ESLint flat config (+ eslint-plugin-security)
+- `configs/.prettierrc.json` + `configs/.prettierignore` — Prettier shared
+- `configs/vitest.config.ts` — Vitest shared
+- `configs/knip.json` — Knip shared
+- `configs/lighthouserc.json` — Lighthouse CI shared
+- `configs/playwright.config.ts` — Playwright base (env-driven via `PW_*`)
+- `renovate-preset.json` — Org-level Renovate preset (replaces Dependabot)
+- `mise.toml` — Tool version management + meta repo's own aggregate tasks
 
 ## Workflow Architecture
 
-The reusable workflows in `.github/workflows/` accept inputs and secrets via `workflow_call`:
-
-### CI Pipeline (Go)
-- **`go-lint.yml`** - CI lint stage using mise + reviewdog (PR inline annotations via reviewdog/action-golangci-lint, falls back to `mise run ci:go-lint` on non-PR)
-- **`go-sec.yml`** - CI security scan using mise + sticky PR comment with results
-- **`go-vulncheck.yml`** - Go vulnerability check using mise + sticky PR comment (runs on all triggers, not just push)
-- **`go-test.yml`** - CI test + optional coverage report (two jobs: `test` and `report`, controlled by `run_report` input)
-- **`go-semgrep.yml`** - Semgrep static analysis for Go (`p/golang` ruleset, pinned container image)
-
-### CI Pipeline (Web / Bun)
-- **`bun-lint.yml`** - Web lint via ESLint (configurable command)
-- **`bun-typecheck.yml`** - TypeScript typecheck via tsc --noEmit (configurable command)
-- **`bun-build.yml`** - Web build via Vite (configurable command)
-- **`bun-audit.yml`** - Dependency audit via bun audit
-- **`bun-test.yml`** - Web unit tests via Vitest (configurable command)
-- **`bun-format-check.yml`** - Format check via Prettier (configurable command)
-- **`bun-knip.yml`** - Dead code detection via Knip (configurable command)
-- **`bun-lighthouse.yml`** - Lighthouse CI (configurable build command)
-- **`bun-bundle-size.yml`** - Bundle size check via size-limit (configurable build command)
-- **`bun-semgrep.yml`** - Semgrep static analysis for JS/TS (`p/javascript p/typescript` rulesets, pinned container image)
-
-### CI Pipeline (Shared)
-- **`hadolint.yml`** - Dockerfile linting via reviewdog/action-hadolint (auto-detects `Dockerfile*`, excludes `*.env`, PR-only, inline annotations). Trusted registries: docker.io, ghcr.io, dhi.io, gcr.io, quay.io
-- **`trivy-iac.yml`** - IaC security scanning (Dockerfile + compose files) via Trivy config scan -> SARIF + sticky PR comment
-- **`trivy-license.yml`** - License compliance checking via Trivy fs scan -> step summary + sticky PR comment
-- **`commitlint.yml`** - Commit message validation via wagoid/commitlint-github-action (PR-only, conventional commits)
-- **`actionlint.yml`** - Workflow YAML linting via reviewdog/action-actionlint (PR inline annotations, step summary on non-PR)
-- **`codeql.yml`** - CodeQL Advanced analysis with configurable language matrix and Go build
-- **`check-managed-files.yml`** - Blocks PRs that modify centrally-managed files (skips `feature/sync-ci-*` branches)
+### Core
+- **`mise-task.yml`** — Reusable. Inputs: `task`, `name`, `runs_on` (JSON via `fromJSON()`), `fetch-depth`, `private-modules`. Secret: `gh_pat`. Encapsulates checkout (SHA-pinned) + `jdx/mise-action@<sha>` + optional git private-modules config + run mise atom + step summary + enforce.
 
 ### Release & Build
-- **`release-please.yml`** - Automated release management via googleapis/release-please-action (conventional commits -> Release PR with changelog -> GitHub Release + tag). `workflow_call` only (reusable by consumer repos). Requires PAT (`gh_pat` or `GH_PAT_RELEASE_NICSDP` fallback) to trigger downstream workflows
-- **`go-release.yml`** - Go binary release pipeline (multi-arch cross-compile, cosign checksums, macOS notarize via quill, GitHub Release)
-- **`image-release.yml`** - Container image build with dual registry (DockerHub + GHCR), attestations, cosign image signing (keyless). Outputs `digest` for sbom-image
-- **`sbom-source.yml`** - Source code SBOM (CycloneDX 1.6 via anchore/sbom-action + parlay enrich) + Trivy + Grype vulnerability scan -> GitHub Release + Security tab
-- **`sbom-image.yml`** - Container image SBOM (CycloneDX 1.6 via anchore/sbom-action + parlay enrich) + Trivy + Grype vulnerability scan -> GitHub Release + Security tab
+- **`go-release.yml`** — Multi-arch Go binary release (cosign, macOS notarize via quill, GitHub Release).
+- **`image-release.yml`** — Docker image dual-registry (DockerHub + GHCR) + attestations + cosign keyless. Outputs `digest` for `sbom-image.yml`.
+- **`release-please.yml`** — googleapis/release-please-action (conventional commits → Release PR → GitHub Release + tag).
+- **`sbom-image.yml`** — Container image CycloneDX 1.6 SBOM (anchore/sbom-action + parlay enrich) + Trivy + Grype vuln scan → GitHub Release + Security tab.
 
-### Sync Workflows
-- **`sync-codeql.yml`** - Syncs `configs/codeqls/<repo>.yml` -> `.github/workflows/codeql.yml`
-- **`sync-commitlintrc.yml`** - Syncs `configs/.commitlintrc.yml` -> `.commitlintrc.yml`
-- **`sync-golangci.yml`** - Syncs `configs/.golangci.yml` -> `.golangci.yml`
-- **`sync-prettier.yml`** - Syncs `configs/.prettierrc.json` + `configs/.prettierignore`
-- **`sync-eslint-config.yml`** - Syncs `configs/eslint.config.js` -> `eslint.config.js`
-- **`sync-vitest-config.yml`** - Syncs `configs/vitest.config.ts` -> `vitest.config.ts`
-- **`sync-knip.yml`** - Syncs `configs/knip.json` -> `knip.json`
-- **`sync-lighthouserc.yml`** - Syncs `configs/lighthouserc.json` -> `lighthouserc.json`
+### CodeQL
+- **`codeql-reusable.yml`** — CodeQL Advanced analysis (configurable language matrix + Go build).
+- **`codeql.yml`** — meta repo's own CodeQL (workflow YAML scan only).
 
 ### Utility
-- **`notify-gchat.yml`** - PR/push/release event notifications to Google Chat
-- **`check-upstream-release.yml`** - Checks upstream repo for new releases, creates bump PR
-- **`artifacts-comment.yml`** - Lists build artifacts and upserts a PR comment with nightly.link download URLs
-
-### Scheduling
-- **`cron.yml`** - Weekly matrix trigger for all sync workflows across repos (ALL_REPOS, GO_REPOS, WEB_REPOS, CODEQL_REPOS)
+- **`artifacts-comment.yml`** — Sticky PR comment listing artifacts (nightly.link URLs).
+- **`notify-gchat.yml`** — Google Chat card notification.
 
 ### Meta CI
-- **`ci.yml`** - Meta repo's own CI: commitlint + actionlint for all workflow YAML files
+- **`ci.yml`** — meta repo's own CI: matrix calling `mise-task.yml` with `iac:actionlint` (workflow YAML lint via mise atom).
 
 ## Editing Guidelines
 
-- Config source files live in `configs/`; changes are synced to consumer repos via sync workflows + `cron.yml`
-- Per-repo CodeQL workflow configs live in `configs/codeqls/<github-repo-name>.yml` (must match GitHub repo name, e.g. `dcf-platform.yml`)
-- To add a new repo to sync, update the repo lists in `.github/workflows/cron.yml` (`ALL_REPOS`, `GO_REPOS`, `WEB_REPOS`, `CODEQL_REPOS`)
-- Shared mise task files live in `.mise/tasks/`; consumer repos include them via `git::` remote includes in `mise.toml`
-- Project templates in `golang-templates/` and `web-templates/` are reference files for new repo setup (workflow YAML + mise.toml)
-- Renovate preset changes in `renovate-preset.json` automatically apply to all consumer repos; `ignoreDeps` is set in downstream repos, not in the preset
-- Consumer repos need `.commitlintrc.yml` and `renovate.json` copied from `configs/`
+- New mise atom: add file under `.mise/tasks/<category>/<name>`, prepend `#MISE description=…` and `#MISE hide=true`. Make executable.
+- New facade vocabulary task: edit `templates/facades/mise.<archetype>.toml`. Don't add to atoms (facades only).
+- Shared config change in `configs/`: takes effect immediately for consumers (no sync workflow; raw URL fetched at atom runtime).
+- Renovate preset change in `renovate-preset.json`: applies to all consumer repos automatically.
+- Workflow YAML change: validate with `mise exec -- actionlint <file>` before commit.
+- Atom signature change: breaking change requires coordinated bump in all 15 consumer repos once `?ref=` is tagged (`v1`). Until tag is cut, `?ref=main` is mutable and `meta:bump` clears mise cache.
 
 
 Centralised AI agent instructions. Add coding guidelines, style guides, and project context here.

@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+#MISE description="Update Go dependencies via go get -u (use go:api-fix afterwards if APIs migrated)"
+#MISE hide=true
+#MISE depends_post=["go:install"]
+#MISE silent="stdout"
+
+go get -u ./...

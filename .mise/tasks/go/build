@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 #MISE description="Build Go binary from cmd/"
+#MISE hide=true
 #MISE raw=true
+#MISE silent="stdout"
 #USAGE arg "<name>" help="Binary name (auto-detected if cmd/ has only one entry)"
 # shellcheck disable=SC2154 # usage_name is set by mise USAGE
 

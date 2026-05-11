@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+#MISE description="Build Python wheel + sdist via uv build"
+#MISE hide=true
+#MISE raw=true
+#MISE silent="stdout"
+
+set -euo pipefail
+
+uv build

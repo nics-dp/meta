@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+#MISE description="Refresh shared task includes from nics-dp/meta"
+#MISE hide=true
+#MISE raw=true
+
+set -euo pipefail
+mise cache clear
+mise install

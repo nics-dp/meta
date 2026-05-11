@@ -1,9 +1,9 @@
 # Shared log functions — sourced by mise tasks, not executable
-# Requires gum (install via mise.toml tools).
+# Plain echo to stderr with level prefix; no external tool dependency.
 
-log_step() { gum log --level info "$1"; }
-log_info() { gum log --level info "$1"; }
-log_warn() { gum log --level warn "$1"; }
-log_error() { gum log --level error "$1"; }
+log_step()  { echo "[INFO]  $1" >&2; }
+log_info()  { echo "[INFO]  $1" >&2; }
+log_warn()  { echo "[WARN]  $1" >&2; }
+log_error() { echo "[ERROR] $1" >&2; }
 
 # vim: ft=sh

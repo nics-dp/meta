@@ -1,0 +1,239 @@
+#!/usr/bin/env bash
+#MISE description="JS/TS benchmark + compare via vitest bench. --save <label> to capture (multiple runs); no flag to diff old vs new"
+#MISE hide=true
+#MISE raw=true
+#MISE tools={bun="latest"}
+#USAGE flag "--save <label>" help="Save bench results to bench-<label>.json (typically 'old' or 'new')"
+#USAGE flag "--count <n>" help="Number of runs for statistical significance" default="5"
+#USAGE flag "--pattern <regex>" help="Filter by bench name pattern" default=""
+
+set -euo pipefail
+# shellcheck disable=SC2154
+label="${usage_save:-}"
+# shellcheck disable=SC2154
+count="${usage_count:-5}"
+# shellcheck disable=SC2154
+pattern="${usage_pattern:-}"
+
+META_CONFIG_BASE="${META_CONFIG_BASE:-https://raw.githubusercontent.com/nics-dp/meta/main/configs}"
+tmp_dir=""
+cleanup() {
+  rc=$?
+  rm -f vitest.config.ts
+  [ -n "$tmp_dir" ] && [ -d "$tmp_dir" ] && rm -rf "$tmp_dir"
+  exit "$rc"
+}
+trap cleanup EXIT
+curl -fsSL "$META_CONFIG_BASE/vitest.config.ts" -o vitest.config.ts
+
+if [ -n "$label" ]; then
+  out="bench-${label}.json"
+  tmp_dir=$(mktemp -d)
+
+  cmd_base=(bunx vitest bench --run --reporter=json)
+  [ -n "$pattern" ] && cmd_base+=(--testNamePattern="$pattern")
+
+  echo "Running benchmarks (count=$count, pattern=${pattern:-all}) -> $out"
+  for i in $(seq 1 "$count"); do
+    echo "==> Pass $i/$count"
+    "${cmd_base[@]}" --outputFile="$tmp_dir/run-$i.json"
+  done
+
+  bun --silent -e "
+const fs = require('fs');
+const dir = '$tmp_dir';
+const files = fs.readdirSync(dir).filter(f => f.startsWith('run-')).sort();
+function* walk(node, path = []) {
+  if (!node) return;
+  const list = Array.isArray(node) ? node : (node.tasks || node.files);
+  if (!list) return;
+  for (const t of list) {
+    const name = [...path, t.name].filter(Boolean).join(' > ');
+    const bench = t.result?.benchmark || t.benchmark;
+    if (bench && typeof bench.hz === 'number') yield [name, bench];
+    if (t.tasks || t.files) yield* walk(t, [...path, t.name].filter(Boolean));
+  }
+}
+const merged = {};
+for (const f of files) {
+  const data = JSON.parse(fs.readFileSync(\`\${dir}/\${f}\`, 'utf8'));
+  for (const [name, b] of walk(data)) {
+    (merged[name] ||= []).push({ hz: b.hz, mean: b.mean, rme: b.rme });
+  }
+}
+fs.writeFileSync('$out', JSON.stringify(merged, null, 2));
+const benchCount = Object.keys(merged).length;
+const sampleCount = Object.values(merged).reduce((s, a) => s + a.length, 0);
+console.log(\`Saved: \${benchCount} bench(es) × \${files.length} run(s) = \${sampleCount} samples\`);
+"
+  exit 0
+fi
+
+if [ ! -f bench-old.json ] || [ ! -f bench-new.json ]; then
+  cat <<'EOF' >&2
+Error: bench-old.json and bench-new.json required.
+
+Workflow:
+  1. (on baseline)  mise run node:bench-compare --save old
+  2. <make changes>
+  3. (on new code)  mise run node:bench-compare --save new
+  4. mise run node:bench-compare    # show diff
+EOF
+  exit 1
+fi
+
+# shellcheck disable=SC2016 # JS body kept literal; $ is JS, not bash
+bun --silent -e '
+const fs = require("fs");
+
+// === Numerical Recipes: lnGamma (Lanczos) ===
+function lnGamma(x) {
+  if (x < 0.5) {
+    return Math.log(Math.PI / Math.sin(Math.PI * x)) - lnGamma(1 - x);
+  }
+  const c = [
+    0.99999999999980993,
+    676.5203681218851,
+    -1259.1392167224028,
+    771.32342877765313,
+    -176.61502916214059,
+    12.507343278686905,
+    -0.13857109526572012,
+    9.9843695780195716e-6,
+    1.5056327351493116e-7,
+  ];
+  const g = 7;
+  x -= 1;
+  let a = c[0];
+  const t = x + g + 0.5;
+  for (let i = 1; i < c.length; i++) a += c[i] / (x + i);
+  return 0.5 * Math.log(2 * Math.PI) + (x + 0.5) * Math.log(t) - t + Math.log(a);
+}
+
+// === Numerical Recipes: Regularized incomplete beta via Lentzs continued fraction ===
+function incBetaCF(x, a, b) {
+  const MAX_ITER = 200;
+  const EPS = 3e-10;
+  const FPMIN = 1e-300;
+  const qab = a + b;
+  const qap = a + 1;
+  const qam = a - 1;
+  let c = 1;
+  let d = 1 - (qab * x) / qap;
+  if (Math.abs(d) < FPMIN) d = FPMIN;
+  d = 1 / d;
+  let h = d;
+  for (let m = 1; m <= MAX_ITER; m++) {
+    const m2 = 2 * m;
+    let aa = (m * (b - m) * x) / ((qam + m2) * (a + m2));
+    d = 1 + aa * d;
+    if (Math.abs(d) < FPMIN) d = FPMIN;
+    c = 1 + aa / c;
+    if (Math.abs(c) < FPMIN) c = FPMIN;
+    d = 1 / d;
+    h *= d * c;
+    aa = (-(a + m) * (qab + m) * x) / ((a + m2) * (qap + m2));
+    d = 1 + aa * d;
+    if (Math.abs(d) < FPMIN) d = FPMIN;
+    c = 1 + aa / c;
+    if (Math.abs(c) < FPMIN) c = FPMIN;
+    d = 1 / d;
+    const del = d * c;
+    h *= del;
+    if (Math.abs(del - 1) < EPS) break;
+  }
+  return h;
+}
+
+function incBeta(x, a, b) {
+  if (x <= 0) return 0;
+  if (x >= 1) return 1;
+  const lnBt = lnGamma(a + b) - lnGamma(a) - lnGamma(b)
+             + a * Math.log(x) + b * Math.log(1 - x);
+  const bt = Math.exp(lnBt);
+  if (x < (a + 1) / (a + b + 2)) {
+    return (bt * incBetaCF(x, a, b)) / a;
+  }
+  return 1 - (bt * incBetaCF(1 - x, b, a)) / b;
+}
+
+// === Student t CDF ===
+// P(T <= t) for t-distribution with df degrees of freedom.
+function tCDF(t, df) {
+  const x = df / (df + t * t);
+  const ib = incBeta(x, df / 2, 0.5);
+  return t < 0 ? 0.5 * ib : 1 - 0.5 * ib;
+}
+
+// === Welch t-test with Welch-Satterthwaite df correction ===
+function welchTTest(a, b) {
+  const sa = stats(a), sb = stats(b);
+  if (!sa || !sb || sa.n < 2 || sb.n < 2) return null;
+  const va = sa.std ** 2, vb = sb.std ** 2;
+  const se = Math.sqrt(va / sa.n + vb / sb.n);
+  if (se === 0) return null;
+  const t = (sa.mean - sb.mean) / se;
+  const num = (va / sa.n + vb / sb.n) ** 2;
+  const den = (va / sa.n) ** 2 / (sa.n - 1) + (vb / sb.n) ** 2 / (sb.n - 1);
+  const df = num / den;
+  const p = 2 * (1 - tCDF(Math.abs(t), df));
+  return { t, df, p };
+}
+
+function stats(arr) {
+  const n = arr.length;
+  if (n === 0) return null;
+  const mean = arr.reduce((s, x) => s + x, 0) / n;
+  if (n === 1) return { mean, std: 0, rme: 0, n };
+  const variance = arr.reduce((s, x) => s + (x - mean) ** 2, 0) / (n - 1);
+  const std = Math.sqrt(variance);
+  return { mean, std, rme: (std / mean) * 100, n };
+}
+
+// === Diff ===
+const oldData = JSON.parse(fs.readFileSync("bench-old.json", "utf8"));
+const newData = JSON.parse(fs.readFileSync("bench-new.json", "utf8"));
+
+const fmtHz   = (n) => n.toLocaleString("en-US", { maximumFractionDigits: 0 });
+const fmtSign = (d) => (d > 0 ? "+" : "") + d.toFixed(2) + "%";
+const fmtP    = (p) => p < 0.001 ? "<0.001" : p.toFixed(3);
+
+const rows = [];
+for (const name of Object.keys(newData)) {
+  if (!oldData[name]) continue;
+  const oArr = oldData[name].map(x => x.hz);
+  const nArr = newData[name].map(x => x.hz);
+  const oS = stats(oArr), nS = stats(nArr);
+  const tt = welchTTest(oArr, nArr);
+  rows.push({
+    name,
+    oS, nS,
+    delta: ((nS.mean - oS.mean) / oS.mean) * 100,
+    tt,
+  });
+}
+
+if (rows.length === 0) {
+  console.error("No matching benchmarks. JSON format may differ from expected.");
+  process.exit(2);
+}
+
+const w1 = Math.max(4, ...rows.map(r => r.name.length));
+const head = `${"name".padEnd(w1)}  ${"old ops/s ± rme".padStart(22)}  ${"new ops/s ± rme".padStart(22)}  ${"delta".padStart(8)}  ${"p".padStart(7)}  sig`;
+console.log(head);
+console.log("-".repeat(head.length));
+for (const r of rows) {
+  const oldStr = `${fmtHz(r.oS.mean)} ± ${r.oS.rme.toFixed(1)}%`;
+  const newStr = `${fmtHz(r.nS.mean)} ± ${r.nS.rme.toFixed(1)}%`;
+  let pStr = "n/a", sig = "?";
+  if (r.tt) {
+    pStr = fmtP(r.tt.p);
+    sig = r.tt.p < 0.001 ? "***" : r.tt.p < 0.01 ? "**" : r.tt.p < 0.05 ? "*" : "~";
+  }
+  console.log(
+    `${r.name.padEnd(w1)}  ${oldStr.padStart(22)}  ${newStr.padStart(22)}  ${fmtSign(r.delta).padStart(8)}  ${pStr.padStart(7)}  ${sig}`
+  );
+}
+console.log("");
+console.log("sig: *** p<0.001  ** p<0.01  * p<0.05  ~ not significant  ? insufficient samples");
+'

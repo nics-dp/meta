@@ -1,6 +1,0 @@
-#!/usr/bin/env bash
-#MISE description="Tidy and vendor Go modules"
-#MISE raw=true
-
-go mod tidy
-go mod vendor

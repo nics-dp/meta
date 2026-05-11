@@ -1,0 +1,88 @@
+# Frontend (JS/TS via bun) facade.
+
+[settings]
+jobs = 16
+task.output = "keep-order"
+unix_default_inline_shell_args = "bash -c"
+
+# ------------------------------------------------------------------------------
+[tools]
+# JS/TS runtime
+bun = "latest"
+
+[env]
+# Override meta config base if forking nics-dp/meta
+# META_CONFIG_BASE = "https://raw.githubusercontent.com/your-org/meta/main/configs"
+
+# Playwright env (consumed by configs/playwright.config.ts):
+# PW_BASE_URL    = "http://localhost:5173"
+# PW_DEV_CMD     = "bun run dev"
+# PW_TEST_DIR    = "./e2e"
+# PW_NO_SERVER   = "1"   # set if dev server already running
+
+# Bundle size scan target (default: dist)
+# BUNDLE_SIZE_DIR = "dist"
+
+# ------------------------------------------------------------------------------
+[task_config]
+includes = ["git::https://github.com/nics-dp/meta.git//.mise/tasks?ref=main"]
+
+# ==============================================================================
+# Facade tasks
+# ==============================================================================
+[tasks.init]
+silent = "stdout"
+description = "Install JS deps + Playwright browsers"
+depends = ["node:install", "node:e2e-install"]
+
+[tasks.clean]
+silent = "stdout"
+description = "Wipe Node artifacts"
+depends = ["node:clean"]
+
+[tasks.build]
+silent = "stdout"
+description = "Build frontend bundle"
+depends = ["node:build"]
+
+[tasks.run]
+description = "Run a bun script (default: dev)"
+depends = ["node:run"]
+
+[tasks.test]
+description = "Run frontend unit tests"
+depends = ["node:test"]
+
+[tasks.bench]
+description = "Run vitest benchmarks (single pass)"
+run = "bunx vitest bench --run"
+
+[tasks.update]
+silent = "stdout"
+description = "Bump deps and refresh shared atoms"
+depends = ["node:update", "meta:bump"]
+
+[tasks.ci]
+description = "Run all CI checks"
+depends = [
+  "node:lint-fix",
+  "node:format-fix",
+  "node:typecheck",
+  "node:knip",
+  "node:sast",
+  "node:audit",
+  # "node:deptree",
+  "node:bundle-size",
+  "node:e2e",
+  "node:lighthouse",
+  "ci:semgrep typescript javascript",
+  "iac:trivy",
+]
+
+[tasks.sbom]
+description = "Generate enriched SBOM and scan"
+depends = ["sbom:trivy", "sbom:grype"]
+
+[tasks.all]
+description = "init -> build -> test -> ci"
+depends = ["init", "build", "test", "ci"]

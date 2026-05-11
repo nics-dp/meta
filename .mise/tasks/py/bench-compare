@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+#MISE description="Benchmark + compare via pytest-benchmark. --save <label> to capture; no flag to diff old vs new"
+#MISE hide=true
+#MISE raw=true
+#USAGE flag "--save <label>" help="Save bench results under .benchmarks/ as <label>"
+#USAGE flag "--pattern <regex>" help="Filter benchmarks by name (-k)" default=""
+
+set -euo pipefail
+# shellcheck disable=SC1091
+source "$(dirname "$0")/../lib/py-env"
+# shellcheck disable=SC2154
+label="${usage_save:-}"
+# shellcheck disable=SC2154
+pattern="${usage_pattern:-}"
+
+if [ -n "$label" ]; then
+  cmd=("${PY_RUNNER_ARR[@]}" pytest "$PY_TEST_PATHS" --benchmark-only "--benchmark-save=$label")
+  [ -n "$pattern" ] && cmd+=("-k" "$pattern")
+  echo "Running benchmarks -> .benchmarks/<machine>/<id>_${label}.json"
+  "${cmd[@]}"
+  exit 0
+fi
+
+# Diff: pytest-benchmark compare auto-picks the two most recent runs by default.
+# Pass explicit IDs as PY_BENCH_OLD / PY_BENCH_NEW to override.
+old_ref="${PY_BENCH_OLD:-old}"
+new_ref="${PY_BENCH_NEW:-new}"
+
+echo "Comparing benchmark sessions: $old_ref vs $new_ref"
+echo "(override via PY_BENCH_OLD / PY_BENCH_NEW env vars)"
+"${PY_RUNNER_ARR[@]}" pytest-benchmark compare "$old_ref" "$new_ref" --columns=mean,median,stddev,ops --histogram=bench-compare

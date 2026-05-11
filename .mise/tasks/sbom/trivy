@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 #MISE description="Scan SBOM for vulnerabilities with Trivy"
+#MISE hide=true
 #MISE raw=true
 #MISE depends=["sbom:enrich"]
+#MISE tools={trivy="latest"}
 
 trivy sbom enriched-source.cdx.json

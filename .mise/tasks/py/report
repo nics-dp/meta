@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+#MISE description="Generate HTML coverage report from coverage.xml / .coverage"
+#MISE hide=true
+#MISE raw=true
+
+set -euo pipefail
+# shellcheck disable=SC1091
+source "$(dirname "$0")/../lib/py-env"
+# shellcheck disable=SC1091
+source "$(dirname "$0")/../lib/logs"
+
+if [ ! -f .coverage ] && [ ! -f "$PY_COVERAGE_FILE" ]; then
+  log_warn ".coverage and $PY_COVERAGE_FILE not found. Run 'mise run py:test --coverage' first."
+  exit 0
+fi
+
+log_step "Generating HTML coverage report: htmlcov/"
+"${PY_RUNNER_ARR[@]}" coverage html
+
+log_step "Coverage summary:"
+"${PY_RUNNER_ARR[@]}" coverage report --show-missing

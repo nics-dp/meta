@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+#MISE description="Cyclomatic complexity + maintainability index via radon (xenon for strict gating)"
+#MISE hide=true
+#MISE raw=true
+#USAGE flag "--strict" help="Fail on grade B or worse (uses xenon)"
+
+set -euo pipefail
+# shellcheck disable=SC1091
+source "$(dirname "$0")/../lib/py-env"
+
+# shellcheck disable=SC2154
+if [ "${usage_strict:-false}" = "true" ]; then
+  uvx --from xenon xenon --max-absolute B --max-modules A --max-average A "$PY_LINT_PATHS"
+else
+  echo "=== Cyclomatic Complexity (cc) ==="
+  uvx radon cc "$PY_LINT_PATHS" -a -s
+  echo ""
+  echo "=== Maintainability Index (mi) ==="
+  uvx radon mi "$PY_LINT_PATHS" -s
+fi

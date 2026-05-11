@@ -1,783 +1,286 @@
 # meta
 
-nics-dp 組織的共用設定與 CI/CD 基礎設施 repo。本 repo 不包含可建置的程式碼，僅提供 reusable workflows 和共用設定檔給其他 nics-dp repos 使用。
+nics-dp 組織共用 mise tasks + reusable GitHub Actions workflows + 共用設定檔之 meta repo。本 repo 無可建置程式碼，純配置與 CI/CD 基礎設施。
 
 ## 內容總覽
 
-| 目錄/檔案              | 說明                                                                                                   |
-| ---------------------- | ------------------------------------------------------------------------------------------------------ |
-| `.github/workflows/`   | Reusable GitHub Actions workflows                                                                      |
-| `.mise/tasks/`         | 共用 mise task 檔案 (ci, dc, go, gs, sbom, ruler)，透過 `git::` remote includes 供 consumer repos 使用 |
-| `configs/`             | Sync 來源設定檔 (commitlintrc, renovate, golangci, prettier, eslint, vitest, knip, lighthouserc)       |
-| `configs/codeqls/`     | 各 repo 的 CodeQL workflow 設定 (`<repo-name>.yml`)                                                    |
-| `golang-templates/`    | Go 專案模板 (workflows + `mise.toml`)                                                                  |
-| `web-templates/`       | Web 專案模板 (workflows + `mise.toml`)                                                                 |
-| `renovate-preset.json` | Org-level Renovate 設定 preset                                                                         |
+| 目錄/檔案              | 說明                                                                                                                                                                                       |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `.github/workflows/`   | Reusable GitHub Actions workflows (`mise-task.yml` 為核心；release / sbom-image / codeql / utility 等)                                                                                       |
+| `.mise/tasks/`         | 共用 mise atomic tasks (`ci/`, `iac/`, `go/`, `node/`, `py/`, `sbom/`, `gs/`, `meta/`, `lib/`)，consumer 透過 `git::` remote includes 引用                                                   |
+| `templates/facades/`   | 5 個 mise.toml facade templates (`mise.go-service.toml`, `mise.go-lib.toml`, `mise.frontend.toml`, `mise.python.toml`, `mise.image.toml`) — copy 後依需求加 repo-specific 即可使用 |
+| `configs/`             | 共用設定檔 (`.golangci.yml`, `eslint.config.js`, `.prettierrc.json`, `.prettierignore`, `vitest.config.ts`, `knip.json`, `lighthouserc.json`, `playwright.config.ts`)                       |
+| `renovate-preset.json` | Org-level Renovate preset (`extends` from consumer `renovate.json`)                                                                                                                        |
 
-## 如何引用 Reusable Workflows
+## Mise Tasks — Facade Pattern
 
-Consumer repo 透過 `uses` 呼叫本 repo 的 reusable workflows：
-
-```yaml
-jobs:
-  lint:
-    uses: nics-dp/meta/.github/workflows/go-lint.yml@main
-    secrets:
-      gh_pat: ${{ secrets.GH_PAT_READ_NICSDP }}
-```
-
-所有 workflows 固定引用 `@main` 分支。
-
-## 如何引用共用 Mise Tasks
-
-Consumer repo 透過 `git::` remote includes 引用本 repo 的共用 mise task 檔案：
+Consumer repo 採 facade pattern：自家 `mise.toml` 暴露標準頂層 vocabulary，底層 `depends` 到本 repo atoms。`mise tasks ls` 只看到 facade，atoms 全 hidden。
 
 ```toml
 [task_config]
 includes = ["git::https://github.com/nics-dp/meta.git//.mise/tasks?ref=main"]
 ```
 
-提供的共用 tasks：
+Facade templates 於 `templates/facades/`，包含 `[settings]` / `[tools]` / `[env]` / `[task_config]` / facade `[tasks.*]` 全套。Consumer 複製進自家 `mise.toml` 後依需求改 `[env]` 或加 repo-specific tasks 即可。
 
-| 類別     | Tasks                                                                                  | 說明                                |
-| -------- | -------------------------------------------------------------------------------------- | ----------------------------------- |
-| `ci:*`   | commitlint, go-lint, go-sec, go-vulncheck, hadolint, semgrep, trivy-iac, trivy-license | CI 檢查                             |
-| `dc:*`   | clean, down, pull, rec, up                                                             | Docker Compose 生命週期管理         |
-| `go:*`   | build, coverage-report, local, mod, remote, run, upgrade                               | Go 建置與模組管理                   |
-| `gs:*`   | clone, update                                                                          | Git submodules                      |
-| `sbom:*` | source, enrich, trivy, grype                                                           | SBOM 產生與漏洞掃描                 |
-| `lib/*`  | logs                                                                                   | 共用函式庫 (供 tasks source 使用)   |
-| `ruler`  | —                                                                                      | 編譯 ruler 至 AGENTS.md / CLAUDE.md |
+### Atomic API
 
-Consumer repos 可在自己的 `mise.toml` 中定義同名 task 來覆寫或擴充。
+所有 atoms 標 `#MISE hide=true`，consumer 透過 `depends` 呼叫。Atom 簽名一旦穩定（Phase E tag `v1`）視為 versioned API，breaking change 須協調升 ref。
 
-> **`go:local` / `go:remote` 注意事項：** `go:local` 會自動停用 `.golangci.yml` 中的 `gomoddirectives` 規則，並建立 `.semgrepignore` 以排除 vendored local libs。`go:remote` 會還原這些變更。`.semgrepignore` 不應被 commit（`golang-templates/.gitignore` 已預設忽略；現有 repo 需手動將 `.semgrepignore` 加入 `.gitignore`）。
+| 類別      | Atoms                                                                                                                                                                                          | 用途                                                                                                                                                                                                                                                                                                                                                                                                |
+| --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ci:*`    | semgrep, trivy-license                                                                                                                                                                         | 通用 CI 檢查（語言中立）                                                                                                                                                                                                                                                                                                                                                                            |
+| `iac:*`   | trivy, img:hadolint, actionlint                                                                                                                                                                | IaC misconfig + Dockerfile lint + workflow YAML lint                                                                                                                                                                                                                                                                                                                                                |
+| `go:*`    | api-fix, audit, build, bench-compare, clean, dead-code, deptree, generate, install, lib-local, lib-remote, lint-check, lint-fix, report, run, sast, test, update                               | Go 建置/測試/Lint/安全/模組。`go:test` 預設只跑 unit；flags：`--race`、`--coverage`、`--bench [--pattern X]`、`--full`；`go:report` 從 coverage.out 產 HTML+MD（自動讀 `go.mod` module path 解析 component）；`go:bench-compare` 跑 benchstat；`go:dead-code` 用 `cmd/deadcode` whole-program；`go:deptree` 用 `go mod graph`；路徑/tags/coverpkg 由 `lib/go-env` auto-detect            |
+| `node:*`  | install, build, bench-compare, bundle-size, clean, deptree, run, test, e2e, e2e-install, lint-check, lint-fix, format-check, format-fix, typecheck, sast, audit, update, knip, lighthouse      | JS/TS via bun。`lint`/`test`/`format`/`knip`/`lighthouse` 拉 `configs/` shared；e2e 用 Playwright；`node:clean [--deep]` 清 transient；`node:bench-compare` 跑 vitest bench × `--count` 後 merge JSON，無 flag 列對比 (mean ± rme + Welch t-test 完整 p-value)；`node:bundle-size` 偵 `.size-limit` config 用 size-limit，否則 fallback du+gzip |
+| `py:*`    | install, build, audit, bench-compare, clean, complexity, dead-code, deptree, format-check, format-fix, license-custom, lint-check, lint-fix, profile, report, run, safety-db, sast, sbom-custom, test, typecheck, update | Python via uv + ruff + pytest + bandit + pip-audit + ty。`py:sast` (bandit)；`py:typecheck` (ty Beta / `--pyrefly`)；`py:dead-code` (vulture)；`py:complexity` (radon/xenon)；`py:deptree` (uv tree)；`py:safety-db` (safety<3)；`py:license-custom` (pip-licenses)；`py:sbom-custom` (cyclonedx-py)；`py:profile` 預設 cProfile，flags：`--instrument`/`--spy`/`--mem`/`--scalene`；env override 由 `lib/py-env` |
+| `sbom:*`  | source, enrich, trivy, grype                                                                                                                                                                   | Source SBOM 產生與漏洞掃描                                                                                                                                                                                                                                                                                                                                                                          |
+| `gs:*`    | clone, update                                                                                                                                                                                  | Git submodules                                                                                                                                                                                                                                                                                                                                                                                      |
+| `meta:*`  | bump                                                                                                                                                                                           | 清 mise tasks cache 強制重抓 atom includes                                                                                                                                                                                                                                                                                                                                                          |
+| `lib/*`   | logs, go-env, py-env                                                                                                                                                                           | 內部 sourced helper library                                                                                                                                                                                                                                                                                                                                                                         |
+| `ruler`   | —                                                                                                                                                                                              | 編譯 ruler 至 AGENTS.md / CLAUDE.md                                                                                                                                                                                                                                                                                                                                                                 |
+
+`mise tasks ls --hidden` 列出全部 atoms。
+
+### Facade Vocabulary
+
+| Facade   | 語意                                                                |
+| -------- | ------------------------------------------------------------------- |
+| `init`   | bootstrap deps, hooks, submodules                                   |
+| `clean`  | wipe build artifacts / caches / transient state                     |
+| `build`  | 產 binary / artifact                                                |
+| `run`    | 本機跑 service                                                      |
+| `test`   | unit / integration tests                                            |
+| `bench`  | benchmarks                                                          |
+| `ci`     | 全部 CI 檢查（lint + sast + audit + dead-code + deptree + semgrep + ...）|
+| `sbom`   | 產 enriched SBOM + 掃描                                             |
+| `update` | bump deps + refresh atom includes (`meta:bump`) + update submodules |
+| `all`    | 便利組合：`init` → `build` → `test` → `ci`                          |
+
+Repo-specific concepts (`stg:*`, `pgroll:*`, `benchmark:*`, `spec`, `example:*` 等) 留 repo 本地，不進 facade 層。
+
+### Override 規則
+
+Consumer 在自家 `mise.toml` 定義同名 task 即覆寫（mise 偏好近檔）。`update` facade 用 `meta:bump` 清 mise cache 強制下次 run 重抓 `main`；一旦 ref 改成 tag (`v1`)，`meta:bump` 變 no-op，須手動改 ref。
+
+### Go atoms 之 env 覆寫
+
+`go:test` / `go:report` 透過 `lib/go-env` 自動偵測：
+
+| Env var          | Default                                                     | 用途                               |
+| ---------------- | ----------------------------------------------------------- | ---------------------------------- |
+| `GO_TEST_TAGS`   | `test`                                                      | `-tags=` build tags（空字串則略過）|
+| `GO_TEST_PATHS`  | `./test/...`（如 `test/` 存在）/ `./...`                    | 測試目標 paths                     |
+| `GO_TEST_MOD`    | `vendor`（如 `vendor/` 存在）/ `mod`                        | `-mod=` 模式                       |
+| `GO_COVERPKG`    | `<go.mod module>/internal/...`（如 `internal/` 存在）/ empty | `-coverpkg=` 範圍                  |
+| `CGO_ENABLED`    | `1`                                                         | race detector 須 cgo               |
+
+`go:report` 額外自動讀 `go.mod` module path 解析 component（支援短 module 名與 hostname-style `github.com/<org>/<repo>` path）。
+
+### Python / Node atoms env 覆寫
+
+`py:*` 透過 `lib/py-env`：`PY_RUNNER` (default `uv run --group test`)、`PY_TEST_PATHS`、`PY_LINT_PATHS`、`PY_BANDIT_PATHS`、`PY_BANDIT_EXCLUDE`、`PY_COVERAGE_FILE`。
+
+`node:bundle-size` 用 `BUNDLE_SIZE_DIR` 指定掃描目錄（default `dist`）。
+
+### Transient 檔 — gitignore 建議
+
+Atoms 跑完會在 repo 根產 transient 檔。`mise run go:clean` / `node:clean` / `py:clean` 可清，但建議直接列 `.gitignore`：
+
+```gitignore
+# Go
+coverage.out
+coverage.html
+coverage.md
+bench-*.txt
+bin/
+
+# Node
+dist/
+build/
+.next/
+.turbo/
+.vite/
+coverage/
+playwright-report/
+test-results/
+.lighthouseci/
+.eslintcache
+bench-*.json
+
+# Python
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+coverage.xml
+htmlcov/
+sbom.json
+sbom-py.json
+__pycache__/
+.benchmarks/
+dist/
+build/
+.venv/
+
+# SBOM artifacts (all langs，sbom facade 產出)
+enriched-source.cdx.json
+sbom-source.cdx.json
+```
+
+Atoms 之 trap cleanup 結束時清 curl 下來的 shared config (`eslint.config.js`、`.prettierrc.json`、`vitest.config.ts`、`playwright.config.ts`、`knip.json`、`lighthouserc.json`)，但 atom 中斷時可能殘留 — 若 repo 不另放可一併 ignore。
+
+> **`.golangci.yml` 例外**：由 consumer repo **自家 commit**（非 curl），須含 `gofumpt.module-path: <repo-module>` 設定（v2.12.2 自動推導對無 `.` 模組名會誤判 stdlib，致 gci↔gofumpt import 互相 false positive）。範本見 `templates/facades/.golangci.yml.template`（如有）或直接 ref 既有 Go repo 範本。
+
+> **`go:lib-local` / `go:lib-remote` 注意事項：**
+> 兩 atom 由 env 驅動：
+> ```toml
+> GO_LIB_LOCAL  = "github.com/nics-dp/libdcf=../libdcf github.com/nics-dp/ZenQuery=../ZenQuery"
+> GO_LIB_REMOTE = "github.com/nics-dp/libdcf@dev github.com/nics-dp/ZenQuery@dev"
+> ```
+> `go:lib-local` 自動停用 repo 自家 `.golangci.yml` 中 `gomoddirectives` 規則並建立 `.semgrepignore` block 排除 vendored libs。`go:lib-remote` 還原。`.semgrepignore` 不應 commit（加入 `.gitignore`）。
 
 ---
 
 ## CI Workflows
 
-### go-lint.yml — 程式碼檢查
+### mise-task.yml — Reusable Mise Task Runner (核心)
 
-PR 時使用 reviewdog inline annotation，非 PR 時執行 `mise run ci:go-lint` (golangci-lint v2)。
+封裝 `actions/checkout` + `jdx/mise-action` + 私模 git config + run + summary + enforce。Action 版本中央 pin 於此檔，下游無需各自 pin。
+
+Consumer ci.yml 用 matrix 呼叫：
 
 ```yaml
-uses: nics-dp/meta/.github/workflows/go-lint.yml@main
-secrets:
-  gh_pat: ${{ secrets.GH_PAT_READ_NICSDP }} # 選用，存取私有模組
+jobs:
+  checks:
+    name: ${{ matrix.name }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: "Go Lint",       task: "go:lint-check" }
+          - { name: "Go SAST",       task: "go:sast" }
+          - { name: "Go Audit",      task: "go:audit" }
+          - { name: "Go Test",       task: "go:test --race --coverage" }
+          - { name: "Semgrep",       task: "ci:semgrep golang" }
+          - { name: "Trivy IaC",     task: "iac:trivy" }
+          - { name: "Hadolint",      task: "iac:img:hadolint" }
+          - { name: "Trivy License", task: "ci:trivy-license" }
+    uses: nics-dp/meta/.github/workflows/mise-task.yml@main
+    with:
+      name: ${{ matrix.name }}
+      task: ${{ matrix.task }}
+      runs_on: '{"group":"releasers"}'
+      private-modules: true
+    secrets:
+      gh_pat: ${{ secrets.GH_PAT_READ_NICSDP }}
 ```
 
-| 參數              | 類型    | 預設值 | 說明                     |
-| ----------------- | ------- | ------ | ------------------------ |
-| `go_private_full` | boolean | `true` | 設定 GOPRIVATE/GONOSUMDB |
+| Input             | Type    | Default          | 用途                                                          |
+| ----------------- | ------- | ---------------- | ------------------------------------------------------------- |
+| `task`            | string  | required         | mise atom 名稱 (e.g., `go:lint-check`、`ci:semgrep golang`)   |
+| `name`            | string  | task             | display name for GH job summary                               |
+| `runs_on`         | string  | `'"ubuntu-latest"'` | runner（JSON 經 `fromJSON()` 解析；可傳 `'{"group":"X"}'`） |
+| `fetch-depth`     | number  | `1`              | git fetch depth                                               |
+| `private-modules` | boolean | `false`          | 啟用 GH PAT git config for private modules                    |
+
+Secret `gh_pat`：required when `private-modules=true`。
+
+每 job 結尾自動 emit `## <name>` block 至 GitHub Actions step summary，含 ✅/❌ 狀態 + `<details>` 包 tail 300 行 stdout/stderr。
 
 ---
 
-### go-sec.yml — 靜態安全掃描
+### Release & Build
 
-執行 gosec 靜態安全掃描，結果以 sticky PR comment 回報。
+| Workflow             | 用途                                                                                                                       |
+| -------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `go-release.yml`     | Go binary 跨平台建置 + cosign 簽章 + 多平台 SBOM；3 jobs：`prepare` → `build` (matrix) → `release`                          |
+| `image-release.yml`  | Docker image dual registry (DockerHub + GHCR) + BuildKit SBOM + SLSA provenance + Sigstore attestation + cosign 簽章       |
+| `release-please.yml` | googleapis/release-please-action 自動建 Release PR (含 changelog) → merge 後建 GitHub Release + tag。Caller 傳 `release_type` (`go`/`node`/`python`/`simple`) 與 `gh_pat` (PAT 觸發下游 workflow，非 `GITHUB_TOKEN`) |
+| `sbom-source.yml`    | Source 端 CycloneDX SBOM (anchore/sbom-action) + parlay 增強 + Trivy/Grype 漏洞掃描 → release-mode 上傳至 GitHub Release / snapshot-mode 留 workflow artifact |
+| `sbom-image.yml`     | Container image CycloneDX 1.6 SBOM + parlay 增強 + Trivy/Grype 漏洞掃描 → GitHub Release + Security tab                    |
 
-```yaml
-uses: nics-dp/meta/.github/workflows/go-sec.yml@main
-secrets:
-  gh_pat: ${{ secrets.GH_PAT_READ_NICSDP }}
-```
-
-| 參數              | 類型    | 預設值 | 說明                     |
-| ----------------- | ------- | ------ | ------------------------ |
-| `go_private_full` | boolean | `true` | 設定 GOPRIVATE/GONOSUMDB |
+詳見各 workflow 內 `workflow_call` 之 `inputs` / `secrets` 宣告。
 
 ---
 
-### go-vulncheck.yml — Go 漏洞檢查
+### CodeQL
 
-執行 `mise run ci:go-vulncheck` (govulncheck)，結果以 sticky PR comment 回報。
-
-```yaml
-uses: nics-dp/meta/.github/workflows/go-vulncheck.yml@main
-secrets:
-  gh_pat: ${{ secrets.GH_PAT_READ_NICSDP }}
-```
-
-| 參數              | 類型    | 預設值 | 說明                     |
-| ----------------- | ------- | ------ | ------------------------ |
-| `go_private_full` | boolean | `true` | 設定 GOPRIVATE/GONOSUMDB |
+| Workflow                | 用途                                                                                                       |
+| ----------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `codeql-reusable.yml`   | CodeQL Advanced 分析 reusable workflow。Inputs：`matrix-include` (JSON array of `{language, build-mode}` entries — 例 `[{"language":"actions","build-mode":"none"},{"language":"go","build-mode":"manual"}]`)、`go-cgo-enabled`、`use-private-go-modules`、`submodules` |
+| `codeql.yml` (meta 自身) | meta repo 自家 CodeQL workflow，僅掃描 `actions` 語言（workflow YAML）                                     |
 
 ---
 
-### go-semgrep.yml — Semgrep 靜態分析 (Go)
+### Utility
 
-使用 Semgrep 對 Go 程式碼進行靜態安全掃描。
-
-```yaml
-uses: nics-dp/meta/.github/workflows/go-semgrep.yml@main
-```
-
-| 參數     | 類型   | 預設值     | 說明                                        |
-| -------- | ------ | ---------- | ------------------------------------------- |
-| `config` | string | `p/golang` | Semgrep config/ruleset (空格分隔，支援多組) |
+| Workflow                    | 用途                                                          |
+| --------------------------- | ------------------------------------------------------------- |
+| `artifacts-comment.yml`     | PR 留言列當前 run artifacts，含 [nightly.link](https://nightly.link) 下載連結 |
+| `notify-gchat.yml`          | Google Chat 卡片通知                                          |
 
 ---
 
-### go-test.yml — 單元測試
+### Meta CI
 
-執行 `mise run ci:test`，可選產出覆蓋率報告。
-
-```yaml
-uses: nics-dp/meta/.github/workflows/go-test.yml@main
-with:
-  run_report: true # 選用，產出覆蓋率報告
-secrets:
-  gh_pat: ${{ secrets.GH_PAT_READ_NICSDP }}
-```
-
-| 參數              | 類型    | 預設值             | 說明                             |
-| ----------------- | ------- | ------------------ | -------------------------------- |
-| `go_private_full` | boolean | `true`             | 設定 GOPRIVATE/GONOSUMDB         |
-| `test_command`    | string  | `mise run ci:test` | 測試指令 (需產出 `coverage.out`) |
-| `run_report`      | boolean | `false`            | 是否執行 report job              |
-
-**前提:** Consumer repo 的 mise.toml 需有 `ci:test` task，且產出 `coverage.out`。
-
----
-
-### hadolint.yml — Dockerfile Lint
-
-PR-only，使用 reviewdog 對 Dockerfile 進行 inline annotation。自動偵測 `Dockerfile*` (排除 `*.env`)。
-
-```yaml
-uses: nics-dp/meta/.github/workflows/hadolint.yml@main
-```
-
-無需額外輸入參數。
-
----
-
-### trivy-iac.yml — IaC 安全掃描
-
-對 Dockerfile 和 compose 檔案執行 Trivy config scan，產出 SARIF + sticky PR comment。
-
-```yaml
-uses: nics-dp/meta/.github/workflows/trivy-iac.yml@main
-permissions:
-  actions: read
-  contents: read
-  pull-requests: write
-  security-events: write
-```
-
-無需額外輸入參數。呼叫端須授予 `actions: read`、`contents: read`、`pull-requests: write` 與 `security-events: write` 權限。
-
----
-
-### trivy-license.yml — License 合規檢查
-
-執行 Trivy fs scan 檢查依賴 license 合規性。
-
-```yaml
-uses: nics-dp/meta/.github/workflows/trivy-license.yml@main
-secrets:
-  gh_pat: ${{ secrets.GH_PAT_READ_NICSDP }} # 選用，Go repos 存取私有模組
-```
-
-| 參數              | 類型    | 預設值 | 說明                     |
-| ----------------- | ------- | ------ | ------------------------ |
-| `go_private_full` | boolean | `true` | 設定 GOPRIVATE/GONOSUMDB |
-
-> Web repos 不需要傳 `gh_pat`，因為不存取私有 Go modules。
-
----
-
-### commitlint.yml — Commit 訊息驗證
-
-PR-only，使用 wagoid/commitlint-github-action 驗證 conventional commits。
-
-```yaml
-uses: nics-dp/meta/.github/workflows/commitlint.yml@main
-permissions:
-  contents: read
-  pull-requests: read
-```
-
-無需額外輸入參數。呼叫端須授予 `contents: read` 與 `pull-requests: read` 權限。
-
----
-
-### actionlint.yml — Workflow YAML Lint
-
-PR 時使用 reviewdog inline annotation，非 PR 時輸出至 step summary。
-
-```yaml
-uses: nics-dp/meta/.github/workflows/actionlint.yml@main
-```
-
-| 參數                 | 類型   | 預設值    | 說明                               |
-| -------------------- | ------ | --------- | ---------------------------------- |
-| `actionlint-version` | string | `v1.7.11` | actionlint 版本 (僅非 PR 路徑使用) |
-
----
-
-### check-managed-files.yml — 集中管理檔案保護
-
-檢查 PR 是否修改了由 meta 集中管理的檔案，若有則 CI 失敗。自動跳過 sync workflow 建立的 PR (`feature/sync-ci-*` 分支)。
-
-```yaml
-uses: nics-dp/meta/.github/workflows/check-managed-files.yml@main
-```
-
-| 參數            | 類型   | 預設值   | 說明                     |
-| --------------- | ------ | -------- | ------------------------ |
-| `managed_files` | string | (見下方) | 逗號分隔的受保護檔案路徑 |
-
-預設受保護檔案: `.github/workflows/codeql.yml`, `.commitlintrc.yml`, `.golangci.yml`, `.prettierrc.json`, `.prettierignore`, `eslint.config.js`, `vitest.config.ts`, `knip.json`, `lighthouserc.json`
-
----
-
-### bun-lint.yml — ESLint 檢查
-
-執行 `mise run ci:lint` (內部預設呼叫 `bun run lint`)。
-
-```yaml
-uses: nics-dp/meta/.github/workflows/bun-lint.yml@main
-```
-
-| 參數      | 類型   | 預設值    | 說明                      |
-| --------- | ------ | --------- | ------------------------- |
-| `task`    | string | `ci:lint` | `mise` task 名稱          |
-| `command` | string | `""`      | 選用，直接覆寫 shell 指令 |
-
----
-
-### bun-typecheck.yml — TypeScript 型別檢查
-
-執行 `mise run ci:typecheck` (內部預設呼叫 `bun run typecheck`)。
-
-```yaml
-uses: nics-dp/meta/.github/workflows/bun-typecheck.yml@main
-```
-
-| 參數      | 類型   | 預設值         | 說明                      |
-| --------- | ------ | -------------- | ------------------------- |
-| `task`    | string | `ci:typecheck` | `mise` task 名稱          |
-| `command` | string | `""`           | 選用，直接覆寫 shell 指令 |
-
----
-
-### bun-build.yml — 建置
-
-執行 `mise run build` (內部預設呼叫 `bun run build`)。
-
-```yaml
-uses: nics-dp/meta/.github/workflows/bun-build.yml@main
-```
-
-| 參數      | 類型   | 預設值  | 說明                      |
-| --------- | ------ | ------- | ------------------------- |
-| `task`    | string | `build` | `mise` task 名稱          |
-| `command` | string | `""`    | 選用，直接覆寫 shell 指令 |
-
----
-
-### bun-audit.yml — 依賴漏洞檢查
-
-執行 `mise run ci:audit` (內部預設呼叫 `bun audit`)。
-
-```yaml
-uses: nics-dp/meta/.github/workflows/bun-audit.yml@main
-```
-
-| 參數      | 類型   | 預設值     | 說明                      |
-| --------- | ------ | ---------- | ------------------------- |
-| `task`    | string | `ci:audit` | `mise` task 名稱          |
-| `command` | string | `""`       | 選用，直接覆寫 shell 指令 |
-
----
-
-### bun-test.yml — 單元測試
-
-執行 `mise run ci:test` (內部預設呼叫 `bun run test:coverage`)。
-
-```yaml
-uses: nics-dp/meta/.github/workflows/bun-test.yml@main
-```
-
-| 參數      | 類型   | 預設值    | 說明                      |
-| --------- | ------ | --------- | ------------------------- |
-| `task`    | string | `ci:test` | `mise` task 名稱          |
-| `command` | string | `""`      | 選用，直接覆寫 shell 指令 |
-
----
-
-### bun-format-check.yml — 格式檢查
-
-執行 `mise run ci:format-check` (內部預設呼叫 `bun run format:check`)。
-
-```yaml
-uses: nics-dp/meta/.github/workflows/bun-format-check.yml@main
-```
-
-| 參數      | 類型   | 預設值            | 說明                      |
-| --------- | ------ | ----------------- | ------------------------- |
-| `task`    | string | `ci:format-check` | `mise` task 名稱          |
-| `command` | string | `""`              | 選用，直接覆寫 shell 指令 |
-
----
-
-### bun-knip.yml — Dead Code 檢查
-
-執行 `mise run ci:knip` (內部預設呼叫 `bun run knip`)。
-
-```yaml
-uses: nics-dp/meta/.github/workflows/bun-knip.yml@main
-```
-
-| 參數      | 類型   | 預設值    | 說明                      |
-| --------- | ------ | --------- | ------------------------- |
-| `task`    | string | `ci:knip` | `mise` task 名稱          |
-| `command` | string | `""`      | 選用，直接覆寫 shell 指令 |
-
----
-
-### bun-lighthouse.yml — Lighthouse CI
-
-執行 `mise run lighthouse`。
-
-```yaml
-uses: nics-dp/meta/.github/workflows/bun-lighthouse.yml@main
-```
-
-| 參數      | 類型   | 預設值       | 說明                      |
-| --------- | ------ | ------------ | ------------------------- |
-| `task`    | string | `lighthouse` | `mise` task 名稱          |
-| `command` | string | `""`         | 選用，直接覆寫 shell 指令 |
-
----
-
-### bun-bundle-size.yml — Bundle Size 檢查
-
-執行 `mise run bundle-size`。
-
-```yaml
-uses: nics-dp/meta/.github/workflows/bun-bundle-size.yml@main
-```
-
-| 參數      | 類型   | 預設值        | 說明                      |
-| --------- | ------ | ------------- | ------------------------- |
-| `task`    | string | `bundle-size` | `mise` task 名稱          |
-| `command` | string | `""`          | 選用，直接覆寫 shell 指令 |
-
----
-
-### bun-semgrep.yml — Semgrep 靜態分析 (Web)
-
-使用 Semgrep 對 JavaScript/TypeScript 程式碼進行靜態安全掃描。
-
-```yaml
-uses: nics-dp/meta/.github/workflows/bun-semgrep.yml@main
-```
-
-| 參數     | 類型   | 預設值                      | 說明                                        |
-| -------- | ------ | --------------------------- | ------------------------------------------- |
-| `config` | string | `p/javascript p/typescript` | Semgrep config/ruleset (空格分隔，支援多組) |
-
----
-
-### codeql.yml — Meta Repo CodeQL 分析
-
-`codeql.yml` 是 meta repo 自己的 CodeQL workflow，僅掃描 `actions` 語言（workflow YAML 檔案）。此 workflow 不是 reusable workflow，不供下游 repo 呼叫。
-
-**下游 repo 的 CodeQL** 由 `configs/codeqls/<repo-name>.yml` 集中管理，透過 `sync-codeql.yml` 同步到各 repo 的 `.github/workflows/codeql.yml`。每個 repo 的 config 為獨立可執行的 workflow，可依需要自訂語言 matrix、Go build 指令等。
-
-- **Go repos:** 使用 `actions` + `go` language（`manual` build-mode）
-- **Web repos:** 使用 `actions` + `javascript-typescript` language（`none` build-mode）
-
-私有 repo 可設定 `GH_PAT_READ_NICSDP` 以存取 private modules / private repositories；未設定時，CodeQL 仍會執行，但不會傳 `external-repository-token`，也不會啟用 private module access 設定。PAT 僅限定於需要的 steps (CodeQL init 和 Git URL rewrite)。Git URL rewrite 僅作用於 `github.com/nics-dp` 範圍 (HTTPS 與 SSH)。
-
----
-
-## Release & Build Workflows
-
-### go-release.yml — Go Binary 發布
-
-多平台交叉編譯、cosign 簽章、SBOM 產出。3 個 jobs: `prepare` → `build` (matrix) → `release`。
-
-```yaml
-# 單一 binary
-uses: nics-dp/meta/.github/workflows/go-release.yml@main
-permissions:
-  contents: write
-  id-token: write
-with:
-  project_name: dcf-platform
-  binary: "platform:./cmd/platform"
-  cgo_enabled: true
-  runs_on: '{"group":"releasers"}'  # 選用
-secrets:
-  gh_pat: ${{ secrets.GH_PAT_READ_NICSDP }}  # 選用；若需要存取私有模組，通常傳 read PAT
-
-# 多 binary
-with:
-  project_name: dcf-platform-cli
-  binary: "tui:./cmd/tui,node:./cmd/node,dataset:./cmd/dataset"
-```
-
-| 參數                | 類型    | 預設值                                                            | 必要   | 說明                                                                   |
-| ------------------- | ------- | ----------------------------------------------------------------- | ------ | ---------------------------------------------------------------------- |
-| `project_name`      | string  | —                                                                 | **是** | 專案名稱 (影響 archive 命名)                                           |
-| `binary`            | string  | —                                                                 | **是** | Binary 建置清單 (`name:path,...`)                                      |
-| `platforms`         | string  | `linux/amd64,linux/arm64,darwin/amd64,darwin/arm64,windows/amd64` | 否     | 目標平台                                                               |
-| `go_version`        | string  | `stable`                                                          | 否     | Go 版本 (`actions/setup-go` 使用的版本字串)                            |
-| `cgo_enabled`       | boolean | `false`                                                           | 否     | 啟用 CGO；啟用時建議同時把 `platforms` 覆寫為僅 Linux 目標             |
-| `go_env`            | string  | `GOEXPERIMENT=jsonv2,simd,runtimesecret,goroutineleakprofile`     | 否     | 建置環境變數                                                           |
-| `ldflags`           | string  | `""`                                                              | 否     | 自訂 ldflags (預設注入 version/commit/date)                            |
-| `extra_build_flags` | string  | `-trimpath`                                                       | 否     | 額外 go build flags                                                    |
-| `go_private_full`   | boolean | `true`                                                            | 否     | 設定 GOPRIVATE/GONOSUMDB                                               |
-| `notarize`          | boolean | `false`                                                           | 否     | macOS notarize (需 quill secrets)                                      |
-| `snapshot`          | boolean | `false`                                                           | 否     | 預覽建置模式；版本會改用 `0.0.0-snapshot+<sha>`，不上傳 GitHub Release |
-| `ref`               | string  | `""`                                                              | 否     | Git ref (預設使用事件 ref)                                             |
-| `runs_on`           | string  | `"ubuntu-latest"`                                                 | 否     | Runner (JSON 格式，經 `fromJSON()` 解析)                               |
-
-**選用 Secrets:**
-
-- `gh_pat` — 存取私有模組；consumer repo 的 `release.yml` / `snapshot.yml` 通常傳 `GH_PAT_READ_NICSDP`
-- macOS notarize (當 `notarize: true`): `quill_sign_p12`, `quill_sign_password`, `quill_notary_key`, `quill_notary_key_id`, `quill_notary_issuer`
-
----
-
-### image-release.yml — Container Image 建置
-
-建置 Docker image 並推送至 DockerHub + GHCR，支援 attestation 和 cosign 簽章。
-
-```yaml
-uses: nics-dp/meta/.github/workflows/image-release.yml@main
-permissions:
-  contents: read
-  packages: write
-  attestations: write
-  id-token: write
-with:
-  image_name: dcf-platform # 必要
-  runs_on: '{"group":"releasers"}' # 選用
-secrets:
-  dockerhub_username: ${{ secrets.DOCKERHUB_USERNAME }} # 必要
-  dockerhub_token: ${{ secrets.DOCKERHUB_TOKEN }} # 必要
-  gh_pat: ${{ secrets.GH_PAT_READ_NICSDP }} # 選用
-```
-
-| 參數         | 類型    | 預設值                    | 必要   | 說明                                  |
-| ------------ | ------- | ------------------------- | ------ | ------------------------------------- |
-| `image_name` | string  | —                         | **是** | Docker image 名稱                     |
-| `platforms`  | string  | `linux/amd64,linux/arm64` | 否     | 目標平台                              |
-| `runs_on`    | string  | `"ubuntu-latest"`         | 否     | Runner (JSON，使用 `fromJSON()` 解析) |
-| `context`    | string  | `.`                       | 否     | Docker build context 路徑             |
-| `build_args` | string  | `""`                      | 否     | Docker build-args (多行 key=value)    |
-| `env_file`   | string  | `""`                      | 否     | Env 檔案路徑 (載入為 build-args)      |
-| `sbom`       | boolean | `true`                    | 否     | 啟用 BuildKit SBOM 產生               |
-| `provenance` | boolean | `true`                    | 否     | 啟用 SLSA provenance attestation      |
-| `attest`     | boolean | `true`                    | 否     | 啟用 Sigstore artifact attestation    |
-| `cosign`     | boolean | `true`                    | 否     | 使用 cosign 簽章 (keyless)            |
-| `snapshot`   | boolean | `false`                   | 否     | 僅使用 SHA tag (不含 semver/latest)   |
-| `ref`        | string  | `""`                      | 否     | Git ref                               |
-
-**Outputs:** `digest` — Image digest (`sha256:...`)，供 `sbom-image.yml` 使用
-
-**必要 Secrets:** `dockerhub_username`, `dockerhub_token`
-**選用 Secrets:** `gh_pat` (Dockerfile 中存取私有模組時需要)
-
-**Image 推送目標:**
-
-- `docker.io/nicsdp/<image_name>`
-- `ghcr.io/nics-dp/<image_name>`
-
-**Tag 策略:**
-
-根據 `snapshot` 輸入和 git ref，依優先順序套用以下三種模式：
-
-| 模式     | 條件                        | 產生的 Tag             | 範例                          |
-| -------- | --------------------------- | ---------------------- | ----------------------------- |
-| Snapshot | `inputs.snapshot == true`   | commit SHA (短 + 長)   | `abc1234`, `abc1234567890def` |
-| Release  | ref 是 tag (`refs/tags/v*`) | semver 三層 + `latest` | `v1.2.3`, `v1.2`, `v1`        |
-| Fallback | 其他情況                    | branch 名稱或 PR 編號  | `main`, `pr-42`               |
-
-> **實作細節：** 因為此 workflow 透過 `workflow_call` 呼叫，`github.event_name` 是 `workflow_call` 而非 `release`，
-> 所以 release 偵測使用 `startsWith(github.ref, 'refs/tags/')` 而非檢查 event name。
-> semver pattern 中的 `{{{{raw}}}}` 是因為 `format()` 將 `{{` 轉義為字面 `{`，最終產生 metadata-action 認得的 `{{raw}}`。
-
----
-
-### release-please.yml — 自動 Release 管理
-
-使用 googleapis/release-please-action，依據 conventional commits 自動建立 Release PR (含 changelog)，merge 後建立 GitHub Release + tag。
-
-```yaml
-uses: nics-dp/meta/.github/workflows/release-please.yml@main
-secrets:
-  gh_pat: ${{ secrets.GH_PAT_RELEASE_NICSDP }} # 必要，GITHUB_TOKEN 不會觸發下游 workflows
-```
-
-| 參數           | 類型   | 預設值   | 必要 | 說明                                     |
-| -------------- | ------ | -------- | ---- | ---------------------------------------- |
-| `release_type` | string | `simple` | 否   | Release type (`simple`, `go`, `node` 等) |
-
-**必要 Secrets:** `gh_pat` — 需要 `contents:write` + `pull-requests:write` 的 PAT
-
-**Outputs:** `release_created` (boolean), `tag_name` (string)
-
----
-
-### sbom-source.yml — Source Code SBOM
-
-產出 CycloneDX 1.6 SBOM + parlay 增強 + Trivy/Grype 漏洞掃描，上傳至 GitHub Release 與 GitHub Security tab。非 snapshot 模式時，`anchore/sbom-action` 也會提交 dependency snapshot。
-
-```yaml
-uses: nics-dp/meta/.github/workflows/sbom-source.yml@main
-permissions:
-  actions: read
-  contents: write
-  security-events: write
-with:
-  project_name: dcf-platform # 必要
-```
-
-| 參數           | 類型    | 預設值            | 必要   | 說明                           |
-| -------------- | ------- | ----------------- | ------ | ------------------------------ |
-| `project_name` | string  | —                 | **是** | 專案名稱 (影響 artifact 命名)  |
-| `scan_path`    | string  | `.`               | 否     | 掃描目錄                       |
-| `ref`          | string  | `""`              | 否     | Git ref                        |
-| `snapshot`     | boolean | `false`           | 否     | Snapshot 模式 (不上傳 Release) |
-| `runs_on`      | string  | `"ubuntu-latest"` | 否     | Runner (JSON 格式)             |
-
----
-
-### sbom-image.yml — Container Image SBOM
-
-對 container image 產出 CycloneDX 1.6 SBOM + Trivy/Grype 漏洞掃描，上傳至 GitHub Release 與 GitHub Security tab。
-
-```yaml
-uses: nics-dp/meta/.github/workflows/sbom-image.yml@main
-permissions:
-  actions: read
-  contents: write
-  packages: read
-  security-events: write
-with:
-  project_name: dcf-platform # 必要
-  image_name: dcf-platform # 必要
-  digest: ${{ needs.image-build.outputs.digest }} # 必要
-```
-
-| 參數           | 類型    | 預設值            | 必要   | 說明                           |
-| -------------- | ------- | ----------------- | ------ | ------------------------------ |
-| `project_name` | string  | —                 | **是** | 專案名稱 (影響 artifact 命名)  |
-| `image_name`   | string  | —                 | **是** | Docker image 名稱              |
-| `digest`       | string  | —                 | **是** | Image digest (`sha256:...`)    |
-| `ref`          | string  | `""`              | 否     | Git ref                        |
-| `snapshot`     | boolean | `false`           | 否     | Snapshot 模式 (不上傳 Release) |
-| `runs_on`      | string  | `"ubuntu-latest"` | 否     | Runner (JSON 格式)             |
-
----
-
-## Sync Workflows (設定檔同步)
-
-Sync workflows 由 meta repo 的 `cron.yml` 統一排程觸發 (每週一 00:00 UTC)，使用 matrix 對 consumer repos 執行同步。Consumer repos 不需要在自己的 repo 中呼叫這些 workflows。
-
-目標 repo 清單定義在 `cron.yml` 頂部：
-
-| 清單           | 說明                                  | 用於                                                                                |
-| -------------- | ------------------------------------- | ----------------------------------------------------------------------------------- |
-| `ALL_REPOS`    | 所有 DCF repos (含 patroni)           | sync-commitlintrc                                                                   |
-| `GO_REPOS`     | Go repos (不含 web repos、patroni)    | sync-golangci                                                                       |
-| `WEB_REPOS`    | Web repos                             | sync-prettier, sync-eslint-config, sync-vitest-config, sync-knip, sync-lighthouserc |
-| `CODEQL_REPOS` | 有 CodeQL 設定的 repos (不含 patroni) | sync-codeql                                                                         |
-
-### All repos
-
-| Workflow                | 來源                        | 目標                |
-| ----------------------- | --------------------------- | ------------------- |
-| `sync-commitlintrc.yml` | `configs/.commitlintrc.yml` | `.commitlintrc.yml` |
-
-### CodeQL repos
-
-| Workflow          | 來源                         | 目標                           |
-| ----------------- | ---------------------------- | ------------------------------ |
-| `sync-codeql.yml` | `configs/codeqls/<repo>.yml` | `.github/workflows/codeql.yml` |
-
-### Go repos
-
-| Workflow            | 來源                    | 目標            |
-| ------------------- | ----------------------- | --------------- |
-| `sync-golangci.yml` | `configs/.golangci.yml` | `.golangci.yml` |
-
-### Web repos
-
-| Workflow                 | 來源                                                   | 目標                                   |
-| ------------------------ | ------------------------------------------------------ | -------------------------------------- |
-| `sync-prettier.yml`      | `configs/.prettierrc.json` + `configs/.prettierignore` | `.prettierrc.json` + `.prettierignore` |
-| `sync-eslint-config.yml` | `configs/eslint.config.js`                             | `eslint.config.js`                     |
-| `sync-vitest-config.yml` | `configs/vitest.config.ts`                             | `vitest.config.ts`                     |
-| `sync-knip.yml`          | `configs/knip.json`                                    | `knip.json`                            |
-| `sync-lighthouserc.yml`  | `configs/lighthouserc.json`                            | `lighthouserc.json`                    |
-
-所有 sync workflows 共用相同模式：
-
-```yaml
-uses: nics-dp/meta/.github/workflows/sync-<name>.yml@main
-with:
-  repo_name: <repo-name> # 必要，不含 org prefix
-secrets:
-  gh_token: ${{ secrets.GH_PAT_SYNC_NICSDP }}
-```
-
-`workflow_dispatch` 手動執行時，若要同步到 private repo，需先在 meta repo 設定 repo-level `GH_PAT_SYNC_NICSDP`。
-
----
-
-## Utility Workflows
-
-### artifacts-comment.yml — PR Artifacts 留言
-
-列出當前 workflow run 的所有 build artifacts，以 sticky comment 回覆到 PR，提供 [nightly.link](https://nightly.link) 下載連結。
-
-```yaml
-uses: nics-dp/meta/.github/workflows/artifacts-comment.yml@main
-permissions:
-  actions: read
-  issues: write
-  pull-requests: write
-```
-
-| 參數        | 類型   | 預設值 | 說明                                                    |
-| ----------- | ------ | ------ | ------------------------------------------------------- |
-| `pr_number` | number | `0`    | PR 編號 (自動偵測 `pull_request` / `workflow_run` 事件) |
-
-會在 PR 上建立或更新同一則 comment，支援兩種情境：
-
-- **`pull_request` 觸發的 workflow** — 自動偵測 PR 編號
-- **`workflow_run` 觸發的 workflow** (如 snapshot) — 從 `workflow_run.pull_requests` 自動偵測
-
----
-
-### notify-gchat.yml — Google Chat 通知
-
-發送 Google Chat 卡片通知。
-
-```yaml
-uses: nics-dp/meta/.github/workflows/notify-gchat.yml@main
-with:
-  type: pr # 必要: pr | push | release | issue | ci-failure | ci-success
-  title: "PR #1: Title" # 必要
-  url: "https://..." # 必要
-  actor: "username" # 選用 (預設 github.actor)
-  repository: "org/repo" # 選用 (預設 github.repository)
-  body: "description" # 選用
-  extra_fields: '[{"label":"Branch","value":"main"}]' # 選用
-secrets:
-  google_chat_webhook: ${{ secrets.GOOGLE_CHAT_WEBHOOK }}
-```
-
----
-
-### check-upstream-release.yml — 上游版本檢查
-
-檢查上游 repo 是否有新 release，自動建立 bump PR。
-
-```yaml
-uses: nics-dp/meta/.github/workflows/check-upstream-release.yml@main
-with:
-  upstream_repo: patroni/patroni # 必要
-  version_file: Dockerfile.env # 必要
-  version_variable: PATRONI_VERSION # 必要
-secrets:
-  gh_token: ${{ secrets.GH_PAT_READ_NICSDP }}
-```
-
-| 參數               | 類型   | 預設值 | 必要   | 說明                               |
-| ------------------ | ------ | ------ | ------ | ---------------------------------- |
-| `upstream_repo`    | string | —      | **是** | 上游 repo (例如 `patroni/patroni`) |
-| `version_file`     | string | —      | **是** | 版本號檔案路徑                     |
-| `version_variable` | string | —      | **是** | 版本號變數名稱                     |
-| `release_suffix`   | string | `.dcf` | 否     | Release tag 後綴                   |
+`ci.yml` — meta repo 自家 CI，透過 `mise-task.yml` matrix 跑 `iac:actionlint` (workflow YAML lint)。
 
 ---
 
 ## 共用設定檔 (`configs/`)
 
-所有 sync 來源設定檔集中管理於 `configs/` 目錄：
+Atoms 跑時用 `curl` 抓 raw GitHub 設定，跑完 trap cleanup 清除暫存檔。
 
-| 檔案                         | 同步目標                       | 適用      |
-| ---------------------------- | ------------------------------ | --------- |
-| `configs/codeqls/<repo>.yml` | `.github/workflows/codeql.yml` | Per-repo  |
-| `configs/.commitlintrc.yml`  | `.commitlintrc.yml`            | All repos |
-| `configs/renovate.json`      | `renovate.json`                | 手動複製  |
-| `configs/.golangci.yml`      | `.golangci.yml`                | Go repos  |
-| `configs/.prettierrc.json`   | `.prettierrc.json`             | Web repos |
-| `configs/.prettierignore`    | `.prettierignore`              | Web repos |
-| `configs/eslint.config.js`   | `eslint.config.js`             | Web repos |
-| `configs/vitest.config.ts`   | `vitest.config.ts`             | Web repos |
-| `configs/knip.json`          | `knip.json`                    | Web repos |
-| `configs/lighthouserc.json`  | `lighthouserc.json`            | Web repos |
+| 檔案                        | 用途                                       | 由哪些 atom 拉取                          |
+| --------------------------- | ------------------------------------------ | ----------------------------------------- |
+| `eslint.config.js`          | ESLint flat config + security plugin       | `node:lint-check`, `node:lint-fix`        |
+| `.prettierrc.json` + `.prettierignore` | Prettier shared                  | `node:format-check`, `node:format-fix`    |
+| `vitest.config.ts`          | Vitest shared                              | `node:test`                               |
+| `knip.json`                 | Knip shared                                | `node:knip`                               |
+| `lighthouserc.json`         | Lighthouse CI shared                       | `node:lighthouse`                         |
+| `playwright.config.ts`      | Playwright base (env-driven `PW_*`)        | `node:e2e`, `node:e2e-install`            |
 
----
+Consumer 可透過 `META_CONFIG_BASE` env 覆寫 raw URL 來源（forking nics-dp/meta 時用）。
 
-## 專案模板
-
-### golang-templates/ — Go 專案
-
-適用於 Go service、CLI、library 專案。詳見 [`golang-templates/.github/README.md`](golang-templates/.github/README.md)。
-
-包含: CI (lint, sec, vulncheck, semgrep, test, trivy-license；service repo 另含 hadolint / trivy-iac), release, snapshot, codeql, notify, release-please workflows + `mise.toml` (含 `git::` remote task includes) + `.golangci.yml`
-
-### web-templates/ — Web 專案
-
-適用於 Vue + Vite + TypeScript + Bun 專案。包含 workflow templates 與 `mise.toml`。詳見 [`web-templates/.github/README.md`](web-templates/.github/README.md)。
-
-包含: CI (eslint, typecheck, build, audit；預設也啟用 vitest、prettier、semgrep、trivy-license、knip、lighthouse；有 Dockerfile 的 repo 還可保留 hadolint / trivy-iac), codeql, notify, release-please workflows + `mise.toml` (含 `git::` remote task includes) + eslint, prettier, vitest, knip, lighthouse configs。`bundle-size` workflow 仍提供，但需 repo 自行補上 `size-limit` 設定後再啟用
+**`.golangci.yml` 例外**：不在 `configs/` 共享。各 Go consumer repo **自家 commit** `.golangci.yml`（含 `gofumpt.module-path: <module>` 顯式設定，繞過 golangci-lint v2.12.2 之 gci↔gofumpt false positive）。`go:lint-check` / `go:lint-fix` atom **不再 curl**，直接讀 repo 自家檔。
 
 ---
 
-## Consumer Repo 新增步驟
+## Renovate
 
-### Go 專案
+Consumer repo 之 `renovate.json` 引用 org preset：
 
-1. 從 `golang-templates/.github/` 複製 workflows，並複製 `golang-templates/mise.toml` (已含 `git::` remote task includes，共用 CI/Go/SBOM 等 tasks)
-2. 從 `configs/` 複製 `.golangci.yml`、`.commitlintrc.yml`、`renovate.json`
-3. 替換 `TODO` 標記 (`project_name`, `binary`, `image_name`)
-4. 新增 `configs/codeqls/<repo-name>.yml`，設定 CodeQL workflow
-5. 更新 `cron.yml` 的 repo 清單 (`CODEQL_REPOS`, `GO_REPOS`, `ALL_REPOS`)
-6. 確認 repo secrets:
-   - `GH_PAT_READ_NICSDP` (私有 Go modules / release / snapshot / CodeQL 用)
-   - `GH_PAT_RELEASE_NICSDP` (release-please 用)
-   - `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN` (僅 Docker image repos 需要)
+```json
+{
+  "extends": ["github>nics-dp/meta:renovate-preset"]
+}
+```
 
-### Web 專案
-
-1. 從 `web-templates/.github/` 複製 workflows，並複製 `web-templates/mise.toml` (已含 `git::` remote task includes，共用 CI/SBOM 等 tasks)
-2. 從 `configs/` 複製所有 web 設定檔 (`.prettierrc.json`, `.prettierignore`, `eslint.config.js`, `vitest.config.ts`, `knip.json`, `lighthouserc.json`, `.commitlintrc.yml`, `renovate.json`)
-3. 安裝 devDependencies (見 `web-templates/.github/README.md`)
-4. 若 repo 沒有 Dockerfile，先從 `web-templates/.github/workflows/ci.yml` 移除 `hadolint` 與 `trivy-iac` jobs；若不需要 `knip` / `lighthouse`，也可一併移除
-5. 新增 `configs/codeqls/<repo-name>.yml` (使用 `javascript-typescript` language)
-6. 更新 `cron.yml` 的 repo 清單 (`CODEQL_REPOS`, `WEB_REPOS`, `ALL_REPOS`)
-7. 確認 repo secrets: `GH_PAT_RELEASE_NICSDP`
+Meta repo 自家 `renovate.json` 額外 customManagers 處理：
+- `actions/checkout`, `jdx/mise-action` 等 GitHub Actions 由 native github-actions manager 自動 bump
+- `anchore/quill` (go-release.yml) — regex manager
+- `snyk/parlay` (sbom-image.yml) — regex manager
+- mise [tools] (`actionlint`, `bun`, etc.) — native mise manager
 
 ---
 
-## Consumer Repo 前提條件
+## Consumer Repo 設置步驟
 
-### Go repos
+1. 從 `templates/facades/mise.<archetype>.toml` (`go-service`/`go-lib`/`frontend`/`python`/`image`) 複製為 repo 自家 `mise.toml`
+2. 確認 `[task_config].includes = ["git::https://github.com/nics-dp/meta.git//.mise/tasks?ref=main"]`
+3. 加 repo-specific tasks/tools/env at end
+4. 寫 `.github/workflows/ci.yml`，用 matrix 呼叫 `nics-dp/meta/.github/workflows/mise-task.yml@main`
+5. 設 secrets:
+   - `GH_PAT_READ_NICSDP` (Go 私模 + CodeQL private repo + release/snapshot)
+   - `GH_PAT_RELEASE_NICSDP` (release-please)
+   - `DOCKERHUB_USERNAME` + `DOCKERHUB_TOKEN` (Docker image repos)
 
-1. **mise.toml** — 定義 `init`, `ci:go-lint`, `ci:go-sec`, `ci:go-vulncheck`, `ci:test` 等 CI tasks (建議直接使用 `golang-templates/mise.toml`)
-2. **coverage.out** — `mise run ci:test` 需產出此檔案 (go-test.yml 預期此路徑)
-3. **Go module** — go.mod 存在且版本正確
-4. **Private module access** — 若 repo 會引用私有 `nics-dp` modules，需設定 `GH_PAT_READ_NICSDP`
+驗證：`mise tasks ls` 應顯示 ~10 facade 名 + repo-specific extras（atoms hidden）；`mise run --dry-run ci test sbom` resolve 無誤。
 
-### Web repos
-
-1. **mise.toml** — 建議直接使用 `web-templates/mise.toml`
-2. **bun.lock** — 使用 Bun 作為 package manager
-3. **package.json scripts** — 需包含 `lint`, `typecheck`, `build`, `test:coverage`, `format:check`
-4. **選用 scripts / configs** — 若保留 `knip`、`lighthouse` 或之後啟用 `bundle-size`，需補齊對應 script 與設定檔
-5. **Release token** — `GH_PAT_RELEASE_NICSDP` secret 已設定 (供 release-please 建立 release/tag 並觸發下游 workflows)
+---
 
 ## 相關文件
 
 - [GitHub: Reusing Workflows](https://docs.github.com/en/actions/learn-github-actions/reusing-workflows)
+- [mise: Tasks](https://mise.jdx.dev/tasks/)

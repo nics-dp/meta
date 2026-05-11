@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+#MISE description="Check JS/TS formatting (prettier)"
+#MISE hide=true
+#MISE raw=true
+#MISE tools={bun="latest"}
+
+META_CONFIG_BASE="${META_CONFIG_BASE:-https://raw.githubusercontent.com/nics-dp/meta/main/configs}"
+cleanup() {
+  rc=$?
+  rm -f .prettierrc.json .prettierignore
+  exit "$rc"
+}
+trap cleanup EXIT
+curl -fsSL "$META_CONFIG_BASE/.prettierrc.json" -o .prettierrc.json
+curl -fsSL "$META_CONFIG_BASE/.prettierignore" -o .prettierignore
+
+bunx prettier --check .
