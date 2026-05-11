@@ -10,25 +10,7 @@ unix_default_inline_shell_args = "bash -c"
 [tools]
 # Go toolchain
 go = "1.26.3"
-golangci-lint = "latest"
-"github:securego/gosec" = "latest"
-"go:golang.org/x/vuln/cmd/govulncheck" = "latest"
 
-# Image / IaC
-hadolint = "latest"
-
-# SBOM
-syft = "latest"
-"github:snyk/parlay" = "latest"
-
-# Vuln / IaC scan
-trivy = "latest"
-grype = "latest"
-
-# Static scanning
-"pipx:semgrep" = "latest"
-
-# ------------------------------------------------------------------------------
 [env]
 # Override meta config base if forking nics-dp/meta
 # META_CONFIG_BASE = "https://raw.githubusercontent.com/your-org/meta/main/configs"
@@ -55,15 +37,18 @@ includes = ["git::https://github.com/nics-dp/meta.git//.mise/tasks?ref=main"]
 # Facade tasks
 # ==============================================================================
 [tasks.init]
+silent = "stdout"
 description = "Bootstrap deps and submodules"
 depends = ["go:install", "gs:clone"]
 
 [tasks.clean]
+silent = "stdout"
 description = "Wipe build artifacts and compose state"
 depends = ["go:clean"]
 run = "docker compose down --volumes --remove-orphans 2>/dev/null || true"
 
 [tasks.build]
+silent = "stdout"
 description = "Build Go binary from cmd/"
 depends = ["go:build"]
 
@@ -81,14 +66,17 @@ depends = ["go:test --race --coverage"]
 depends_post = ["go:report"]
 
 [tasks."lib:local"]
+silent = "stdout"
 description = "Use local replace directives (set GO_LIB_LOCAL env first)"
 depends = ["go:lib-local"]
 
 [tasks."lib:remote"]
+silent = "stdout"
 description = "Switch to remote refs (set GO_LIB_REMOTE env first)"
 depends = ["go:lib-remote"]
 
 [tasks.update]
+silent = "stdout"
 description = "Bump deps, refresh shared atoms, update submodules"
 depends = ["go:update", "gs:update", "meta:bump"]
 
@@ -99,7 +87,7 @@ depends = [
   "go:sast",
   "go:audit",
   "go:dead-code",
-  "go:deptree",
+  # "go:deptree",
   "iac:img:hadolint",
   "ci:semgrep golang",
   "iac:trivy",

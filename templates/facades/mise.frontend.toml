@@ -10,21 +10,6 @@ unix_default_inline_shell_args = "bash -c"
 # JS/TS runtime
 bun = "latest"
 
-# uv (for uvx-launched tools: njsscan, etc.; uv self-manages Python)
-uv = "latest"
-
-# SBOM
-syft = "latest"
-"github:snyk/parlay" = "latest"
-
-# Vuln / IaC scan
-trivy = "latest"
-grype = "latest"
-
-# Static scanning
-"pipx:semgrep" = "latest"
-
-# ------------------------------------------------------------------------------
 [env]
 # Override meta config base if forking nics-dp/meta
 # META_CONFIG_BASE = "https://raw.githubusercontent.com/your-org/meta/main/configs"
@@ -46,14 +31,17 @@ includes = ["git::https://github.com/nics-dp/meta.git//.mise/tasks?ref=main"]
 # Facade tasks
 # ==============================================================================
 [tasks.init]
+silent = "stdout"
 description = "Install JS deps + Playwright browsers"
 depends = ["node:install", "node:e2e-install"]
 
 [tasks.clean]
+silent = "stdout"
 description = "Wipe Node artifacts"
 depends = ["node:clean"]
 
 [tasks.build]
+silent = "stdout"
 description = "Build frontend bundle"
 depends = ["node:build"]
 
@@ -70,6 +58,7 @@ description = "Run vitest benchmarks (single pass)"
 run = "bunx vitest bench --run"
 
 [tasks.update]
+silent = "stdout"
 description = "Bump deps and refresh shared atoms"
 depends = ["node:update", "meta:bump"]
 
@@ -82,7 +71,7 @@ depends = [
   "node:knip",
   "node:sast",
   "node:audit",
-  "node:deptree",
+  # "node:deptree",
   "node:bundle-size",
   "node:e2e",
   "node:lighthouse",

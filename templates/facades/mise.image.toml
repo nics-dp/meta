@@ -6,19 +6,10 @@ task.output = "keep-order"
 unix_default_inline_shell_args = "bash -c"
 
 # ------------------------------------------------------------------------------
+# All required tools are declared inline by the shared tasks under
+# git::https://github.com/nics-dp/meta.git//.mise/tasks
 [tools]
-# Image / IaC
-hadolint = "latest"
 
-# SBOM
-syft = "latest"
-"github:snyk/parlay" = "latest"
-
-# Vuln / IaC scan
-trivy = "latest"
-grype = "latest"
-
-# ------------------------------------------------------------------------------
 [env]
 # Override meta config base if forking nics-dp/meta
 # META_CONFIG_BASE = "https://raw.githubusercontent.com/your-org/meta/main/configs"
@@ -31,10 +22,12 @@ includes = ["git::https://github.com/nics-dp/meta.git//.mise/tasks?ref=main"]
 # Facade tasks
 # ==============================================================================
 [tasks.init]
+silent = "stdout"
 description = "No-op (no source deps)"
 run = "true"
 
 [tasks.clean]
+silent = "stdout"
 description = "Wipe Docker Compose state"
 run = "docker compose down --volumes --rmi all --remove-orphans 2>/dev/null || true"
 
@@ -50,5 +43,6 @@ description = "Generate enriched SBOM and scan"
 depends = ["sbom:trivy", "sbom:grype"]
 
 [tasks.update]
+silent = "stdout"
 description = "Refresh shared atoms"
 depends = ["meta:bump"]

@@ -9,22 +9,7 @@ unix_default_inline_shell_args = "bash -c"
 [tools]
 # Go toolchain
 go = "1.26.3"
-golangci-lint = "latest"
-"github:securego/gosec" = "latest"
-"go:golang.org/x/vuln/cmd/govulncheck" = "latest"
 
-# SBOM
-syft = "latest"
-"github:snyk/parlay" = "latest"
-
-# Vuln scan
-trivy = "latest"
-grype = "latest"
-
-# Static scanning
-"pipx:semgrep" = "latest"
-
-# ------------------------------------------------------------------------------
 [env]
 # Override meta config base if forking nics-dp/meta
 # META_CONFIG_BASE = "https://raw.githubusercontent.com/your-org/meta/main/configs"
@@ -48,10 +33,12 @@ includes = ["git::https://github.com/nics-dp/meta.git//.mise/tasks?ref=main"]
 # Facade tasks
 # ==============================================================================
 [tasks.init]
+silent = "stdout"
 description = "Tidy and vendor Go modules"
 depends = ["go:install"]
 
 [tasks.clean]
+silent = "stdout"
 description = "Wipe Go artifacts"
 depends = ["go:clean"]
 
@@ -61,6 +48,7 @@ depends = ["go:test --race --coverage"]
 depends_post = ["go:report"]
 
 [tasks.update]
+silent = "stdout"
 description = "Bump deps and refresh shared atoms"
 depends = ["go:update", "meta:bump"]
 
@@ -71,7 +59,7 @@ depends = [
   "go:sast",
   "go:audit",
   "go:dead-code",
-  "go:deptree",
+  # "go:deptree",
   "ci:semgrep golang",
 ]
 

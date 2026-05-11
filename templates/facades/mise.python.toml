@@ -12,18 +12,6 @@ unix_default_inline_shell_args = "bash -c"
 python = "3.13"
 uv = "latest"
 
-# SBOM
-syft = "latest"
-"github:snyk/parlay" = "latest"
-
-# Vuln scan
-trivy = "latest"
-grype = "latest"
-
-# Static scanning
-"pipx:semgrep" = "latest"
-
-# ------------------------------------------------------------------------------
 [env]
 # Override meta config base if forking nics-dp/meta
 # META_CONFIG_BASE = "https://raw.githubusercontent.com/your-org/meta/main/configs"
@@ -44,14 +32,17 @@ includes = ["git::https://github.com/nics-dp/meta.git//.mise/tasks?ref=main"]
 # Facade tasks
 # ==============================================================================
 [tasks.init]
+silent = "stdout"
 description = "Install Python deps"
 depends = ["py:install"]
 
 [tasks.clean]
+silent = "stdout"
 description = "Wipe Python artifacts and caches"
 depends = ["py:clean"]
 
 [tasks.build]
+silent = "stdout"
 description = "Build wheel + sdist"
 depends = ["py:build"]
 
@@ -70,6 +61,7 @@ description = "Run pytest benchmarks (single pass)"
 depends = ["py:test --bench"]
 
 [tasks.update]
+silent = "stdout"
 description = "Bump deps and refresh shared atoms"
 depends = ["py:update", "meta:bump"]
 
@@ -84,7 +76,7 @@ depends = [
   "py:safety-db",
   "py:complexity",
   "py:dead-code",
-  "py:deptree",
+  # "py:deptree",
   "py:license-custom",
   "ci:semgrep python",
 ]
