@@ -2,6 +2,7 @@
 #MISE description="Find unreachable functions via whole-program analysis (golang.org/x/tools/cmd/deadcode)"
 #MISE hide=true
 #MISE raw=true
+#MISE tools={"go:golang.org/x/tools/cmd/deadcode"="latest"}
 #USAGE arg "[entry]" help="Entry package(s) (default: ./... — analyzes every cmd/* main)"
 #USAGE flag "--filter <regex>" help="Only report functions matching regex"
 #USAGE flag "--whole-program" help="Run analysis even on test code"
@@ -10,11 +11,6 @@
 set -euo pipefail
 # shellcheck disable=SC1091
 source "$(dirname "$0")/../lib/go-env"
-
-if ! command -v deadcode >/dev/null 2>&1; then
-  echo "Installing deadcode..."
-  go install golang.org/x/tools/cmd/deadcode@latest
-fi
 
 entry="${usage_entry:-./...}"
 cmd=(deadcode)

@@ -2,6 +2,7 @@
 #MISE description="Benchmark + compare with benchstat. --save <label> to capture; no flag to diff old vs new"
 #MISE hide=true
 #MISE raw=true
+#MISE tools={"go:golang.org/x/perf/cmd/benchstat"="latest"}
 #USAGE flag "--save <label>" help="Save bench results to bench-<label>.txt (typically 'old' or 'new')"
 #USAGE flag "--count <n>" help="Bench iterations for statistical significance" default="5"
 #USAGE flag "--pattern <regex>" help="Benchmark name pattern" default="."
@@ -16,13 +17,6 @@ pattern="${usage_pattern:-.}"
 # shellcheck disable=SC2154
 label="${usage_save:-}"
 
-ensure_benchstat() {
-  if ! command -v benchstat >/dev/null 2>&1; then
-    echo "Installing benchstat..."
-    go install golang.org/x/perf/cmd/benchstat@latest
-  fi
-}
-
 if [ -n "$label" ]; then
   out="bench-${label}.txt"
   cmd=(go test)
@@ -31,7 +25,6 @@ if [ -n "$label" ]; then
   echo "Running benchmarks (count=$count, pattern=$pattern) -> $out"
   "${cmd[@]}" | tee "$out"
 else
-  ensure_benchstat
   if [ ! -f bench-old.txt ] || [ ! -f bench-new.txt ]; then
     echo "Error: bench-old.txt and bench-new.txt required."
     echo ""
