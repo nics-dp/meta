@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+#MISE description="Lint Go (read-only)"
+#MISE hide=true
+#MISE raw=true
+
+golangci-lint run ./...

@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+#MISE description="Run go generate (code generation)"
+#MISE hide=true
+#MISE raw=true
+
+set -euo pipefail
+paths="${GO_GENERATE_PATHS:-./...}"
+go generate "$paths"

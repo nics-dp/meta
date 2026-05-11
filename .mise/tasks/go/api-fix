@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+#MISE description="Migrate Go source to new APIs via go fix (rewrites deprecated stdlib paths/calls)"
+#MISE hide=true
+#MISE raw=true
+
+set -euo pipefail
+
+go fix ./...
+
+if ! git diff --exit-code -- . >/dev/null; then
+  echo ""
+  echo "⚠ Source changes from 'go fix'. Please review and commit."
+  git diff --stat -- .
+fi

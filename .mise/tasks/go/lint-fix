@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+#MISE description="Lint Go with autofix (golangci-lint fmt)"
+#MISE hide=true
+#MISE raw=true
+
+golangci-lint fmt ./...
+
+if ! git diff --exit-code -- . >/dev/null; then
+  echo ""
+  echo "⚠ Formatting changes detected after 'golangci-lint fmt ./...'. Please commit the result."
+  git diff --stat -- .
+fi

@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+#MISE description="Show Go module dep graph via go mod graph (with optional filter / format)"
+#MISE hide=true
+#MISE raw=true
+#USAGE arg "[module]" help="Filter to lines mentioning this module (substring match)"
+#USAGE flag "--why" help="Show why <module> is needed (uses 'go mod why')"
+#USAGE flag "--dot" help="Output Graphviz DOT format (pipe to 'dot -Tsvg' for image)"
+
+# shellcheck disable=SC2154
+set -euo pipefail
+
+if [ "${usage_why:-false}" = "true" ]; then
+  if [ -z "${usage_module:-}" ]; then
+    echo "Error: --why requires <module> argument" >&2
+    exit 1
+  fi
+  go mod why "$usage_module"
+  exit 0
+fi
+
+if [ "${usage_dot:-false}" = "true" ]; then
+  echo "digraph G {"
+  echo "  rankdir=LR;"
+  echo "  node [shape=box, style=rounded];"
+  go mod graph | awk -v filter="${usage_module:-}" '
+    {
+      if (filter == "" || $1 ~ filter || $2 ~ filter) {
+        printf "  \"%s\" -> \"%s\";\n", $1, $2
+      }
+    }
+  '
+  echo "}"
+  exit 0
+fi
+
+if [ -n "${usage_module:-}" ]; then
+  go mod graph | grep -- "$usage_module" || {
+    echo "No edges mention '$usage_module'" >&2
+    exit 1
+  }
+else
+  go mod graph
+fi
