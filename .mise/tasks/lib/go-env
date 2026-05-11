@@ -5,7 +5,8 @@
 #   GO_TEST_PATHS    test target paths            default: ./test/... if test/ exists, else ./...
 #   GO_TEST_MOD      module mode                  default: vendor if vendor/ exists, else mod
 #   GO_COVERPKG      coverage instrumentation     default: <module>/internal/... if internal/ exists, else empty
-#   CGO_ENABLED      cgo on/off (race needs 1)    default: 1
+#   CGO_ENABLED      cgo on/off                   default: 1 (only when unset/empty;
+#                                                 `go/test --race|--full` force-sets it to 1)
 
 : "${GO_TEST_TAGS:=test}"
 : "${CGO_ENABLED:=1}"

@@ -14,6 +14,11 @@ source "$(dirname "$0")/../lib/go-env"
 # shellcheck disable=SC2154
 pattern="${usage_pattern:-.}"
 
+# -race requires cgo; force-enable regardless of caller's CGO_ENABLED.
+if [ "${usage_race:-false}" = "true" ] || [ "${usage_full:-false}" = "true" ]; then
+  export CGO_ENABLED=1
+fi
+
 base=(go test)
 [ -n "$GO_TEST_TAGS" ] && base+=("-tags=$GO_TEST_TAGS")
 base+=("-mod=$GO_TEST_MOD")
