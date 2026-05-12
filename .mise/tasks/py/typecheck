@@ -8,9 +8,15 @@ set -euo pipefail
 # shellcheck disable=SC1091
 source "$(dirname "$0")/../lib/py-env"
 
+uv sync
+
 # shellcheck disable=SC2154
+# Both ty and pyrefly default to project-checking mode (driven by config) when
+# no path is passed. Pyrefly explicitly ignores `project-excludes` from
+# pyproject.toml when paths are supplied, so omit paths to let per-project
+# excludes (e.g. test/, .venv/) take effect.
 if [ "${usage_pyrefly:-false}" = "true" ]; then
-  uvx pyrefly check "$PY_LINT_PATHS"
+  uvx pyrefly check
 else
-  uvx ty check "$PY_LINT_PATHS"
+  uvx ty check
 fi

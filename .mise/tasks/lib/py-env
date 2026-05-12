@@ -3,15 +3,18 @@
 # Vars (override via env if needed):
 #   PY_RUNNER         tool runner prefix          default: "uv run --group test"
 #   PY_TEST_PATHS     pytest target paths         default: tests/ if exists, else .
-#   PY_LINT_PATHS     lint target paths           default: .
+#   PY_LINT_PATHS     ruff/dead-code/complexity   default: .
+#                     (typecheck no longer uses this; ty/pyrefly drive
+#                      includes/excludes from pyproject.toml [tool.ty.src] /
+#                      [tool.pyrefly] project-excludes)
 #   PY_BANDIT_PATHS   bandit target paths         default: .
-#   PY_BANDIT_EXCLUDE bandit exclude paths        default: ./.venv,./tests
+#   PY_BANDIT_EXCLUDE bandit exclude paths        default: ./.venv,./tests,./test
 #   PY_COVERAGE_FILE  coverage output file        default: coverage.xml
 
 : "${PY_RUNNER:=uv run --group test}"
 : "${PY_LINT_PATHS:=.}"
 : "${PY_BANDIT_PATHS:=.}"
-: "${PY_BANDIT_EXCLUDE:=./.venv,./tests}"
+: "${PY_BANDIT_EXCLUDE:=./.venv,./tests,./test}"
 : "${PY_COVERAGE_FILE:=coverage.xml}"
 
 if [ -z "${PY_TEST_PATHS:-}" ]; then
@@ -22,6 +25,9 @@ if [ -z "${PY_TEST_PATHS:-}" ]; then
   fi
 fi
 
-# Split runner into array for safe expansion
-# shellcheck disable=SC2206
+# Split runner into array for safe expansion. Unquoted on purpose so
+# "uv run --group test" splits into 4 argv elements; quoting collapses it
+# into a single element and breaks "${PY_RUNNER_ARR[@]}" consumers.
+# SC2034: consumed by sibling tasks that source this helper.
+# shellcheck disable=SC2206,SC2034
 PY_RUNNER_ARR=($PY_RUNNER)
