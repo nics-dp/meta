@@ -10,5 +10,5 @@ set -euo pipefail
 if [ -n "${SAFETY_API_KEY:-}" ]; then
   uvx safety scan --output text
 else
-  uvx 'safety<3' check --output text
+  uvx --with 'setuptools<81' 'safety<3' check --output text
 fi
