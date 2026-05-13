@@ -6,6 +6,7 @@
     "eslint",
     "eslint-plugin-security",
     "eslint-plugin-vue",
+    "prettier",
     "prettier-plugin-tailwindcss"
   ]
 }
