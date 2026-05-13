@@ -2,7 +2,6 @@
   "$schema": "https://unpkg.com/knip@latest/schema.json",
   "ignore": ["src/components/ui/**"],
   "ignoreDependencies": [
-    "prettier-plugin-tailwindcss",
-    "@tailwindcss/vite"
+    "prettier-plugin-tailwindcss"
   ]
 }
