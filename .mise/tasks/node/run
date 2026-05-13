@@ -3,6 +3,7 @@
 #MISE hide=true
 #MISE raw=true
 #MISE tools={bun="latest"}
+#MISE depends=["node:install"]
 #USAGE arg "[args]" var=#true var_min=0 help="bun run args (default: 'dev'). e.g., 'start' or 'dev --port 3001'"
 
 # shellcheck disable=SC2154

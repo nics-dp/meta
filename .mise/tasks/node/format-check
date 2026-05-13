@@ -3,6 +3,7 @@
 #MISE hide=true
 #MISE raw=true
 #MISE tools={bun="latest"}
+#MISE depends=["node:install"]
 
 META_CONFIG_BASE="${META_CONFIG_BASE:-https://raw.githubusercontent.com/nics-dp/meta/main/configs}"
 cleanup() {
