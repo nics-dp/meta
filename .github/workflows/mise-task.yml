@@ -50,6 +50,15 @@ on:
         required: false
         type: boolean
         default: false
+      prior_tasks:
+        description: |
+          Optional JSON array of tasks to run sequentially BEFORE the main task,
+          e.g. '[{"name":"Install","task":"node:install"}]'. Each entry needs
+          `name` (log group label) and `task` (mise task identifier; may include
+          space-separated args). Defaults to '[]' (no prior tasks).
+        required: false
+        type: string
+        default: "[]"
     secrets:
       gh_pat:
         description: "GitHub PAT with read access to private modules (required when private-modules=true)"
@@ -81,6 +90,21 @@ jobs:
             exit 0
           fi
           git config --global url."https://x-access-token:${GH_PAT}@github.com/nics-dp/".insteadOf "https://github.com/nics-dp/"
+
+      - name: Prior tasks
+        if: ${{ inputs.prior_tasks != '' && inputs.prior_tasks != '[]' }}
+        env:
+          PRIOR_TASKS: ${{ inputs.prior_tasks }}
+        run: |
+          set -euo pipefail
+          count=$(jq 'length' <<<"$PRIOR_TASKS")
+          for i in $(seq 0 $((count - 1))); do
+            name=$(jq -r ".[$i].name" <<<"$PRIOR_TASKS")
+            task=$(jq -r ".[$i].task" <<<"$PRIOR_TASKS")
+            echo "::group::Prior: $name ($task)"
+            mise run $task
+            echo "::endgroup::"
+          done
 
       - id: check
         name: Run ${{ inputs.task }}
