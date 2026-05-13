@@ -2,6 +2,10 @@
   "$schema": "https://unpkg.com/knip@latest/schema.json",
   "ignore": ["src/components/ui/**"],
   "ignoreDependencies": [
+    "@vue/eslint-config-typescript",
+    "eslint",
+    "eslint-plugin-security",
+    "eslint-plugin-vue",
     "prettier-plugin-tailwindcss"
   ]
 }
