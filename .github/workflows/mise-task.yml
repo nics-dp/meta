@@ -102,7 +102,9 @@ jobs:
             name=$(jq -r ".[$i].name" <<<"$PRIOR_TASKS")
             task=$(jq -r ".[$i].task" <<<"$PRIOR_TASKS")
             echo "::group::Prior: $name ($task)"
-            mise run $task
+            # split task into argv so space-separated args reach mise correctly
+            read -ra cmd <<<"$task"
+            mise run "${cmd[@]}"
             echo "::endgroup::"
           done
 
