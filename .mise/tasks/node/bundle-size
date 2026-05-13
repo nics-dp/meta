@@ -2,6 +2,7 @@
 #MISE description="Report bundle size (uses size-limit if .size-limit config exists, else du+gzip on dist/)"
 #MISE hide=true
 #MISE raw=true
+#MISE depends=["node:build"]
 #MISE tools={bun="latest"}
 
 set -euo pipefail
