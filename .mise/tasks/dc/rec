@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+#MISE description="Recreate Docker Compose services (force-recreate + build)"
+#MISE raw=true
+#USAGE arg "[services]" var=#true var_min=0 help="Services to recreate (default: all)"
+# shellcheck disable=SC2154 # usage_services is set by mise USAGE
+
+docker compose up -d --build --force-recreate --remove-orphans "${usage_services[@]}"

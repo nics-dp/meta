@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+#MISE description="Stop Docker Compose services"
+#MISE raw=true
+#USAGE arg "[services]" var=#true var_min=0 help="Services to stop (default: all)"
+# shellcheck disable=SC2154 # usage_services is set by mise USAGE
+
+docker compose down --remove-orphans "${usage_services[@]}"
