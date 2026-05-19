@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 #MISE description="Clean Docker Compose resources"
+#MISE hide=true
 #MISE raw=true
 #USAGE arg "[target]" help="Resource to clean: vol, img, net, all" {
 #USAGE   choices "vol" "img" "net" "all"
