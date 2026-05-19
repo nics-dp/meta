@@ -11,8 +11,8 @@ set -e
 target=${usage_target:-$(gum choose "vol" "img" "net" "all")}
 
 project=$(docker compose config --format json 2>/dev/null | grep -o '"name":"[^"]*"' | head -1 | cut -d'"' -f4)
-if [ -z "$project" ]; then
-  project=$(basename "$(pwd)")
+if [ "$project" = "" ]; then
+  project=$(basename "$PWD")
 fi
 
 clean_volumes() {
