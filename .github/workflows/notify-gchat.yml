@@ -69,9 +69,12 @@ jobs:
             *)                     BTN_TEXT="VIEW ON GITHUB" ;;
           esac
 
-          # Truncate body to 1000 chars
+          # Truncate body to 1000 chars (char-aware, UTF-8 safe).
+          # Previous `head -c 1000 | iconv -c -t UTF-8` cut in the middle of
+          # multi-byte sequences and iconv exited non-zero at EOF, failing the
+          # whole step under `set -eo pipefail`.
           if [ ${#BODY} -gt 1000 ]; then
-            BODY=$(printf '%s' "$BODY" | head -c 1000 | iconv -c -t UTF-8)
+            BODY=$(printf '%s' "$BODY" | python3 -c 'import sys; sys.stdout.write(sys.stdin.buffer.read().decode("utf-8", errors="ignore")[:1000])')
             BODY="${BODY}..."
           fi
 
