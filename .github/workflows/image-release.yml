@@ -74,6 +74,26 @@ on:
         type: string
         default: "stable"
         description: "Go version for vendor step (only used when go_vendor is true)"
+      external_repo:
+        required: false
+        type: string
+        default: ""
+        description: "Optional external repo to checkout as the build context (e.g., 'patroni/patroni'). When set, `context` must equal `external_path` or be a subpath of it."
+      external_ref:
+        required: false
+        type: string
+        default: ""
+        description: "Ref (branch/tag/sha) to checkout from external_repo. Required when external_repo is set (empty would default to upstream's default branch and make builds non-reproducible). Ignored when external_repo is empty."
+      external_path:
+        required: false
+        type: string
+        default: "external-src"
+        description: "Local path under the workspace where external_repo is checked out. Ignored when external_repo is empty."
+      dockerfile_path:
+        required: false
+        type: string
+        default: ""
+        description: "Path (relative to the caller repository workspace) of the Dockerfile to copy into external_path/Dockerfile, overriding any Dockerfile the external repo ships with. Must be a regular file (symlinks are rejected). Required when external_repo is set; otherwise ignored."
     outputs:
       digest:
         description: "Image digest (sha256:...)"
@@ -125,6 +145,164 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           ref: ${{ inputs.ref }}
+
+      - name: Warn on orphan external_repo inputs
+        if: inputs.external_repo == '' && (inputs.dockerfile_path != '' || inputs.external_ref != '')
+        env:
+          DOCKERFILE_PATH: ${{ inputs.dockerfile_path }}
+          EXTERNAL_REF: ${{ inputs.external_ref }}
+        run: |
+          # dockerfile_path / external_ref only take effect alongside
+          # external_repo; surface a warning so callers don't assume they were
+          # silently honored.
+          if [[ -n "$DOCKERFILE_PATH" ]]; then
+            echo "::warning::dockerfile_path ('$DOCKERFILE_PATH') was set without external_repo and will be ignored"
+          fi
+          if [[ -n "$EXTERNAL_REF" ]]; then
+            echo "::warning::external_ref ('$EXTERNAL_REF') was set without external_repo and will be ignored"
+          fi
+
+      - name: Validate external_repo inputs
+        if: inputs.external_repo != ''
+        env:
+          DOCKERFILE_PATH: ${{ inputs.dockerfile_path }}
+          EXTERNAL_PATH: ${{ inputs.external_path }}
+          EXTERNAL_REF: ${{ inputs.external_ref }}
+          CONTEXT: ${{ inputs.context }}
+          GO_VENDOR: ${{ inputs.go_vendor }}
+        run: |
+          fail=0
+          # Strip a single optional leading "./" for path comparison so
+          # equivalent forms ("./external-src" and "external-src") validate
+          # the same way. Error messages echo the caller's original value to
+          # avoid confusion ("you wrote X but the tool says Y was rejected").
+          NORM_DOCKERFILE_PATH="${DOCKERFILE_PATH#./}"
+          NORM_EXTERNAL_PATH="${EXTERNAL_PATH#./}"
+          NORM_CONTEXT="${CONTEXT#./}"
+
+          # has_dotdot <path> — true only when ".." appears as a full path
+          # component (i.e., "..", "../x", "x/..", or "x/../y"). Avoids
+          # rejecting legitimate names like "my..dir" that merely contain "..".
+          has_dotdot() {
+            case "$1" in
+              ..|../*|*/..|*/../*) return 0 ;;
+              *) return 1 ;;
+            esac
+          }
+
+          # external_ref must be non-empty: an empty ref makes builds
+          # non-reproducible by silently falling back to the default branch.
+          if [[ -z "$EXTERNAL_REF" ]]; then
+            echo "::error::external_ref is required when external_repo is set (empty ref would default to upstream's default branch, breaking reproducibility)"
+            fail=1
+          fi
+
+          if [[ -z "$NORM_DOCKERFILE_PATH" ]]; then
+            echo "::error::dockerfile_path is required when external_repo is set"
+            fail=1
+          elif [[ "$NORM_DOCKERFILE_PATH" == /* ]]; then
+            echo "::error::dockerfile_path must be relative to the caller repository workspace, got '$DOCKERFILE_PATH'"
+            fail=1
+          elif has_dotdot "$NORM_DOCKERFILE_PATH"; then
+            echo "::error::dockerfile_path must not contain a '..' path component, got '$DOCKERFILE_PATH'"
+            fail=1
+          elif [[ "$NORM_DOCKERFILE_PATH" == *[*?\[]* ]]; then
+            echo "::error::dockerfile_path must not contain glob metacharacters (*, ?, [), got '$DOCKERFILE_PATH'"
+            fail=1
+          elif [[ -L "$NORM_DOCKERFILE_PATH" ]]; then
+            echo "::error::dockerfile_path '$DOCKERFILE_PATH' must be a regular file, not a symlink"
+            fail=1
+          elif [[ ! -f "$NORM_DOCKERFILE_PATH" ]]; then
+            echo "::error::dockerfile_path '$DOCKERFILE_PATH' not found in the caller repository workspace"
+            fail=1
+          fi
+
+          if [[ -z "$NORM_EXTERNAL_PATH" || "$NORM_EXTERNAL_PATH" == "." ]]; then
+            echo "::error::external_path must resolve to a directory under the workspace (not '.' / './' / empty), got '$EXTERNAL_PATH'"
+            fail=1
+          elif [[ "$NORM_EXTERNAL_PATH" == /* ]]; then
+            echo "::error::external_path must be relative, got '$EXTERNAL_PATH'"
+            fail=1
+          elif has_dotdot "$NORM_EXTERNAL_PATH"; then
+            echo "::error::external_path must not contain a '..' path component, got '$EXTERNAL_PATH'"
+            fail=1
+          elif [[ "$NORM_EXTERNAL_PATH" == */ ]]; then
+            echo "::error::external_path must not end with '/', got '$EXTERNAL_PATH'"
+            fail=1
+          elif [[ "$NORM_EXTERNAL_PATH" == *[*?\[]* ]]; then
+            echo "::error::external_path must not contain glob metacharacters (*, ?, [), got '$EXTERNAL_PATH'"
+            fail=1
+          else
+            case "$NORM_CONTEXT" in
+              "$NORM_EXTERNAL_PATH"|"$NORM_EXTERNAL_PATH"/*) ;;
+              *)
+                echo "::error::context must be '$EXTERNAL_PATH' or a subpath when external_repo is set, got '$CONTEXT'"
+                fail=1
+                ;;
+            esac
+          fi
+
+          # context '..' and glob checks run independently of the external_path
+          # branches above so the more specific error still fires when
+          # external_path itself fails validation.
+          if has_dotdot "$NORM_CONTEXT"; then
+            echo "::error::context must not contain a '..' path component, got '$CONTEXT'"
+            fail=1
+          fi
+          if [[ "$NORM_CONTEXT" == *[*?\[]* ]]; then
+            echo "::error::context must not contain glob metacharacters (*, ?, [), got '$CONTEXT'"
+            fail=1
+          fi
+
+          # Reject dockerfile_path that lives under external_path. The external
+          # checkout step clones into external_path with clean=true, removing
+          # the caller's Dockerfile before the overlay cp reads it. In the
+          # degenerate case where the external repo ships a file at the same
+          # relative path, cp would silently use the external repo's content
+          # as the overlay source - defeating the whole point of the overlay.
+          # Only runs when both paths passed their own non-emptiness checks.
+          if [[ -n "$NORM_DOCKERFILE_PATH" && -n "$NORM_EXTERNAL_PATH" && "$NORM_EXTERNAL_PATH" != "." ]]; then
+            case "$NORM_DOCKERFILE_PATH" in
+              "$NORM_EXTERNAL_PATH"|"$NORM_EXTERNAL_PATH"/*)
+                echo "::error::dockerfile_path ('$DOCKERFILE_PATH') must not be inside external_path ('$EXTERNAL_PATH'); the external checkout would overwrite it before the overlay copy"
+                fail=1
+                ;;
+            esac
+          fi
+
+          if [[ "$GO_VENDOR" == "true" ]]; then
+            echo "::error::go_vendor is not supported with external_repo; the vendor step would run in the caller repo, leaving the external build context without vendor/"
+            fail=1
+          fi
+          [[ "$fail" -eq 0 ]] || exit 1
+
+      - name: Checkout external repo
+        if: inputs.external_repo != ''
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          repository: ${{ inputs.external_repo }}
+          ref: ${{ inputs.external_ref }}
+          path: ${{ inputs.external_path }}
+          token: ${{ secrets.gh_pat || github.token }}
+
+      - name: Overlay Dockerfile onto external source
+        if: inputs.external_repo != ''
+        env:
+          SRC: ${{ inputs.dockerfile_path }}
+          DEST: ${{ inputs.external_path }}/Dockerfile
+        run: |
+          # Remove any existing DEST first so cp cannot follow a symlink the
+          # external repo may ship at that path. Tolerate rm's exit code with
+          # `|| true` so the `[[ -e ]]` check below can fire with a clear
+          # error message when DEST is a directory (rm -f fails on dirs, and
+          # without the `|| true` the step would abort on the bare rm error
+          # under `set -e`, never reaching this branch).
+          rm -f -- "$DEST" || true
+          if [[ -e "$DEST" || -L "$DEST" ]]; then
+            echo "::error::cannot overlay Dockerfile onto '$DEST': path still exists after rm (likely a directory)"
+            exit 1
+          fi
+          cp -- "$SRC" "$DEST"
 
       - name: Prepare non-secret build args from env file
         id: env-args
@@ -201,6 +379,17 @@ jobs:
         uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f # v7.1.0
         with:
           context: ${{ inputs.context }}
+          # In external_repo mode the overlaid Dockerfile lives at
+          # external_path/Dockerfile, which may differ from context (e.g., when
+          # caller points context at a monorepo subpath). Pin file explicitly
+          # so build never silently picks up an upstream Dockerfile.
+          #
+          # When external_repo is not set, fall back to ${context}/Dockerfile.
+          # This is the path build-push-action would currently infer on its
+          # own, but setting it explicitly pins behaviour against future action
+          # changes and keeps existing callers identical regardless of how the
+          # action handles an empty `file:` input.
+          file: ${{ inputs.external_repo != '' && format('{0}/Dockerfile', inputs.external_path) || format('{0}/Dockerfile', inputs.context) }}
           platforms: ${{ inputs.platforms }}
           push: true
           tags: ${{ steps.meta.outputs.tags }}

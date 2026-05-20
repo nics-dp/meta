@@ -22,6 +22,8 @@ if [ -z "${PY_TEST_PATHS:-}" ]; then
   fi
 fi
 
-# Split runner into array for safe expansion
-# shellcheck disable=SC2206
+# Split runner into array for safe expansion. SC2034 suppresses the
+# "appears unused" warning when shellcheck lints this helper in isolation;
+# the array is consumed by downstream tasks that source this file.
+# shellcheck disable=SC2206,SC2034
 PY_RUNNER_ARR=($PY_RUNNER)

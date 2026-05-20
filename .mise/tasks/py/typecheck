@@ -8,9 +8,15 @@ set -euo pipefail
 # shellcheck disable=SC1091
 source "$(dirname "$0")/../lib/py-env"
 
+# Both checkers resolve scope from pyproject.toml (pyrefly: project-includes/
+# project-excludes; ty: [tool.ty.src]). Passing positional paths bypasses
+# project-excludes in both tools (ty requires --force-exclude to honor them),
+# so we invoke without paths and let project config drive scope. Standalone
+# `mise run py:typecheck` from a fresh checkout works because uvx provisions
+# the checker in an ephemeral environment; no `uv sync` is needed here.
 # shellcheck disable=SC2154
 if [ "${usage_pyrefly:-false}" = "true" ]; then
-  uvx pyrefly check "$PY_LINT_PATHS"
+  uvx pyrefly check
 else
-  uvx ty check "$PY_LINT_PATHS"
+  uvx ty check
 fi
