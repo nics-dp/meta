@@ -254,6 +254,22 @@ jobs:
             fail=1
           fi
 
+          # Reject dockerfile_path that lives under external_path. The external
+          # checkout step clones into external_path with clean=true, removing
+          # the caller's Dockerfile before the overlay cp reads it. In the
+          # degenerate case where the external repo ships a file at the same
+          # relative path, cp would silently use the external repo's content
+          # as the overlay source - defeating the whole point of the overlay.
+          # Only runs when both paths passed their own non-emptiness checks.
+          if [[ -n "$NORM_DOCKERFILE_PATH" && -n "$NORM_EXTERNAL_PATH" && "$NORM_EXTERNAL_PATH" != "." ]]; then
+            case "$NORM_DOCKERFILE_PATH" in
+              "$NORM_EXTERNAL_PATH"|"$NORM_EXTERNAL_PATH"/*)
+                echo "::error::dockerfile_path ('$DOCKERFILE_PATH') must not be inside external_path ('$EXTERNAL_PATH'); the external checkout would overwrite it before the overlay copy"
+                fail=1
+                ;;
+            esac
+          fi
+
           if [[ "$GO_VENDOR" == "true" ]]; then
             echo "::error::go_vendor is not supported with external_repo; the vendor step would run in the caller repo, leaving the external build context without vendor/"
             fail=1
