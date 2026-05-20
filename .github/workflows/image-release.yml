@@ -318,7 +318,12 @@ jobs:
           # external_path/Dockerfile, which may differ from context (e.g., when
           # caller points context at a monorepo subpath). Pin file explicitly
           # so build never silently picks up an upstream Dockerfile.
-          file: ${{ inputs.external_repo != '' && format('{0}/Dockerfile', inputs.external_path) || '' }}
+          #
+          # When external_repo is not set, fall back to ${context}/Dockerfile,
+          # which matches build-push-action's documented default and keeps
+          # existing callers' behaviour identical (rather than relying on the
+          # implicit "empty string == unset" handling inside the action).
+          file: ${{ inputs.external_repo != '' && format('{0}/Dockerfile', inputs.external_path) || format('{0}/Dockerfile', inputs.context) }}
           platforms: ${{ inputs.platforms }}
           push: true
           tags: ${{ steps.meta.outputs.tags }}
