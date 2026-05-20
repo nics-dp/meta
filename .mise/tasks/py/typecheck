@@ -10,7 +10,9 @@ source "$(dirname "$0")/../lib/py-env"
 
 # shellcheck disable=SC2154
 if [ "${usage_pyrefly:-false}" = "true" ]; then
-  uvx pyrefly check "$PY_LINT_PATHS"
+  # Pyrefly resolves scope from project-includes/project-excludes in
+  # pyproject.toml; passing paths on the CLI bypasses project-excludes.
+  uvx pyrefly check
 else
   uvx ty check "$PY_LINT_PATHS"
 fi
