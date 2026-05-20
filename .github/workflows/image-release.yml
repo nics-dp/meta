@@ -83,7 +83,7 @@ on:
         required: false
         type: string
         default: ""
-        description: "Ref (branch/tag/sha) to checkout from external_repo. Ignored when external_repo is empty."
+        description: "Ref (branch/tag/sha) to checkout from external_repo. Required when external_repo is set (empty would default to upstream's default branch and make builds non-reproducible). Ignored when external_repo is empty."
       external_path:
         required: false
         type: string
@@ -151,6 +151,7 @@ jobs:
         env:
           DOCKERFILE_PATH: ${{ inputs.dockerfile_path }}
           EXTERNAL_PATH: ${{ inputs.external_path }}
+          EXTERNAL_REF: ${{ inputs.external_ref }}
           CONTEXT: ${{ inputs.context }}
           GO_VENDOR: ${{ inputs.go_vendor }}
         run: |
@@ -159,32 +160,52 @@ jobs:
           # equivalent forms ("./external-src" and "external-src") validate
           # the same way. Error messages echo the caller's original value to
           # avoid confusion ("you wrote X but the tool says Y was rejected").
+          NORM_DOCKERFILE_PATH="${DOCKERFILE_PATH#./}"
           NORM_EXTERNAL_PATH="${EXTERNAL_PATH#./}"
           NORM_CONTEXT="${CONTEXT#./}"
-          if [[ -z "$DOCKERFILE_PATH" ]]; then
+
+          # has_dotdot <path> — true only when ".." appears as a full path
+          # component (i.e., "..", "../x", "x/..", or "x/../y"). Avoids
+          # rejecting legitimate names like "my..dir" that merely contain "..".
+          has_dotdot() {
+            case "$1" in
+              ..|../*|*/..|*/../*) return 0 ;;
+              *) return 1 ;;
+            esac
+          }
+
+          # external_ref must be non-empty: an empty ref makes builds
+          # non-reproducible by silently falling back to the default branch.
+          if [[ -z "$EXTERNAL_REF" ]]; then
+            echo "::error::external_ref is required when external_repo is set (empty ref would default to upstream's default branch, breaking reproducibility)"
+            fail=1
+          fi
+
+          if [[ -z "$NORM_DOCKERFILE_PATH" ]]; then
             echo "::error::dockerfile_path is required when external_repo is set"
             fail=1
-          elif [[ "$DOCKERFILE_PATH" == /* ]]; then
+          elif [[ "$NORM_DOCKERFILE_PATH" == /* ]]; then
             echo "::error::dockerfile_path must be relative to the caller repository workspace, got '$DOCKERFILE_PATH'"
             fail=1
-          elif [[ "$DOCKERFILE_PATH" == *..* ]]; then
-            echo "::error::dockerfile_path must not contain '..', got '$DOCKERFILE_PATH'"
+          elif has_dotdot "$NORM_DOCKERFILE_PATH"; then
+            echo "::error::dockerfile_path must not contain a '..' path component, got '$DOCKERFILE_PATH'"
             fail=1
-          elif [[ -L "$DOCKERFILE_PATH" ]]; then
+          elif [[ -L "$NORM_DOCKERFILE_PATH" ]]; then
             echo "::error::dockerfile_path '$DOCKERFILE_PATH' must be a regular file, not a symlink"
             fail=1
-          elif [[ ! -f "$DOCKERFILE_PATH" ]]; then
+          elif [[ ! -f "$NORM_DOCKERFILE_PATH" ]]; then
             echo "::error::dockerfile_path '$DOCKERFILE_PATH' not found in the caller repository workspace"
             fail=1
           fi
+
           if [[ -z "$NORM_EXTERNAL_PATH" || "$NORM_EXTERNAL_PATH" == "." ]]; then
             echo "::error::external_path must resolve to a directory under the workspace (not '.' / './' / empty), got '$EXTERNAL_PATH'"
             fail=1
           elif [[ "$NORM_EXTERNAL_PATH" == /* ]]; then
             echo "::error::external_path must be relative, got '$EXTERNAL_PATH'"
             fail=1
-          elif [[ "$NORM_EXTERNAL_PATH" == *..* ]]; then
-            echo "::error::external_path must not contain '..', got '$EXTERNAL_PATH'"
+          elif has_dotdot "$NORM_EXTERNAL_PATH"; then
+            echo "::error::external_path must not contain a '..' path component, got '$EXTERNAL_PATH'"
             fail=1
           elif [[ "$NORM_EXTERNAL_PATH" == */ ]]; then
             echo "::error::external_path must not end with '/', got '$EXTERNAL_PATH'"
@@ -200,11 +221,16 @@ jobs:
                 fail=1
                 ;;
             esac
-            if [[ "$NORM_CONTEXT" == *..* ]]; then
-              echo "::error::context must not contain '..', got '$CONTEXT'"
-              fail=1
-            fi
           fi
+
+          # context '..' check runs independently of the external_path branches
+          # above so the more specific error still fires when external_path
+          # itself fails validation.
+          if has_dotdot "$NORM_CONTEXT"; then
+            echo "::error::context must not contain a '..' path component, got '$CONTEXT'"
+            fail=1
+          fi
+
           if [[ "$GO_VENDOR" == "true" ]]; then
             echo "::error::go_vendor is not supported with external_repo; the vendor step would run in the caller repo, leaving the external build context without vendor/"
             fail=1
@@ -319,10 +345,11 @@ jobs:
           # caller points context at a monorepo subpath). Pin file explicitly
           # so build never silently picks up an upstream Dockerfile.
           #
-          # When external_repo is not set, fall back to ${context}/Dockerfile,
-          # which matches build-push-action's documented default and keeps
-          # existing callers' behaviour identical (rather than relying on the
-          # implicit "empty string == unset" handling inside the action).
+          # When external_repo is not set, fall back to ${context}/Dockerfile.
+          # This is the path build-push-action would currently infer on its
+          # own, but setting it explicitly pins behaviour against future action
+          # changes and keeps existing callers identical regardless of how the
+          # action handles an empty `file:` input.
           file: ${{ inputs.external_repo != '' && format('{0}/Dockerfile', inputs.external_path) || format('{0}/Dockerfile', inputs.context) }}
           platforms: ${{ inputs.platforms }}
           push: true
