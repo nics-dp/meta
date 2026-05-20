@@ -146,6 +146,22 @@ jobs:
         with:
           ref: ${{ inputs.ref }}
 
+      - name: Warn on orphan external_repo inputs
+        if: inputs.external_repo == '' && (inputs.dockerfile_path != '' || inputs.external_ref != '')
+        env:
+          DOCKERFILE_PATH: ${{ inputs.dockerfile_path }}
+          EXTERNAL_REF: ${{ inputs.external_ref }}
+        run: |
+          # dockerfile_path / external_ref only take effect alongside
+          # external_repo; surface a warning so callers don't assume they were
+          # silently honored.
+          if [[ -n "$DOCKERFILE_PATH" ]]; then
+            echo "::warning::dockerfile_path ('$DOCKERFILE_PATH') was set without external_repo and will be ignored"
+          fi
+          if [[ -n "$EXTERNAL_REF" ]]; then
+            echo "::warning::external_ref ('$EXTERNAL_REF') was set without external_repo and will be ignored"
+          fi
+
       - name: Validate external_repo inputs
         if: inputs.external_repo != ''
         env:
