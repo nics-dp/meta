@@ -190,6 +190,9 @@ jobs:
           elif has_dotdot "$NORM_DOCKERFILE_PATH"; then
             echo "::error::dockerfile_path must not contain a '..' path component, got '$DOCKERFILE_PATH'"
             fail=1
+          elif [[ "$NORM_DOCKERFILE_PATH" == *[*?\[]* ]]; then
+            echo "::error::dockerfile_path must not contain glob metacharacters (*, ?, [), got '$DOCKERFILE_PATH'"
+            fail=1
           elif [[ -L "$NORM_DOCKERFILE_PATH" ]]; then
             echo "::error::dockerfile_path '$DOCKERFILE_PATH' must be a regular file, not a symlink"
             fail=1
@@ -223,11 +226,15 @@ jobs:
             esac
           fi
 
-          # context '..' check runs independently of the external_path branches
-          # above so the more specific error still fires when external_path
-          # itself fails validation.
+          # context '..' and glob checks run independently of the external_path
+          # branches above so the more specific error still fires when
+          # external_path itself fails validation.
           if has_dotdot "$NORM_CONTEXT"; then
             echo "::error::context must not contain a '..' path component, got '$CONTEXT'"
+            fail=1
+          fi
+          if [[ "$NORM_CONTEXT" == *[*?\[]* ]]; then
+            echo "::error::context must not contain glob metacharacters (*, ?, [), got '$CONTEXT'"
             fail=1
           fi
 
