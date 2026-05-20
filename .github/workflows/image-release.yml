@@ -78,7 +78,7 @@ on:
         required: false
         type: string
         default: ""
-        description: "Optional external repo to checkout as the build context (e.g., 'patroni/patroni'). When set, the caller is expected to point `context` at `external_path`."
+        description: "Optional external repo to checkout as the build context (e.g., 'patroni/patroni'). When set, `context` must equal `external_path` or be a subpath of it."
       external_ref:
         required: false
         type: string
@@ -197,6 +197,10 @@ jobs:
                 fail=1
                 ;;
             esac
+            if [[ "$CONTEXT" == *..* ]]; then
+              echo "::error::context must not contain '..', got '$CONTEXT'"
+              fail=1
+            fi
           fi
           if [[ "$GO_VENDOR" == "true" ]]; then
             echo "::error::go_vendor is not supported with external_repo; the vendor step would run in the caller repo, leaving the external build context without vendor/"
