@@ -158,11 +158,17 @@ jobs:
           if [[ -z "$DOCKERFILE_PATH" ]]; then
             echo "::error::dockerfile_path is required when external_repo is set"
             fail=1
+          elif [[ "$DOCKERFILE_PATH" == /* ]]; then
+            echo "::error::dockerfile_path must be relative to the caller repository workspace, got '$DOCKERFILE_PATH'"
+            fail=1
+          elif [[ "$DOCKERFILE_PATH" == *..* ]]; then
+            echo "::error::dockerfile_path must not contain '..', got '$DOCKERFILE_PATH'"
+            fail=1
           elif [[ -L "$DOCKERFILE_PATH" ]]; then
             echo "::error::dockerfile_path '$DOCKERFILE_PATH' must be a regular file, not a symlink"
             fail=1
           elif [[ ! -f "$DOCKERFILE_PATH" ]]; then
-            echo "::error::dockerfile_path '$DOCKERFILE_PATH' not found in this repo"
+            echo "::error::dockerfile_path '$DOCKERFILE_PATH' not found in the caller repository workspace"
             fail=1
           fi
           if [[ -z "$EXTERNAL_PATH" ]]; then
@@ -214,8 +220,14 @@ jobs:
           DEST: ${{ inputs.external_path }}/Dockerfile
         run: |
           # Remove any existing DEST first so cp cannot follow a symlink the
-          # external repo may ship at that path.
+          # external repo may ship at that path. `rm -f` succeeds on missing
+          # paths but fails on directories under `set -e`; assert DEST is gone
+          # before writing so failures surface with a clear message.
           rm -f -- "$DEST"
+          if [[ -e "$DEST" || -L "$DEST" ]]; then
+            echo "::error::cannot overlay Dockerfile onto '$DEST': path still exists after rm (likely a directory)"
+            exit 1
+          fi
           cp -- "$SRC" "$DEST"
 
       - name: Prepare non-secret build args from env file
@@ -293,6 +305,11 @@ jobs:
         uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f # v7.1.0
         with:
           context: ${{ inputs.context }}
+          # In external_repo mode the overlaid Dockerfile lives at
+          # external_path/Dockerfile, which may differ from context (e.g., when
+          # caller points context at a monorepo subpath). Pin file explicitly
+          # so build never silently picks up an upstream Dockerfile.
+          file: ${{ inputs.external_repo != '' && format('{0}/Dockerfile', inputs.external_path) || '' }}
           platforms: ${{ inputs.platforms }}
           push: true
           tags: ${{ steps.meta.outputs.tags }}
