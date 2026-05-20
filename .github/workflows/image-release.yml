@@ -150,15 +150,41 @@ jobs:
         if: inputs.external_repo != ''
         env:
           DOCKERFILE_PATH: ${{ inputs.dockerfile_path }}
+          EXTERNAL_PATH: ${{ inputs.external_path }}
+          CONTEXT: ${{ inputs.context }}
+          GO_VENDOR: ${{ inputs.go_vendor }}
         run: |
+          fail=0
           if [[ -z "$DOCKERFILE_PATH" ]]; then
             echo "::error::dockerfile_path is required when external_repo is set"
-            exit 1
-          fi
-          if [[ ! -f "$DOCKERFILE_PATH" ]]; then
+            fail=1
+          elif [[ ! -f "$DOCKERFILE_PATH" ]]; then
             echo "::error::dockerfile_path '$DOCKERFILE_PATH' not found in this repo"
-            exit 1
+            fail=1
           fi
+          if [[ -z "$EXTERNAL_PATH" ]]; then
+            echo "::error::external_path must not be empty"
+            fail=1
+          elif [[ "$EXTERNAL_PATH" == /* ]]; then
+            echo "::error::external_path must be relative, got '$EXTERNAL_PATH'"
+            fail=1
+          elif [[ "$EXTERNAL_PATH" == *..* ]]; then
+            echo "::error::external_path must not contain '..', got '$EXTERNAL_PATH'"
+            fail=1
+          else
+            case "$CONTEXT" in
+              "$EXTERNAL_PATH"|"$EXTERNAL_PATH"/*) ;;
+              *)
+                echo "::error::context must be '$EXTERNAL_PATH' or a subpath when external_repo is set, got '$CONTEXT'"
+                fail=1
+                ;;
+            esac
+          fi
+          if [[ "$GO_VENDOR" == "true" ]]; then
+            echo "::error::go_vendor is not supported with external_repo; the vendor step would run in the caller repo, leaving the external build context without vendor/"
+            fail=1
+          fi
+          [[ "$fail" -eq 0 ]] || exit 1
 
       - name: Checkout external repo
         if: inputs.external_repo != ''
@@ -167,6 +193,7 @@ jobs:
           repository: ${{ inputs.external_repo }}
           ref: ${{ inputs.external_ref }}
           path: ${{ inputs.external_path }}
+          token: ${{ secrets.gh_pat || github.token }}
 
       - name: Overlay Dockerfile onto external source
         if: inputs.external_repo != ''
