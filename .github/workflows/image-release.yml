@@ -224,10 +224,12 @@ jobs:
           DEST: ${{ inputs.external_path }}/Dockerfile
         run: |
           # Remove any existing DEST first so cp cannot follow a symlink the
-          # external repo may ship at that path. `rm -f` succeeds on missing
-          # paths but fails on directories under `set -e`; assert DEST is gone
-          # before writing so failures surface with a clear message.
-          rm -f -- "$DEST"
+          # external repo may ship at that path. Tolerate rm's exit code with
+          # `|| true` so the `[[ -e ]]` check below can fire with a clear
+          # error message when DEST is a directory (rm -f fails on dirs, and
+          # without the `|| true` the step would abort on the bare rm error
+          # under `set -e`, never reaching this branch).
+          rm -f -- "$DEST" || true
           if [[ -e "$DEST" || -L "$DEST" ]]; then
             echo "::error::cannot overlay Dockerfile onto '$DEST': path still exists after rm (likely a directory)"
             exit 1
