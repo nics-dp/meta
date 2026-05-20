@@ -155,6 +155,12 @@ jobs:
           GO_VENDOR: ${{ inputs.go_vendor }}
         run: |
           fail=0
+          # Strip a single optional leading "./" for path comparison so
+          # equivalent forms ("./external-src" and "external-src") validate
+          # the same way. Error messages echo the caller's original value to
+          # avoid confusion ("you wrote X but the tool says Y was rejected").
+          NORM_EXTERNAL_PATH="${EXTERNAL_PATH#./}"
+          NORM_CONTEXT="${CONTEXT#./}"
           if [[ -z "$DOCKERFILE_PATH" ]]; then
             echo "::error::dockerfile_path is required when external_repo is set"
             fail=1
@@ -171,33 +177,30 @@ jobs:
             echo "::error::dockerfile_path '$DOCKERFILE_PATH' not found in the caller repository workspace"
             fail=1
           fi
-          if [[ -z "$EXTERNAL_PATH" ]]; then
-            echo "::error::external_path must not be empty"
+          if [[ -z "$NORM_EXTERNAL_PATH" || "$NORM_EXTERNAL_PATH" == "." ]]; then
+            echo "::error::external_path must resolve to a directory under the workspace (not '.' / './' / empty), got '$EXTERNAL_PATH'"
             fail=1
-          elif [[ "$EXTERNAL_PATH" == /* ]]; then
+          elif [[ "$NORM_EXTERNAL_PATH" == /* ]]; then
             echo "::error::external_path must be relative, got '$EXTERNAL_PATH'"
             fail=1
-          elif [[ "$EXTERNAL_PATH" == *..* ]]; then
+          elif [[ "$NORM_EXTERNAL_PATH" == *..* ]]; then
             echo "::error::external_path must not contain '..', got '$EXTERNAL_PATH'"
             fail=1
-          elif [[ "$EXTERNAL_PATH" == "." || "$EXTERNAL_PATH" == ./* ]]; then
-            echo "::error::external_path must not be '.' or start with './' (would overwrite caller repo), got '$EXTERNAL_PATH'"
-            fail=1
-          elif [[ "$EXTERNAL_PATH" == */ ]]; then
+          elif [[ "$NORM_EXTERNAL_PATH" == */ ]]; then
             echo "::error::external_path must not end with '/', got '$EXTERNAL_PATH'"
             fail=1
-          elif [[ "$EXTERNAL_PATH" == *[*?\[]* ]]; then
+          elif [[ "$NORM_EXTERNAL_PATH" == *[*?\[]* ]]; then
             echo "::error::external_path must not contain glob metacharacters (*, ?, [), got '$EXTERNAL_PATH'"
             fail=1
           else
-            case "$CONTEXT" in
-              "$EXTERNAL_PATH"|"$EXTERNAL_PATH"/*) ;;
+            case "$NORM_CONTEXT" in
+              "$NORM_EXTERNAL_PATH"|"$NORM_EXTERNAL_PATH"/*) ;;
               *)
                 echo "::error::context must be '$EXTERNAL_PATH' or a subpath when external_repo is set, got '$CONTEXT'"
                 fail=1
                 ;;
             esac
-            if [[ "$CONTEXT" == *..* ]]; then
+            if [[ "$NORM_CONTEXT" == *..* ]]; then
               echo "::error::context must not contain '..', got '$CONTEXT'"
               fail=1
             fi
