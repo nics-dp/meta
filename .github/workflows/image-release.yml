@@ -93,7 +93,7 @@ on:
         required: false
         type: string
         default: ""
-        description: "Path (relative to this repo) of the Dockerfile to copy into external_path/Dockerfile, overriding any Dockerfile the external repo ships with. Required when external_repo is set; otherwise ignored."
+        description: "Path (relative to the caller repository workspace) of the Dockerfile to copy into external_path/Dockerfile, overriding any Dockerfile the external repo ships with. Must be a regular file (symlinks are rejected). Required when external_repo is set; otherwise ignored."
     outputs:
       digest:
         description: "Image digest (sha256:...)"
@@ -158,6 +158,9 @@ jobs:
           if [[ -z "$DOCKERFILE_PATH" ]]; then
             echo "::error::dockerfile_path is required when external_repo is set"
             fail=1
+          elif [[ -L "$DOCKERFILE_PATH" ]]; then
+            echo "::error::dockerfile_path '$DOCKERFILE_PATH' must be a regular file, not a symlink"
+            fail=1
           elif [[ ! -f "$DOCKERFILE_PATH" ]]; then
             echo "::error::dockerfile_path '$DOCKERFILE_PATH' not found in this repo"
             fail=1
@@ -170,6 +173,15 @@ jobs:
             fail=1
           elif [[ "$EXTERNAL_PATH" == *..* ]]; then
             echo "::error::external_path must not contain '..', got '$EXTERNAL_PATH'"
+            fail=1
+          elif [[ "$EXTERNAL_PATH" == "." || "$EXTERNAL_PATH" == ./* ]]; then
+            echo "::error::external_path must not be '.' or start with './' (would overwrite caller repo), got '$EXTERNAL_PATH'"
+            fail=1
+          elif [[ "$EXTERNAL_PATH" == */ ]]; then
+            echo "::error::external_path must not end with '/', got '$EXTERNAL_PATH'"
+            fail=1
+          elif [[ "$EXTERNAL_PATH" == *[*?\[]* ]]; then
+            echo "::error::external_path must not contain glob metacharacters (*, ?, [), got '$EXTERNAL_PATH'"
             fail=1
           else
             case "$CONTEXT" in
@@ -200,7 +212,11 @@ jobs:
         env:
           SRC: ${{ inputs.dockerfile_path }}
           DEST: ${{ inputs.external_path }}/Dockerfile
-        run: cp "$SRC" "$DEST"
+        run: |
+          # Remove any existing DEST first so cp cannot follow a symlink the
+          # external repo may ship at that path.
+          rm -f -- "$DEST"
+          cp -- "$SRC" "$DEST"
 
       - name: Prepare non-secret build args from env file
         id: env-args
