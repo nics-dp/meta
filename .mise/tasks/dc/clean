@@ -26,10 +26,17 @@ clean_images() {
   docker compose down --rmi all --remove-orphans
 }
 
+remove_project_networks() {
+  network_ids=$(docker network ls --filter "label=com.docker.compose.project=${project}" -q)
+  if [ -n "$network_ids" ]; then
+    echo "$network_ids" | xargs docker network rm 2>/dev/null || true
+  fi
+}
+
 clean_networks() {
   echo "Removing networks..."
   docker compose down --remove-orphans
-  docker network ls --filter "name=${project}" -q | xargs -r docker network rm 2>/dev/null || true
+  remove_project_networks
 }
 
 case "$target" in
@@ -39,6 +46,6 @@ case "$target" in
   all)
     echo "Removing volumes, images, and networks..."
     docker compose down --volumes --rmi all --remove-orphans
-    docker network ls --filter "name=${project}" -q | xargs -r docker network rm 2>/dev/null || true
+    remove_project_networks
     ;;
 esac
