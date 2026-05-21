@@ -70,13 +70,12 @@ jobs:
           esac
 
           # Truncate body to 1000 chars (char-aware, UTF-8 safe).
-          # Previous `head -c 1000 | iconv -c -t UTF-8` cut in the middle of
-          # multi-byte sequences and iconv exited non-zero at EOF, failing the
-          # whole step under `set -eo pipefail`.
-          if [ ${#BODY} -gt 1000 ]; then
-            BODY=$(printf '%s' "$BODY" | python3 -c 'import sys; sys.stdout.write(sys.stdin.buffer.read().decode("utf-8", errors="ignore")[:1000])')
-            BODY="${BODY}..."
-          fi
+          # Both the length check and the slice happen in Python so we
+          # compare character counts (not bytes). Previous `head -c 1000 |
+          # iconv -c -t UTF-8` cut in the middle of multi-byte sequences
+          # and iconv exited non-zero at EOF, failing the step under
+          # pipefail.
+          BODY=$(printf '%s' "$BODY" | python3 -c 'import sys; s = sys.stdin.buffer.read().decode("utf-8", errors="ignore"); sys.stdout.write(s if len(s) <= 1000 else s[:1000] + "...")')
 
           # Validate extra_fields JSON, default to empty array on error
           EXTRA_FIELDS=$(printf '%s' "$EXTRA_FIELDS" | jq -c 'if type == "array" then . else [] end' 2>/dev/null || echo '[]')
