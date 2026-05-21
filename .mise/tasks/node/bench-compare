@@ -28,6 +28,11 @@ trap cleanup EXIT
 curl -fsSL "$META_CONFIG_BASE/vitest.config.ts" -o vitest.config.ts
 
 if [ "$label" != "" ]; then
+  if ! [[ "$count" =~ ^[1-9][0-9]*$ ]]; then
+    echo "Error: --count must be a positive integer (got '$count')" >&2
+    exit 1
+  fi
+
   out="bench-${label}.json"
   tmp_dir=$(mktemp -d)
 
