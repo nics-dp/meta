@@ -6,7 +6,7 @@
 #   GO_TEST_MOD      module mode                  default: vendor if vendor/ exists, else mod
 #   GO_COVERPKG      coverage instrumentation     default: <module>/internal/... if internal/ exists, else empty
 #   CGO_ENABLED      cgo on/off                   default: 1 (only when unset/empty;
-#                                                 `go/test --race|--full` force-sets it to 1)
+#                                                 `go:test --race|--full` force-sets it to 1)
 
 : "${GO_TEST_TAGS:=test}"
 : "${CGO_ENABLED:=1}"
