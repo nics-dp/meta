@@ -57,6 +57,8 @@ jobs:
           EXTRA_FIELDS: ${{ inputs.extra_fields }}
           GOOGLE_CHAT_WEBHOOK: ${{ secrets.google_chat_webhook }}
         run: |
+          set -euo pipefail
+
           if [ -z "$GOOGLE_CHAT_WEBHOOK" ]; then
             echo "No webhook configured, skipping notification"
             exit 0
