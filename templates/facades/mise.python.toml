@@ -19,10 +19,17 @@ uv = "latest"
 # Override py-env defaults if needed:
 # PY_RUNNER         = "uv run --group test"             # default
 # PY_TEST_PATHS     = "tests"                           # auto-detect tests/ or .
-# PY_LINT_PATHS     = "."
+# PY_LINT_PATHS     = "."                               # used by ruff/dead-code/complexity
+#                                                       # (typecheck reads pyproject.toml instead)
 # PY_BANDIT_PATHS   = "."
-# PY_BANDIT_EXCLUDE = "./.venv,./tests"
+# PY_BANDIT_EXCLUDE = "./.venv,./tests,./test"
 # PY_COVERAGE_FILE  = "coverage.xml"
+#
+# For typecheck excludes, configure in pyproject.toml:
+#   [tool.ty.src]
+#   exclude = ["test", ".venv"]
+#   [tool.pyrefly]
+#   project-excludes = ["test/**", ".venv/**"]
 
 # ------------------------------------------------------------------------------
 [task_config]
@@ -71,6 +78,7 @@ depends = [
   "py:lint-fix",
   "py:format-fix",
   "py:typecheck",
+  "py:typecheck --pyrefly",
   "py:sast",
   "py:audit",
   "py:safety-db",

@@ -3,6 +3,7 @@
 #MISE hide=true
 #MISE raw=true
 #MISE tools={bun="latest"}
+#MISE depends=["node:install"]
 #USAGE flag "--save <label>" help="Save bench results to bench-<label>.json (typically 'old' or 'new')"
 #USAGE flag "--count <n>" help="Number of runs for statistical significance" default="5"
 #USAGE flag "--pattern <regex>" help="Filter by bench name pattern" default=""
@@ -20,21 +21,26 @@ tmp_dir=""
 cleanup() {
   rc=$?
   rm -f vitest.config.ts
-  [ -n "$tmp_dir" ] && [ -d "$tmp_dir" ] && rm -rf "$tmp_dir"
+  [ "$tmp_dir" != "" ] && [ -d "$tmp_dir" ] && rm -rf "$tmp_dir"
   exit "$rc"
 }
 trap cleanup EXIT
 curl -fsSL "$META_CONFIG_BASE/vitest.config.ts" -o vitest.config.ts
 
-if [ -n "$label" ]; then
+if [ "$label" != "" ]; then
+  if ! [[ "$count" =~ ^[1-9][0-9]*$ ]]; then
+    echo "Error: --count must be a positive integer (got '$count')" >&2
+    exit 1
+  fi
+
   out="bench-${label}.json"
   tmp_dir=$(mktemp -d)
 
   cmd_base=(bunx vitest bench --run --reporter=json)
-  [ -n "$pattern" ] && cmd_base+=(--testNamePattern="$pattern")
+  [ "$pattern" != "" ] && cmd_base+=(--testNamePattern="$pattern")
 
   echo "Running benchmarks (count=$count, pattern=${pattern:-all}) -> $out"
-  for i in $(seq 1 "$count"); do
+  for ((i = 1; i <= count; i++)); do
     echo "==> Pass $i/$count"
     "${cmd_base[@]}" --outputFile="$tmp_dir/run-$i.json"
   done

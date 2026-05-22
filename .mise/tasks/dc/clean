@@ -1,0 +1,54 @@
+#!/usr/bin/env bash
+#MISE description="Clean Docker Compose resources"
+#MISE hide=true
+#MISE raw=true
+#MISE tools={gum="latest", jq="latest"}
+#USAGE arg "[target]" help="Resource to clean: vol, img, net, all" {
+#USAGE   choices "vol" "img" "net" "all"
+#USAGE }
+
+set -e
+
+target=${usage_target:-$(gum choose "vol" "img" "net" "all")}
+
+project=${COMPOSE_PROJECT_NAME:-}
+if [ -z "$project" ]; then
+  project=$(docker compose config --format json 2>/dev/null | jq -r '.name // empty')
+fi
+if [ -z "$project" ]; then
+  project=$(basename "$PWD")
+fi
+
+clean_volumes() {
+  echo "Removing volumes..."
+  docker compose down --volumes --remove-orphans
+}
+
+clean_images() {
+  echo "Removing images..."
+  docker compose down --rmi all --remove-orphans
+}
+
+remove_project_networks() {
+  network_ids=$(docker network ls --filter "label=com.docker.compose.project=${project}" -q)
+  if [ -n "$network_ids" ]; then
+    echo "$network_ids" | xargs docker network rm 2>/dev/null || true
+  fi
+}
+
+clean_networks() {
+  echo "Removing networks..."
+  docker compose down --remove-orphans
+  remove_project_networks
+}
+
+case "$target" in
+  vol) clean_volumes ;;
+  img) clean_images ;;
+  net) clean_networks ;;
+  all)
+    echo "Removing volumes, images, and networks..."
+    docker compose down --volumes --rmi all --remove-orphans
+    remove_project_networks
+    ;;
+esac

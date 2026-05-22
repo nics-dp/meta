@@ -2,7 +2,13 @@
   "$schema": "https://unpkg.com/knip@latest/schema.json",
   "ignore": ["src/components/ui/**"],
   "ignoreDependencies": [
-    "prettier-plugin-tailwindcss",
-    "@tailwindcss/vite"
+    "@lhci/cli",
+    "@playwright/test",
+    "@vue/eslint-config-typescript",
+    "eslint",
+    "eslint-plugin-security",
+    "eslint-plugin-vue",
+    "prettier",
+    "prettier-plugin-tailwindcss"
   ]
 }

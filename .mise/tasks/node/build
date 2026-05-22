@@ -4,5 +4,6 @@
 #MISE raw=true
 #MISE silent="stdout"
 #MISE tools={bun="latest"}
+#MISE depends=["node:install"]
 
 bun run build
