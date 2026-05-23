@@ -16,5 +16,16 @@
 : "${COMMIT:=$(git rev-parse HEAD 2>/dev/null || echo unknown)}"
 : "${BUILD_DATE:=$(date -u +%Y-%m-%dT%H:%M:%SZ)}"
 
+# Reject whitespace and quote characters in values to prevent ldflags
+# injection — Go's -ldflags parser splits on whitespace, so a value
+# containing a space would be parsed as an extra linker flag.
+for _v in VERSION_PKG VERSION COMMIT BUILD_DATE; do
+  if [[ "${!_v}" =~ [[:space:]\"\'] ]]; then
+    echo "Error: $_v contains invalid characters (whitespace or quotes): ${!_v}" >&2
+    exit 1
+  fi
+done
+unset _v
+
 # shellcheck disable=SC2034 # consumed by sourcing script (go/build, go/run)
 VERSION_LDFLAGS="-X ${VERSION_PKG}.Version=${VERSION} -X ${VERSION_PKG}.CommitSHA=${COMMIT} -X ${VERSION_PKG}.CommitDate=${BUILD_DATE}"
