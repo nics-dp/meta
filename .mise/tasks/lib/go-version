@@ -19,9 +19,11 @@
 # Reject whitespace and quote characters in values to prevent ldflags
 # injection — Go's -ldflags parser splits on whitespace, so a value
 # containing a space would be parsed as an extra linker flag.
+# Don't echo the offending value: env vars may carry sensitive data
+# and the error lands in CI logs.
 for _v in VERSION_PKG VERSION COMMIT COMMIT_DATE; do
   if [[ "${!_v}" =~ [[:space:]\"\'] ]]; then
-    echo "Error: $_v contains invalid characters (whitespace or quotes): ${!_v}" >&2
+    echo "Error: $_v contains invalid characters (whitespace or quotes)" >&2
     exit 1
   fi
 done
