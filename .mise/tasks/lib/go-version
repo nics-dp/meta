@@ -2,18 +2,19 @@
 # Sourced helper. Provides Go version info for ldflags injection.
 # Vars (override via env if needed):
 #   VERSION       from git describe --tags --always --dirty   default: dev
-#   COMMIT        short commit SHA                            default: unknown
-#   BUILD_DATE    ISO8601 UTC timestamp                       default: <now>
-#   VERSION_PKG   package holding version vars                default: main
+#   COMMIT        full commit SHA                              default: unknown
+#   BUILD_DATE    ISO8601 UTC timestamp                        default: <now>
+#   VERSION_PKG   package holding version vars                 default: main
 #
 # Exports:
-#   VERSION_LDFLAGS  ready-to-append ldflags string injecting
-#                    ${VERSION_PKG}.version, .commit, .buildDate
+#   VERSION_LDFLAGS  -ldflags string injecting
+#                    ${VERSION_PKG}.Version, .CommitSHA, .CommitDate
+#                    (matches the go-release workflow naming convention)
 
 : "${VERSION_PKG:=main}"
 : "${VERSION:=$(git describe --tags --always --dirty 2>/dev/null || echo dev)}"
-: "${COMMIT:=$(git rev-parse --short HEAD 2>/dev/null || echo unknown)}"
+: "${COMMIT:=$(git rev-parse HEAD 2>/dev/null || echo unknown)}"
 : "${BUILD_DATE:=$(date -u +%Y-%m-%dT%H:%M:%SZ)}"
 
 # shellcheck disable=SC2034 # consumed by sourcing script (go/build, go/run)
-VERSION_LDFLAGS="-X ${VERSION_PKG}.version=${VERSION} -X ${VERSION_PKG}.commit=${COMMIT} -X ${VERSION_PKG}.buildDate=${BUILD_DATE}"
+VERSION_LDFLAGS="-X ${VERSION_PKG}.Version=${VERSION} -X ${VERSION_PKG}.CommitSHA=${COMMIT} -X ${VERSION_PKG}.CommitDate=${BUILD_DATE}"
