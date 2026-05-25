@@ -3,25 +3,24 @@
 # Vars (override via env if needed):
 #   VERSION       from git describe --tags --always --dirty   default: dev
 #   COMMIT        full commit SHA                              default: unknown
-#   COMMIT_DATE   ISO8601 commit timestamp from git log        default: <now>
+#   BUILD_DATE    ISO8601 commit timestamp from git log        default: <now>
 #   VERSION_PKG   package holding version vars                 default: main
 #
 # Exports:
 #   VERSION_LDFLAGS  -ldflags string injecting
-#                    ${VERSION_PKG}.Version, .CommitSHA, .CommitDate
-#                    (matches the go-release workflow naming convention)
+#                    ${VERSION_PKG}.Version, .Commit, .BuildDate
 
 : "${VERSION_PKG:=main}"
 : "${VERSION:=$(git describe --tags --always --dirty 2>/dev/null || echo dev)}"
 : "${COMMIT:=$(git rev-parse HEAD 2>/dev/null || echo unknown)}"
-: "${COMMIT_DATE:=$(git log -1 --format=%cI 2>/dev/null || date -u +%Y-%m-%dT%H:%M:%SZ)}"
+: "${BUILD_DATE:=$(git log -1 --format=%cI 2>/dev/null || date -u +%Y-%m-%dT%H:%M:%SZ)}"
 
 # Reject whitespace and quote characters in values to prevent ldflags
 # injection — Go's -ldflags parser splits on whitespace, so a value
 # containing a space would be parsed as an extra linker flag.
 # Don't echo the offending value: env vars may carry sensitive data
 # and the error lands in CI logs.
-for _v in VERSION_PKG VERSION COMMIT COMMIT_DATE; do
+for _v in VERSION_PKG VERSION COMMIT BUILD_DATE; do
   if [[ "${!_v}" =~ [[:space:]\"\'] ]]; then
     echo "Error: $_v contains invalid characters (whitespace or quotes)" >&2
     exit 1
@@ -30,4 +29,4 @@ done
 unset _v
 
 # shellcheck disable=SC2034 # consumed by sourcing script (go/build, go/run)
-VERSION_LDFLAGS="-X ${VERSION_PKG}.Version=${VERSION} -X ${VERSION_PKG}.CommitSHA=${COMMIT} -X ${VERSION_PKG}.CommitDate=${COMMIT_DATE}"
+VERSION_LDFLAGS="-X ${VERSION_PKG}.Version=${VERSION} -X ${VERSION_PKG}.Commit=${COMMIT} -X ${VERSION_PKG}.BuildDate=${BUILD_DATE}"
