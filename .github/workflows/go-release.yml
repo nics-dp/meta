@@ -235,7 +235,7 @@ jobs:
           if [[ -n "$LDFLAGS_INPUT" ]]; then
             LDFLAGS="$LDFLAGS_INPUT"
           else
-            LDFLAGS="-s -w -X main.Version=v${VERSION} -X main.CommitSHA=$(git rev-parse HEAD) -X main.CommitDate=$(git log -1 --format=%cI)"
+            LDFLAGS="-s -w -X main.Version=v${VERSION} -X main.Commit=$(git rev-parse HEAD) -X main.BuildDate=$(git log -1 --format=%cI)"
           fi
 
           mkdir -p output
