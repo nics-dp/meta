@@ -27,7 +27,7 @@ fi
 # Detect renamed env var (COMMIT_DATE → BUILD_DATE) to fail loud instead of
 # silently ignoring stale CI / mise configs that still set the old name.
 if [ -n "${COMMIT_DATE:-}" ]; then
-  echo "Error: COMMIT_DATE was renamed to BUILD_DATE (meta PR #93). Update your env." >&2
+  echo "Error: COMMIT_DATE was renamed to BUILD_DATE; set BUILD_DATE (or unset COMMIT_DATE)." >&2
   exit 1
 fi
 

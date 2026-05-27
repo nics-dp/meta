@@ -23,4 +23,7 @@ if [ ! -f "cmd/$usage_name/main.go" ]; then
   echo "Error: cmd/$usage_name/main.go not found"
   exit 1
 fi
-go run -mod=vendor -ldflags "${VERSION_LDFLAGS}" "./cmd/$usage_name" "$usage_args"
+# usage_args is a shell-escaped string for a variadic arg; eval into an array
+# so multiple args split correctly and zero args pass nothing (not an empty "").
+eval "args=(${usage_args:-})"
+go run -mod=vendor -ldflags "${VERSION_LDFLAGS}" "./cmd/$usage_name" "${args[@]}"
