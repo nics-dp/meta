@@ -3,6 +3,7 @@
 #MISE hide=true
 #MISE raw=true
 #MISE tools={bun="latest"}
+#MISE depends=["node:install"]
 
 if [ -f package.json ] && grep -q '"vue-tsc"' package.json; then
   bunx vue-tsc -b --noEmit

@@ -3,6 +3,7 @@
 #MISE hide=true
 #MISE raw=true
 #MISE tools={bun="latest"}
+#MISE depends=["node:build"]
 
 set -euo pipefail
 

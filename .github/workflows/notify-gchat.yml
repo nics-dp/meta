@@ -57,6 +57,8 @@ jobs:
           EXTRA_FIELDS: ${{ inputs.extra_fields }}
           GOOGLE_CHAT_WEBHOOK: ${{ secrets.google_chat_webhook }}
         run: |
+          set -euo pipefail
+
           if [ -z "$GOOGLE_CHAT_WEBHOOK" ]; then
             echo "No webhook configured, skipping notification"
             exit 0
@@ -69,11 +71,13 @@ jobs:
             *)                     BTN_TEXT="VIEW ON GITHUB" ;;
           esac
 
-          # Truncate body to 1000 chars
-          if [ ${#BODY} -gt 1000 ]; then
-            BODY=$(printf '%s' "$BODY" | head -c 1000 | iconv -c -t UTF-8)
-            BODY="${BODY}..."
-          fi
+          # Truncate body to 1000 chars (char-aware, UTF-8 safe).
+          # Both the length check and the slice happen in Python so we
+          # compare character counts (not bytes). Previous `head -c 1000 |
+          # iconv -c -t UTF-8` cut in the middle of multi-byte sequences
+          # and iconv exited non-zero at EOF, failing the step under
+          # pipefail.
+          BODY=$(printf '%s' "$BODY" | python3 -c 'import sys; s = sys.stdin.buffer.read().decode("utf-8", errors="ignore"); sys.stdout.write(s if len(s) <= 1000 else s[:1000] + "...")')
 
           # Validate extra_fields JSON, default to empty array on error
           EXTRA_FIELDS=$(printf '%s' "$EXTRA_FIELDS" | jq -c 'if type == "array" then . else [] end' 2>/dev/null || echo '[]')

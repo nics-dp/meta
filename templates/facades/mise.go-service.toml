@@ -78,7 +78,8 @@ depends = ["go:lib-remote"]
 [tasks.update]
 silent = "stdout"
 description = "Bump deps, refresh shared atoms, update submodules"
-depends = ["go:update", "gs:update", "meta:bump"]
+depends = ["go:update", "gs:update"]
+depends_post = ["meta:bump"]
 
 [tasks.ci]
 description = "Run all CI checks"

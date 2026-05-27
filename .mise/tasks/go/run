@@ -6,6 +6,9 @@
 #USAGE arg "[args]" var=#true var_min=0 help="Arguments to pass to the script"
 # shellcheck disable=SC2154 # usage_name, usage_args are set by mise USAGE
 
+# shellcheck disable=SC1091
+source "$(dirname "$0")/../lib/go-version"
+
 if [ "$usage_name" = "" ]; then
   entries=(cmd/*/main.go)
   if [ "${#entries[@]}" -eq 1 ]; then
@@ -20,4 +23,4 @@ if [ ! -f "cmd/$usage_name/main.go" ]; then
   echo "Error: cmd/$usage_name/main.go not found"
   exit 1
 fi
-go run -mod=vendor "./cmd/$usage_name" "$usage_args"
+go run -mod=vendor -ldflags "${VERSION_LDFLAGS}" "./cmd/$usage_name" "$usage_args"

@@ -49,8 +49,9 @@ depends_post = ["go:report"]
 
 [tasks.update]
 silent = "stdout"
-description = "Bump deps and refresh shared atoms"
-depends = ["go:update", "meta:bump"]
+description = "Bump deps, update submodules, and refresh shared atoms"
+depends = ["go:update", "gs:update"]
+depends_post = ["meta:bump"]
 
 [tasks.ci]
 description = "Run all CI checks"

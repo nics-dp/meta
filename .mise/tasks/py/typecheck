@@ -2,13 +2,12 @@
 #MISE description="Type check Python via ty (Astral's Rust-based type checker, Beta)"
 #MISE hide=true
 #MISE raw=true
+#MISE depends=["py:install"]
 #USAGE flag "--pyrefly" help="Use Meta's pyrefly instead of Astral's ty"
 
 set -euo pipefail
 # shellcheck disable=SC1091
 source "$(dirname "$0")/../lib/py-env"
-
-uv sync
 
 # shellcheck disable=SC2154
 # Both ty and pyrefly default to project-checking mode (driven by config) when
