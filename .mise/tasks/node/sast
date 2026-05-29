@@ -3,6 +3,10 @@
 #MISE hide=true
 #MISE raw=true
 #MISE tools={uv="latest"}
+# FIX: njsscan depends on semgrep -> pydantic 2.8.2 -> pydantic-core 2.20.1 whose
+# bundled PyO3 0.22 caps at Python 3.13. Pin uv to 3.13 so the wheel build
+# (triggered when no prebuilt wheel matches) doesn't hit the 3.14 cap.
+#MISE env={UV_PYTHON="3.13"}
 #USAGE flag "--json" help="Emit JSON output to njsscan-report.json"
 
 # shellcheck disable=SC2154
