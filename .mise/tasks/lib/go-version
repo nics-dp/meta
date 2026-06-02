@@ -26,7 +26,9 @@ fi
 
 # Detect renamed env var (COMMIT_DATE → BUILD_DATE) to fail loud instead of
 # silently ignoring stale CI / mise configs that still set the old name.
-if [ -n "${COMMIT_DATE:-}" ]; then
+# Use ${VAR+x} (not ${VAR:-}) so an explicitly-set-but-empty COMMIT_DATE
+# still trips the guard — being set at all signals a stale config.
+if [ -n "${COMMIT_DATE+x}" ]; then
   echo "Error: COMMIT_DATE was renamed to BUILD_DATE; set BUILD_DATE (or unset COMMIT_DATE)." >&2
   exit 1
 fi
