@@ -157,6 +157,11 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           ref: ${{ inputs.ref }}
+          # No authenticated git is run against this checkout afterwards, and in
+          # non-external mode the workspace root is the docker build context.
+          # Opt out of credential persistence (least privilege) so no token
+          # material lingers in or near the build context.
+          persist-credentials: false
 
       - name: Warn on orphan external_repo inputs
         if: inputs.external_repo == '' && (inputs.dockerfile_path != '' || inputs.external_ref != '')
@@ -351,6 +356,13 @@ jobs:
           ref: ${{ inputs.external_ref }}
           path: ${{ inputs.external_path }}
           token: ${{ secrets.gh_pat || github.token }}
+          # This checkout IS the docker build context. The token is still used
+          # for the initial fetch, but must not be persisted afterwards: never
+          # run authenticated git here, and keep credential material out of the
+          # build context. (checkout v6 stores creds under RUNNER_TEMP rather
+          # than .git/config, but opting out is the explicit least-privilege
+          # guarantee and is robust against version/behaviour changes.)
+          persist-credentials: false
 
       - name: Overlay Dockerfile onto external source
         if: inputs.external_repo != ''
