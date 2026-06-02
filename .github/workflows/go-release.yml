@@ -235,7 +235,16 @@ jobs:
           if [[ -n "$LDFLAGS_INPUT" ]]; then
             LDFLAGS="$LDFLAGS_INPUT"
           else
-            LDFLAGS="-s -w -X main.Version=v${VERSION} -X main.CommitSHA=$(git rev-parse HEAD) -X main.CommitDate=$(git log -1 --format=%cI)"
+            # Inject version vars into the same package the mise go:build/go:run
+            # tasks target (.mise/tasks/lib/go-version): <module>/internal/version
+            # when that dir exists, else main. Keep this detection in sync with
+            # that helper so local and release builds populate the same symbols.
+            VERSION_PKG="main"
+            MODULE=$(awk '/^module / {print $2; exit}' go.mod 2>/dev/null || echo "")
+            if [[ -n "$MODULE" && -d "internal/version" ]]; then
+              VERSION_PKG="${MODULE}/internal/version"
+            fi
+            LDFLAGS="-s -w -X ${VERSION_PKG}.Version=v${VERSION} -X ${VERSION_PKG}.Commit=$(git rev-parse HEAD) -X ${VERSION_PKG}.BuildDate=$(git log -1 --format=%cI)"
           fi
 
           mkdir -p output

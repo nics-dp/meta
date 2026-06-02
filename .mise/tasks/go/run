@@ -23,4 +23,12 @@ if [ ! -f "cmd/$usage_name/main.go" ]; then
   echo "Error: cmd/$usage_name/main.go not found"
   exit 1
 fi
-go run -mod=vendor -ldflags "${VERSION_LDFLAGS}" "./cmd/$usage_name" "$usage_args"
+# usage_args is a shell-escaped string for a variadic arg; eval into an array
+# so multiple args split correctly and zero args pass nothing (not an empty "").
+# Abort on eval failure: a malformed usage_args would otherwise leave args
+# stale/unset and silently run go with the wrong arguments.
+if ! eval "args=(${usage_args:-})"; then
+  echo "Error: failed to parse arguments: ${usage_args:-}" >&2
+  exit 1
+fi
+go run -mod=vendor -ldflags "${VERSION_LDFLAGS}" "./cmd/$usage_name" "${args[@]}"
