@@ -247,7 +247,18 @@ jobs:
               entry="${entry#"${entry%%[![:space:]]*}"}"
               entry="${entry%"${entry##*[![:space:]]}"}"
               [[ -z "$entry" || "$entry" == \#* ]] && continue
-              # shellcheck disable=SC2254 # intentional glob match against trusted allowlist entry
+              # Constrain each entry to the two documented forms before using it
+              # as a glob: an exact 'owner/repo' or an 'owner/*' wildcard. This
+              # keeps behaviour aligned with the input docs and rejects broader
+              # or malformed globs (e.g. '*/*', 'owner/re?o', 'owner/[ab]',
+              # entries with spaces or shell metacharacters) that would silently
+              # match more than intended.
+              if [[ ! "$entry" =~ ^[A-Za-z0-9._-]+/([A-Za-z0-9._-]+|\*)$ ]]; then
+                echo "::error::external_repo_allowlist entry '$entry' must be 'owner/repo' or 'owner/*'"
+                fail=1
+                continue
+              fi
+              # shellcheck disable=SC2254 # intentional glob match against validated allowlist entry
               case "$EXTERNAL_REPO" in
                 $entry) allow_match=1; break ;;
               esac
