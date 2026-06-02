@@ -169,14 +169,26 @@ jobs:
           DOCKERFILE_PATH: ${{ inputs.dockerfile_path }}
           EXTERNAL_REF: ${{ inputs.external_ref }}
         run: |
+          # Escape a value before interpolating it into a ::error::/::warning::
+          # workflow command, matching the GitHub Actions toolkit escapeData
+          # (% -> %25, CR -> %0D, LF -> %0A; % first to avoid double-escaping).
+          # Without this, a caller value containing newlines/CR/% could inject
+          # additional workflow commands or truncate the message.
+          esc() {
+            local s=$1
+            s=${s//'%'/'%25'}
+            s=${s//$'\r'/'%0D'}
+            s=${s//$'\n'/'%0A'}
+            printf '%s' "$s"
+          }
           # dockerfile_path / external_ref only take effect alongside
           # external_repo; surface a warning so callers don't assume they were
           # silently honored.
           if [[ -n "$DOCKERFILE_PATH" ]]; then
-            echo "::warning::dockerfile_path ('$DOCKERFILE_PATH') was set without external_repo and will be ignored"
+            echo "::warning::dockerfile_path ('$(esc "$DOCKERFILE_PATH")') was set without external_repo and will be ignored"
           fi
           if [[ -n "$EXTERNAL_REF" ]]; then
-            echo "::warning::external_ref ('$EXTERNAL_REF') was set without external_repo and will be ignored"
+            echo "::warning::external_ref ('$(esc "$EXTERNAL_REF")') was set without external_repo and will be ignored"
           fi
 
       - name: Validate external_repo inputs
@@ -191,6 +203,19 @@ jobs:
           GO_VENDOR: ${{ inputs.go_vendor }}
         run: |
           fail=0
+          # Escape a value before interpolating it into a ::error::/::warning::
+          # workflow command, matching the GitHub Actions toolkit escapeData
+          # (% -> %25, CR -> %0D, LF -> %0A; % first to avoid double-escaping).
+          # All caller-supplied values below are echoed through esc() so a
+          # malformed/hostile value (newlines, CR, %) cannot inject additional
+          # workflow commands or truncate the message.
+          esc() {
+            local s=$1
+            s=${s//'%'/'%25'}
+            s=${s//$'\r'/'%0D'}
+            s=${s//$'\n'/'%0A'}
+            printf '%s' "$s"
+          }
           # Strip a single optional leading "./" for path comparison so
           # equivalent forms ("./external-src" and "external-src") validate
           # the same way. Error messages echo the caller's original value to
@@ -221,7 +246,7 @@ jobs:
           # guard against malformed/injected values; the allowlist below is the
           # actual trust boundary.
           if [[ ! "$EXTERNAL_REPO" =~ ^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$ ]]; then
-            echo "::error::external_repo must be a bare 'owner/repo' slug, got '$EXTERNAL_REPO'"
+            echo "::error::external_repo must be a bare 'owner/repo' slug, got '$(esc "$EXTERNAL_REPO")'"
             fail=1
           fi
 
@@ -229,7 +254,7 @@ jobs:
           # (Non-emptiness is enforced above; skip the charset check when empty
           # so the more specific "required" error is the one that surfaces.)
           if [[ -n "$EXTERNAL_REF" && ! "$EXTERNAL_REF" =~ ^[A-Za-z0-9._/-]+$ ]]; then
-            echo "::error::external_ref must contain only [A-Za-z0-9._/-], got '$EXTERNAL_REF'"
+            echo "::error::external_ref must contain only [A-Za-z0-9._/-], got '$(esc "$EXTERNAL_REF")'"
             fail=1
           fi
 
@@ -254,7 +279,7 @@ jobs:
               # entries with spaces or shell metacharacters) that would silently
               # match more than intended.
               if [[ ! "$entry" =~ ^[A-Za-z0-9._-]+/([A-Za-z0-9._-]+|\*)$ ]]; then
-                echo "::error::external_repo_allowlist entry '$entry' must be 'owner/repo' or 'owner/*'"
+                echo "::error::external_repo_allowlist entry '$(esc "$entry")' must be 'owner/repo' or 'owner/*'"
                 fail=1
                 continue
               fi
@@ -264,53 +289,53 @@ jobs:
               esac
             done <<< "$EXTERNAL_REPO_ALLOWLIST"
             if [[ "$allow_match" -ne 1 ]]; then
-              echo "::error::external_repo '$EXTERNAL_REPO' is not permitted by external_repo_allowlist"
+              echo "::error::external_repo '$(esc "$EXTERNAL_REPO")' is not permitted by external_repo_allowlist"
               fail=1
             fi
           else
-            echo "::warning::external_repo_allowlist is empty; external_repo ('$EXTERNAL_REPO') is unconstrained. Provide an allowlist and ensure callers never pass PR-event data to external_repo/external_ref."
+            echo "::warning::external_repo_allowlist is empty; external_repo ('$(esc "$EXTERNAL_REPO")') is unconstrained. Provide an allowlist and ensure callers never pass PR-event data to external_repo/external_ref."
           fi
 
           if [[ -z "$NORM_DOCKERFILE_PATH" ]]; then
             echo "::error::dockerfile_path is required when external_repo is set"
             fail=1
           elif [[ "$NORM_DOCKERFILE_PATH" == /* ]]; then
-            echo "::error::dockerfile_path must be relative to the caller repository workspace, got '$DOCKERFILE_PATH'"
+            echo "::error::dockerfile_path must be relative to the caller repository workspace, got '$(esc "$DOCKERFILE_PATH")'"
             fail=1
           elif has_dotdot "$NORM_DOCKERFILE_PATH"; then
-            echo "::error::dockerfile_path must not contain a '..' path component, got '$DOCKERFILE_PATH'"
+            echo "::error::dockerfile_path must not contain a '..' path component, got '$(esc "$DOCKERFILE_PATH")'"
             fail=1
           elif [[ "$NORM_DOCKERFILE_PATH" == *[*?\[]* ]]; then
-            echo "::error::dockerfile_path must not contain glob metacharacters (*, ?, [), got '$DOCKERFILE_PATH'"
+            echo "::error::dockerfile_path must not contain glob metacharacters (*, ?, [), got '$(esc "$DOCKERFILE_PATH")'"
             fail=1
           elif [[ -L "$NORM_DOCKERFILE_PATH" ]]; then
-            echo "::error::dockerfile_path '$DOCKERFILE_PATH' must be a regular file, not a symlink"
+            echo "::error::dockerfile_path '$(esc "$DOCKERFILE_PATH")' must be a regular file, not a symlink"
             fail=1
           elif [[ ! -f "$NORM_DOCKERFILE_PATH" ]]; then
-            echo "::error::dockerfile_path '$DOCKERFILE_PATH' not found in the caller repository workspace"
+            echo "::error::dockerfile_path '$(esc "$DOCKERFILE_PATH")' not found in the caller repository workspace"
             fail=1
           fi
 
           if [[ -z "$NORM_EXTERNAL_PATH" || "$NORM_EXTERNAL_PATH" == "." ]]; then
-            echo "::error::external_path must resolve to a directory under the workspace (not '.' / './' / empty), got '$EXTERNAL_PATH'"
+            echo "::error::external_path must resolve to a directory under the workspace (not '.' / './' / empty), got '$(esc "$EXTERNAL_PATH")'"
             fail=1
           elif [[ "$NORM_EXTERNAL_PATH" == /* ]]; then
-            echo "::error::external_path must be relative, got '$EXTERNAL_PATH'"
+            echo "::error::external_path must be relative, got '$(esc "$EXTERNAL_PATH")'"
             fail=1
           elif has_dotdot "$NORM_EXTERNAL_PATH"; then
-            echo "::error::external_path must not contain a '..' path component, got '$EXTERNAL_PATH'"
+            echo "::error::external_path must not contain a '..' path component, got '$(esc "$EXTERNAL_PATH")'"
             fail=1
           elif [[ "$NORM_EXTERNAL_PATH" == */ ]]; then
-            echo "::error::external_path must not end with '/', got '$EXTERNAL_PATH'"
+            echo "::error::external_path must not end with '/', got '$(esc "$EXTERNAL_PATH")'"
             fail=1
           elif [[ "$NORM_EXTERNAL_PATH" == *[*?\[]* ]]; then
-            echo "::error::external_path must not contain glob metacharacters (*, ?, [), got '$EXTERNAL_PATH'"
+            echo "::error::external_path must not contain glob metacharacters (*, ?, [), got '$(esc "$EXTERNAL_PATH")'"
             fail=1
           else
             case "$NORM_CONTEXT" in
               "$NORM_EXTERNAL_PATH"|"$NORM_EXTERNAL_PATH"/*) ;;
               *)
-                echo "::error::context must be '$EXTERNAL_PATH' or a subpath when external_repo is set, got '$CONTEXT'"
+                echo "::error::context must be '$(esc "$EXTERNAL_PATH")' or a subpath when external_repo is set, got '$(esc "$CONTEXT")'"
                 fail=1
                 ;;
             esac
@@ -320,11 +345,11 @@ jobs:
           # branches above so the more specific error still fires when
           # external_path itself fails validation.
           if has_dotdot "$NORM_CONTEXT"; then
-            echo "::error::context must not contain a '..' path component, got '$CONTEXT'"
+            echo "::error::context must not contain a '..' path component, got '$(esc "$CONTEXT")'"
             fail=1
           fi
           if [[ "$NORM_CONTEXT" == *[*?\[]* ]]; then
-            echo "::error::context must not contain glob metacharacters (*, ?, [), got '$CONTEXT'"
+            echo "::error::context must not contain glob metacharacters (*, ?, [), got '$(esc "$CONTEXT")'"
             fail=1
           fi
 
@@ -338,7 +363,7 @@ jobs:
           if [[ -n "$NORM_DOCKERFILE_PATH" && -n "$NORM_EXTERNAL_PATH" && "$NORM_EXTERNAL_PATH" != "." ]]; then
             case "$NORM_DOCKERFILE_PATH" in
               "$NORM_EXTERNAL_PATH"|"$NORM_EXTERNAL_PATH"/*)
-                echo "::error::dockerfile_path ('$DOCKERFILE_PATH') must not be inside external_path ('$EXTERNAL_PATH'); the external checkout would overwrite it before the overlay copy"
+                echo "::error::dockerfile_path ('$(esc "$DOCKERFILE_PATH")') must not be inside external_path ('$(esc "$EXTERNAL_PATH")'); the external checkout would overwrite it before the overlay copy"
                 fail=1
                 ;;
             esac
