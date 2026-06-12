@@ -185,11 +185,14 @@ jobs:
           BUILD_DATE="$(git log -1 --format=%cI 2>/dev/null || date -u +%Y-%m-%dT%H:%M:%SZ)"
           # Reject whitespace and quote characters before feeding these into
           # -ldflags downstream — Go's -ldflags parser splits on whitespace, so a
-          # value with a space would be parsed as an extra linker flag. VERSION
-          # derives from a git tag / ref name, which may legitimately carry such
-          # characters. Mirrors the same guard in .mise/tasks/lib/go-version so
-          # the image and CLI build paths reject identical inputs. Don't echo the
-          # offending value: it lands in CI logs.
+          # value with a space would be parsed as an extra linker flag. A
+          # well-formed git ref name can't contain whitespace (git-check-ref-format
+          # forbids spaces and control chars), so that branch is defence-in-depth;
+          # a quote, however, is a permitted ref character, so VERSION (derived
+          # from a git tag / ref name) can legitimately carry one. Mirrors the same
+          # guard in .mise/tasks/lib/go-version so the image and CLI build paths
+          # reject identical inputs. Don't echo the offending value: it lands in
+          # CI logs.
           for _v in VERSION COMMIT BUILD_DATE; do
             if [[ "${!_v}" =~ [[:space:]\"\'] ]]; then
               echo "::error::$_v contains invalid characters (whitespace or quotes)"
