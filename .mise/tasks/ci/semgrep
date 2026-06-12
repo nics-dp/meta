@@ -2,7 +2,7 @@
 #MISE description="Run semgrep static analysis (p/ci baseline + lang packs)"
 #MISE hide=true
 #MISE raw=true
-#MISE tools={"pipx:semgrep"="latest"}
+#MISE tools={"pipx:semgrep"="latest","uv"="latest"}
 #USAGE arg "[packs]" var=#true var_min=0 help="Language packs (golang, python, typescript, javascript, ...). Stacked on top of p/ci baseline."
 #USAGE flag "--audit" help="Add p/default + p/security-audit + p/owasp-top-ten (deep scan, more FPs; nightly/manual use)"
 #USAGE flag "--rules <path>" help="Custom rules file (e.g., .semgrep/rules.yml). Stacked on top of packs." default=""
