@@ -1,0 +1,8 @@
+* @nics-dp/DP
+compose.yml @nics-dp/DP @charliie-dev
+Dockerfile @nics-dp/DP @charliie-dev
+mise.toml @nics-dp/DP @charliie-dev
+.mise/tasks/ @nics-dp/DP @charliie-dev
+renovate.json @nics-dp/DP @charliie-dev
+trivy.yaml @nics-dp/DP @charliie-dev
+.github/ @nics-dp/DP @charliie-dev
