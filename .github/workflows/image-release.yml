@@ -163,6 +163,53 @@ jobs:
           # material lingers in or near the build context.
           persist-credentials: false
 
+      - name: Compute version metadata
+        id: version
+        # This is the only unconditional run: step in the job; runs_on is a
+        # caller-supplied JSON input, so pin bash explicitly rather than rely on
+        # the runner default (pwsh on Windows) — this script uses bash-only
+        # syntax ([[ ]], indirect expansion ${!var}).
+        shell: bash
+        env:
+          SNAPSHOT: ${{ inputs.snapshot }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          # Mirror .mise/tasks/lib/go-version + go-release.yml so images inject
+          # the SAME version symbols as the CLI/release binaries: snapshot ->
+          # v0.0.0-snapshot+<shortsha>, release -> v<tag-without-v>. Exposed as
+          # build-args (VERSION/COMMIT/BUILD_DATE) the Dockerfile feeds into
+          # -ldflags -X <module>/internal/version.{Version,Commit,BuildDate}.
+          # git rev-parse/log only need HEAD, so a shallow checkout is fine.
+          if [[ "$SNAPSHOT" == "true" ]]; then
+            VERSION="v0.0.0-snapshot+$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
+          else
+            TAG="${RELEASE_TAG:-$GITHUB_REF_NAME}"
+            VERSION="v${TAG#v}"
+          fi
+          COMMIT="$(git rev-parse HEAD 2>/dev/null || echo unknown)"
+          BUILD_DATE="$(git log -1 --format=%cI 2>/dev/null || date -u +%Y-%m-%dT%H:%M:%SZ)"
+          # Reject whitespace and quote characters before feeding these into
+          # -ldflags downstream — Go's -ldflags parser splits on whitespace, so a
+          # value with a space would be parsed as an extra linker flag. A
+          # well-formed git ref name can't contain whitespace (git-check-ref-format
+          # forbids spaces and control chars), so that branch is defence-in-depth;
+          # a quote, however, is a permitted ref character, so VERSION (derived
+          # from a git tag / ref name) can legitimately carry one. Mirrors the same
+          # guard in .mise/tasks/lib/go-version so the image and CLI build paths
+          # reject identical inputs. Don't echo the offending value: it lands in
+          # CI logs.
+          for _v in VERSION COMMIT BUILD_DATE; do
+            if [[ "${!_v}" =~ [[:space:]\"\'] ]]; then
+              echo "::error::$_v contains invalid characters (whitespace or quotes)"
+              exit 1
+            fi
+          done
+          {
+            echo "version=${VERSION}"
+            echo "commit=${COMMIT}"
+            echo "build_date=${BUILD_DATE}"
+          } >> "$GITHUB_OUTPUT"
+
       - name: Warn on orphan external_repo inputs
         if: inputs.external_repo == '' && (inputs.dockerfile_path != '' || inputs.external_ref != '')
         env:
@@ -510,6 +557,9 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
+            VERSION=${{ steps.version.outputs.version }}
+            COMMIT=${{ steps.version.outputs.commit }}
+            BUILD_DATE=${{ steps.version.outputs.build_date }}
             ${{ inputs.build_args }}
             ${{ steps.env-args.outputs.build_args }}
           secrets: |
