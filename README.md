@@ -9,7 +9,7 @@ nics-dp 組織共用 mise tasks + reusable GitHub Actions workflows + 共用設�
 | `.github/workflows/`   | Reusable GitHub Actions workflows (`mise-task.yml` 為核心；release / sbom-image / codeql / utility 等)                                                                                       |
 | `.mise/tasks/`         | 共用 mise atomic tasks (`ci/`, `iac/`, `go/`, `node/`, `py/`, `sbom/`, `gs/`, `meta/`, `lib/`)，consumer 透過 `git::` remote includes 引用                                                   |
 | `templates/facades/`   | 5 個 mise.toml facade templates (`mise.go-service.toml`, `mise.go-lib.toml`, `mise.frontend.toml`, `mise.python.toml`, `mise.image.toml`) — copy 後依需求加 repo-specific 即可使用 |
-| `configs/`             | 共用設定檔 (`.golangci.yml`, `eslint.config.js`, `.prettierrc.json`, `.prettierignore`, `lighthouserc.json`, `playwright.config.ts`)。`vitest.config.ts` / `knip.json` 改為 repo-local（各 consumer commit 自家 root 檔，工具自動發現） |
+| `configs/`             | 共用設定檔 (`eslint.config.js`, `.prettierrc.json`, `.prettierignore`, `lighthouserc.json`, `playwright.config.ts`)。`vitest.config.ts` / `knip.json` 改為 repo-local（各 consumer commit 自家 root 檔，工具自動發現）；`.golangci.yml` 亦非共享（見下方例外） |
 | `renovate-preset.json` | Org-level Renovate preset (`extends` from consumer `renovate.json`)                                                                                                                        |
 
 ## Mise Tasks — Facade Pattern
