@@ -57,8 +57,7 @@ includes = ["git::https://github.com/nics-dp/meta.git//.mise/tasks?ref=main"]
 - `templates/facades/mise.<archetype>.toml` — facade templates for go-service / go-lib / frontend / python / image
 - `configs/eslint.config.js` — ESLint flat config (+ eslint-plugin-security)
 - `configs/.prettierrc.json` + `configs/.prettierignore` — Prettier shared
-- `configs/vitest.config.ts` — Vitest shared
-- `configs/knip.json` — Knip shared
+- `vitest.config.ts` / `knip.json` — **repo-local** (each web consumer commits its own at repo root; `node:test` / `node:knip` / `node:bench-compare` no longer fetch from meta and error out if the config is missing)
 - `configs/lighthouserc.json` — Lighthouse CI shared
 - `configs/playwright.config.ts` — Playwright base (env-driven via `PW_*`)
 - `renovate-preset.json` — Org-level Renovate preset (replaces Dependabot)

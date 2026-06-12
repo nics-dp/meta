@@ -9,7 +9,7 @@ nics-dp 組織共用 mise tasks + reusable GitHub Actions workflows + 共用設�
 | `.github/workflows/`   | Reusable GitHub Actions workflows (`mise-task.yml` 為核心；release / sbom-image / codeql / utility 等)                                                                                       |
 | `.mise/tasks/`         | 共用 mise atomic tasks (`ci/`, `iac/`, `go/`, `node/`, `py/`, `sbom/`, `gs/`, `meta/`, `lib/`)，consumer 透過 `git::` remote includes 引用                                                   |
 | `templates/facades/`   | 5 個 mise.toml facade templates (`mise.go-service.toml`, `mise.go-lib.toml`, `mise.frontend.toml`, `mise.python.toml`, `mise.image.toml`) — copy 後依需求加 repo-specific 即可使用 |
-| `configs/`             | 共用設定檔 (`.golangci.yml`, `eslint.config.js`, `.prettierrc.json`, `.prettierignore`, `vitest.config.ts`, `knip.json`, `lighthouserc.json`, `playwright.config.ts`)                       |
+| `configs/`             | 共用設定檔 (`eslint.config.js`, `.prettierrc.json`, `.prettierignore`, `lighthouserc.json`, `playwright.config.ts`)。`vitest.config.ts` / `knip.json` 改為 repo-local（各 consumer commit 自家 root 檔，工具自動發現）；`.golangci.yml` 亦非共享（見下方例外） |
 | `renovate-preset.json` | Org-level Renovate preset (`extends` from consumer `renovate.json`)                                                                                                                        |
 
 ## Mise Tasks — Facade Pattern
@@ -32,7 +32,7 @@ Facade templates 於 `templates/facades/`，包含 `[settings]` / `[tools]` / `[
 | `ci:*`    | semgrep, trivy-license                                                                                                                                                                         | 通用 CI 檢查（語言中立）                                                                                                                                                                                                                                                                                                                                                                            |
 | `iac:*`   | trivy, img:hadolint, actionlint                                                                                                                                                                | IaC misconfig + Dockerfile lint + workflow YAML lint                                                                                                                                                                                                                                                                                                                                                |
 | `go:*`    | api-fix, audit, build, bench-compare, clean, dead-code, deptree, generate, install, lib-local, lib-remote, lint-check, lint-fix, report, run, sast, test, update                               | Go 建置/測試/Lint/安全/模組。`go:test` 預設只跑 unit；flags：`--race`、`--coverage`、`--bench [--pattern X]`、`--full`；`go:report` 從 coverage.out 產 HTML+MD（自動讀 `go.mod` module path 解析 component）；`go:bench-compare` 跑 benchstat；`go:dead-code` 用 `cmd/deadcode` whole-program；`go:deptree` 用 `go mod graph`；路徑/tags/coverpkg 由 `lib/go-env` auto-detect            |
-| `node:*`  | install, build, bench-compare, bundle-size, clean, deptree, run, test, e2e, e2e-install, lint-check, lint-fix, format-check, format-fix, typecheck, sast, audit, update, knip, lighthouse      | JS/TS via bun。`lint`/`test`/`format`/`knip`/`lighthouse` 拉 `configs/` shared；e2e 用 Playwright；`node:clean [--deep]` 清 transient；`node:bench-compare` 跑 vitest bench × `--count` 後 merge JSON，無 flag 列對比 (mean ± rme + Welch t-test 完整 p-value)；`node:bundle-size` 偵 `.size-limit` config 用 size-limit，否則 fallback du+gzip |
+| `node:*`  | install, build, bench-compare, bundle-size, clean, deptree, run, test, e2e, e2e-install, lint-check, lint-fix, format-check, format-fix, typecheck, sast, audit, update, knip, lighthouse      | JS/TS via bun。`lint`/`format`/`lighthouse` 拉 `configs/` shared；`test`/`knip` 用 repo-local config（各 repo 自家 root 檔，工具自動發現，缺檔即報錯）；e2e 用 Playwright；`node:clean [--deep]` 清 transient；`node:bench-compare` 跑 vitest bench × `--count` 後 merge JSON，無 flag 列對比 (mean ± rme + Welch t-test 完整 p-value)；`node:bundle-size` 偵 `.size-limit` config 用 size-limit，否則 fallback du+gzip |
 | `py:*`    | install, build, audit, bench-compare, clean, complexity, dead-code, deptree, format-check, format-fix, license-custom, lint-check, lint-fix, profile, report, run, safety-db, sast, sbom-custom, test, typecheck, update | Python via uv + ruff + pytest + bandit + pip-audit + ty。`py:sast` (bandit)；`py:typecheck` (ty Beta / `--pyrefly`)；`py:dead-code` (vulture)；`py:complexity` (radon/xenon)；`py:deptree` (uv tree)；`py:safety-db` (safety<3)；`py:license-custom` (pip-licenses)；`py:sbom-custom` (cyclonedx-py)；`py:profile` 預設 cProfile，flags：`--instrument`/`--spy`/`--mem`/`--scalene`；env override 由 `lib/py-env` |
 | `sbom:*`  | source, enrich, trivy, grype                                                                                                                                                                   | Source SBOM 產生與漏洞掃描                                                                                                                                                                                                                                                                                                                                                                          |
 | `gs:*`    | clone, update                                                                                                                                                                                  | Git submodules                                                                                                                                                                                                                                                                                                                                                                                      |
@@ -128,7 +128,7 @@ enriched-source.cdx.json
 sbom-source.cdx.json
 ```
 
-Atoms 之 trap cleanup 結束時清 curl 下來的 shared config (`eslint.config.js`、`.prettierrc.json`、`vitest.config.ts`、`playwright.config.ts`、`knip.json`、`lighthouserc.json`)，但 atom 中斷時可能殘留 — 若 repo 不另放可一併 ignore。
+Atoms 之 trap cleanup 結束時清 curl 下來的 shared config (`eslint.config.js`、`.prettierrc.json`、`playwright.config.ts`、`lighthouserc.json`)，但 atom 中斷時可能殘留 — 若 repo 不另放可一併 ignore。（`vitest.config.ts` / `knip.json` 已改 repo-local，不再 curl，故不在此清單。）
 
 > **`.golangci.yml` 例外**：由 consumer repo **自家 commit**（非 curl），須含 `gofumpt.module-path: <repo-module>` 設定（v2.12.2 自動推導對無 `.` 模組名會誤判 stdlib，致 gci↔gofumpt import 互相 false positive）。範本見 `templates/facades/.golangci.yml.template`（如有）或直接 ref 既有 Go repo 範本。
 
@@ -234,14 +234,14 @@ Atoms 跑時用 `curl` 抓 raw GitHub 設定，跑完 trap cleanup 清除暫存�
 | --------------------------- | ------------------------------------------ | ----------------------------------------- |
 | `eslint.config.js`          | ESLint flat config + security plugin       | `node:lint-check`, `node:lint-fix`        |
 | `.prettierrc.json` + `.prettierignore` | Prettier shared                  | `node:format-check`, `node:format-fix`    |
-| `vitest.config.ts`          | Vitest shared                              | `node:test`                               |
-| `knip.json`                 | Knip shared                                | `node:knip`                               |
 | `lighthouserc.json`         | Lighthouse CI shared                       | `node:lighthouse`                         |
 | `playwright.config.ts`      | Playwright base (env-driven `PW_*`)        | `node:e2e`, `node:e2e-install`            |
 
 Consumer 可透過 `META_CONFIG_BASE` env 覆寫 raw URL 來源（forking nics-dp/meta 時用）。
 
 **`.golangci.yml` 例外**：不在 `configs/` 共享。各 Go consumer repo **自家 commit** `.golangci.yml`（含 `gofumpt.module-path: <module>` 顯式設定，繞過 golangci-lint v2.12.2 之 gci↔gofumpt false positive）。`go:lint-check` / `go:lint-fix` atom **不再 curl**，直接讀 repo 自家檔。
+
+**`vitest.config.ts` / `knip.json` 例外**：entries/ignores、setup files 等本質 repo-specific，不在 `configs/` 共享。各 web consumer repo **自家 commit** root `vitest.config.ts` / `knip.json`，工具自動發現。`node:test` / `node:knip` / `node:bench-compare` **不再 curl**，並於缺檔時明確報錯（非靜默 fallback 預設行為）。
 
 ---
 

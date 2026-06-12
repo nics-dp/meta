@@ -5,13 +5,24 @@
 #MISE tools={bun="latest"}
 #MISE depends=["node:install"]
 
-META_CONFIG_BASE="${META_CONFIG_BASE:-https://raw.githubusercontent.com/nics-dp/meta/main/configs}"
-cleanup() {
-  rc=$?
-  rm -f knip.json
-  exit "$rc"
-}
-trap cleanup EXIT
-curl -fsSL "$META_CONFIG_BASE/knip.json" -o knip.json
+# knip config is repo-specific (entries / ignores differ per project), so it is
+# NOT shared from meta: each consumer commits its own knip.json at the repo root
+# and knip auto-discovers it. No META_CONFIG_BASE fetch here.
+
+# Guard: fail loudly if the repo-local knip config is missing, instead of
+# silently falling back to knip's zero-config inference (different ignores/entries).
+have_cfg=0
+for f in knip.json knip.jsonc .knip.json .knip.jsonc knip.ts knip.js knip.config.ts knip.config.js; do
+  if [ -f "$f" ]; then have_cfg=1; break; fi
+done
+# package.json#knip: must be a top-level "knip" field, not just the knip
+# devDependency. A plain grep '"knip"' also matches dependencies/devDependencies
+# (knip is virtually always a devDep here), which would bypass the guard, so
+# parse the JSON and check for an own top-level property instead.
+if [ "$have_cfg" -eq 0 ] \
+  && ! bun --silent -e 'try{const p=require(process.cwd()+"/package.json");process.exit(Object.prototype.hasOwnProperty.call(p,"knip")?0:1)}catch{process.exit(1)}'; then
+  echo "node:knip: no knip config found at the repo root (knip.json/.jsonc/.ts/.js or a top-level \"knip\" field in package.json). knip config is repo-local — commit one." >&2
+  exit 1
+fi
 
 bunx knip
