@@ -5,13 +5,8 @@
 #MISE tools={bun="latest"}
 #MISE depends=["node:install"]
 
-META_CONFIG_BASE="${META_CONFIG_BASE:-https://raw.githubusercontent.com/nics-dp/meta/main/configs}"
-cleanup() {
-  rc=$?
-  rm -f vitest.config.ts
-  exit "$rc"
-}
-trap cleanup EXIT
-curl -fsSL "$META_CONFIG_BASE/vitest.config.ts" -o vitest.config.ts
-
+# vitest config is repo-specific (setup files, environment tweaks, per-repo
+# localStorage handling differ per project), so it is NOT shared from meta:
+# each consumer commits its own vitest.config.ts at the repo root and vitest
+# auto-discovers it. No META_CONFIG_BASE fetch here.
 bunx vitest run
