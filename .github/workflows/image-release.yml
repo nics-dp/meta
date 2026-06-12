@@ -24,6 +24,17 @@ on:
         type: string
         default: "."
         description: "Docker build context path"
+      target:
+        required: false
+        type: string
+        default: ""
+        description: >
+          Docker build target stage (e.g. 'runtime'). Empty (default) builds
+          the last stage in the Dockerfile, preserving existing behaviour for
+          callers whose final stage is already the intended image (e.g.
+          otel-bundle, patroni, synth, which have no 'runtime' stage). Service
+          repos with a trailing 'debug' stage should opt in with target: runtime
+          to avoid shipping the debug image.
       build_args:
         required: false
         type: string
@@ -552,6 +563,10 @@ jobs:
           # changes and keeps existing callers identical regardless of how the
           # action handles an empty `file:` input.
           file: ${{ inputs.external_repo != '' && format('{0}/Dockerfile', inputs.external_path) || format('{0}/Dockerfile', inputs.context) }}
+          # Empty target lets build-push-action build the Dockerfile's last
+          # stage (current behaviour). Service callers pass target: runtime to
+          # ship the hardened runtime stage instead of the trailing debug stage.
+          target: ${{ inputs.target }}
           platforms: ${{ inputs.platforms }}
           push: true
           tags: ${{ steps.meta.outputs.tags }}
