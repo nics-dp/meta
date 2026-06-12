@@ -17,7 +17,7 @@ for f in vitest.config.* vite.config.*; do
   if [ -f "$f" ]; then have_cfg=1; break; fi
 done
 if [ "$have_cfg" -eq 0 ]; then
-  echo "node:test: no vitest/vite config found at the repo root. vitest config is repo-local — commit a vitest.config.* (or a vite.config.* with a test block)." >&2
+  echo "node:test: no vitest/vite config found at the repo root. vitest config is repo-local — commit a vitest.config.* (or a vite.config.* that includes a test block)." >&2
   exit 1
 fi
 
