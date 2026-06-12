@@ -62,6 +62,23 @@ jobs:
   run:
     name: ${{ inputs.name != '' && inputs.name || inputs.task }}
     runs-on: ${{ fromJSON(inputs.runs_on) }}
+    # mise's minimum_release_age supply-chain control is forwarded to the pipx
+    # backend as a pip-only flag (--pip-args=--uploaded-prior-to=...), which the
+    # uv-backed pipx installer rejects ("Fatal error from uv"), breaking pipx
+    # tool installs such as semgrep. Setting the age to 0 disables that
+    # injection. "0" requires mise >= 2026.6.3 (older mise rejects it as an
+    # invalid duration), and the self-hosted pool reuses cached mise binaries
+    # of mixed versions, so the action below pins mise to 2026.6.3.
+    #
+    # MISE_USE_VERSIONS_HOST=false: mise-versions.jdx.dev (the CDN that caches
+    # version listings) frequently 403s, spamming "outcome=failed status=403
+    # fallback=true" warnings even though the source-direct fallback already
+    # succeeds. Disabling the host makes mise resolve versions straight from
+    # each backend's source, so `latest` keeps working without the noise.
+    # Trade-off: a few more direct GitHub/aqua calls on version lookup.
+    env:
+      MISE_MINIMUM_RELEASE_AGE: "0"
+      MISE_USE_VERSIONS_HOST: "false"
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
@@ -69,6 +86,7 @@ jobs:
 
       - uses: jdx/mise-action@dba19683ed58901619b14f395a24841710cb4925 # v4.1.0
         with:
+          version: "2026.6.3"
           cache: true
 
       - name: Configure git for private modules
