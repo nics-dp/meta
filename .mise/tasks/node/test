@@ -5,13 +5,20 @@
 #MISE tools={bun="latest"}
 #MISE depends=["node:install"]
 
-META_CONFIG_BASE="${META_CONFIG_BASE:-https://raw.githubusercontent.com/nics-dp/meta/main/configs}"
-cleanup() {
-  rc=$?
-  rm -f vitest.config.ts
-  exit "$rc"
-}
-trap cleanup EXIT
-curl -fsSL "$META_CONFIG_BASE/vitest.config.ts" -o vitest.config.ts
+# vitest config is repo-specific (setup files, environment tweaks, per-repo
+# localStorage handling differ per project), so it is NOT shared from meta:
+# each consumer commits its own vitest.config.ts at the repo root and vitest
+# auto-discovers it. No META_CONFIG_BASE fetch here.
+
+# Guard: fail loudly if the repo-local vitest/vite config is missing, instead of
+# silently running vitest with defaults (wrong environment / skipped setup).
+have_cfg=0
+for f in vitest.config.* vite.config.*; do
+  if [ -f "$f" ]; then have_cfg=1; break; fi
+done
+if [ "$have_cfg" -eq 0 ]; then
+  echo "node:test: no vitest/vite config found at the repo root. vitest config is repo-local — commit a vitest.config.* (or a vite.config.* that includes a test block)." >&2
+  exit 1
+fi
 
 bunx vitest run
