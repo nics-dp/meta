@@ -49,7 +49,6 @@ includes = ["git::https://github.com/nics-dp/meta.git//.mise/tasks?ref=main"]
 
 **PAT split**:
 - `GH_PAT_READ_NICSDP` — private module access, CodeQL private-repo access, release/snapshot builds, `mise-task.yml` private-modules flag
-- `GH_PAT_RELEASE_NICSDP` — release-please.yml + release workflows (triggers downstream)
 - `DOCKERHUB_USERNAME` / `DOCKERHUB_TOKEN` — image-release.yml (Docker image push)
 
 ## Key Files
@@ -73,7 +72,6 @@ includes = ["git::https://github.com/nics-dp/meta.git//.mise/tasks?ref=main"]
 ### Release & Build
 - **`go-release.yml`** — Multi-arch Go binary release (cosign, macOS notarize via quill, GitHub Release).
 - **`image-release.yml`** — Docker image dual-registry (DockerHub + GHCR) + attestations + cosign keyless. Outputs `digest` for `sbom-image.yml`.
-- **`release-please.yml`** — googleapis/release-please-action (conventional commits → Release PR → GitHub Release + tag).
 - **`sbom-image.yml`** — Container image CycloneDX 1.6 SBOM (anchore/sbom-action + parlay enrich) + Trivy + Grype vuln scan → GitHub Release + Security tab.
 
 ### CodeQL
@@ -82,7 +80,6 @@ includes = ["git::https://github.com/nics-dp/meta.git//.mise/tasks?ref=main"]
 
 ### Utility
 - **`artifacts-comment.yml`** — Sticky PR comment listing artifacts (nightly.link URLs).
-- **`notify-gchat.yml`** — Google Chat card notification.
 
 ### Meta CI
 - **`ci.yml`** — meta repo's own CI: matrix calling `mise-task.yml` with `iac:actionlint` (workflow YAML lint via mise atom).

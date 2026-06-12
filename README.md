@@ -196,7 +196,6 @@ Secret `gh_pat`：required when `private-modules=true`。
 | -------------------- | -------------------------------------------------------------------------------------------------------------------------- |
 | `go-release.yml`     | Go binary 跨平台建置 + cosign 簽章 + 多平台 SBOM；3 jobs：`prepare` → `build` (matrix) → `release`                          |
 | `image-release.yml`  | Docker image dual registry (DockerHub + GHCR) + BuildKit SBOM + SLSA provenance + Sigstore attestation + cosign 簽章       |
-| `release-please.yml` | googleapis/release-please-action 自動建 Release PR (含 changelog) → merge 後建 GitHub Release + tag。Caller 傳 `release_type` (`go`/`node`/`python`/`simple`) 與 `gh_pat` (PAT 觸發下游 workflow，非 `GITHUB_TOKEN`) |
 | `sbom-source.yml`    | Source 端 CycloneDX SBOM (anchore/sbom-action) + parlay 增強 + Trivy/Grype 漏洞掃描 → release-mode 上傳至 GitHub Release / snapshot-mode 留 workflow artifact |
 | `sbom-image.yml`     | Container image CycloneDX 1.6 SBOM + parlay 增強 + Trivy/Grype 漏洞掃描 → GitHub Release + Security tab                    |
 
@@ -218,7 +217,6 @@ Secret `gh_pat`：required when `private-modules=true`。
 | Workflow                    | 用途                                                          |
 | --------------------------- | ------------------------------------------------------------- |
 | `artifacts-comment.yml`     | PR 留言列當前 run artifacts，含 [nightly.link](https://nightly.link) 下載連結 |
-| `notify-gchat.yml`          | Google Chat 卡片通知                                          |
 
 ---
 
@@ -273,7 +271,6 @@ Meta repo 自家 `renovate.json` 額外 customManagers 處理：
 4. 寫 `.github/workflows/ci.yml`，用 matrix 呼叫 `nics-dp/meta/.github/workflows/mise-task.yml@main`
 5. 設 secrets:
    - `GH_PAT_READ_NICSDP` (Go 私模 + CodeQL private repo + release/snapshot)
-   - `GH_PAT_RELEASE_NICSDP` (release-please)
    - `DOCKERHUB_USERNAME` + `DOCKERHUB_TOKEN` (Docker image repos)
 
 驗證：`mise tasks ls` 應顯示 ~10 facade 名 + repo-specific extras（atoms hidden）；`mise run --dry-run ci test sbom` resolve 無誤。
