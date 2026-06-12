@@ -165,6 +165,11 @@ jobs:
 
       - name: Compute version metadata
         id: version
+        # This is the only unconditional run: step in the job; runs_on is a
+        # caller-supplied JSON input, so pin bash explicitly rather than rely on
+        # the runner default (pwsh on Windows) — this script uses bash-only
+        # syntax ([[ ]], indirect expansion ${!var}).
+        shell: bash
         env:
           SNAPSHOT: ${{ inputs.snapshot }}
           RELEASE_TAG: ${{ github.event.release.tag_name }}
