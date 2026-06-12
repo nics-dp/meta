@@ -9,4 +9,16 @@
 # localStorage handling differ per project), so it is NOT shared from meta:
 # each consumer commits its own vitest.config.ts at the repo root and vitest
 # auto-discovers it. No META_CONFIG_BASE fetch here.
+
+# Guard: fail loudly if the repo-local vitest/vite config is missing, instead of
+# silently running vitest with defaults (wrong environment / skipped setup).
+have_cfg=0
+for f in vitest.config.* vite.config.*; do
+  if [ -f "$f" ]; then have_cfg=1; break; fi
+done
+if [ "$have_cfg" -eq 0 ]; then
+  echo "node:test: no vitest/vite config found at the repo root. vitest config is repo-local — commit a vitest.config.* (or a vite.config.* with a test block)." >&2
+  exit 1
+fi
+
 bunx vitest run
