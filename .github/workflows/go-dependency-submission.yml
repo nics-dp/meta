@@ -22,9 +22,6 @@ on:
         default: ""
         description: "Build target to detect build dependencies for (e.g. './cmd/app'). Empty uses the action default of 'all' (every build target, including tests and tools)."
     secrets:
-      ci_read_app_id:
-        required: false
-        description: "Legacy/unused: the nics-dp-ci-read App is now identified by the CI_READ_APP_CLIENT_ID org variable (client-id); kept only for backward compatibility with callers still passing it, and is ignored."
       ci_read_app_private_key:
         required: false
         description: "Private key of the nics-dp-ci-read GitHub App (paired with the CI_READ_APP_CLIENT_ID org variable). Minted into a short-lived token so the resolver can fetch github.com/nics-dp/* modules."
