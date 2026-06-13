@@ -41,15 +41,15 @@ if [ "$usage_name" = "" ]; then
     exit 1
   fi
 fi
-# Reject a name containing path separators or traversal: usage_name is
-# interpolated into -build.cmd / -build.entrypoint / ./tmp/<name>, so a value
-# like "../x" or "a/b" would escape ./cmd and ./tmp.
-case "$usage_name" in
-  */* | *..*)
-    echo "Error: invalid name '$usage_name' (must not contain '/' or '..')" >&2
-    exit 1
-    ;;
-esac
+# Allowlist-validate the name: it is interpolated into -build.cmd, which air
+# runs via /bin/sh -c, so a name with whitespace/quotes/`;`/`$`/backticks would
+# be a shell-injection vector (and `/` or `..` would escape ./cmd / ./tmp).
+# Restrict to a safe character set that still covers real Go cmd dir names
+# (letters, digits, dot, underscore, dash), and reject `..` traversal.
+if ! [[ "$usage_name" =~ ^[A-Za-z0-9._-]+$ ]] || [[ "$usage_name" == *..* ]]; then
+  echo "Error: invalid name '$usage_name' (allowed: letters, digits, '.', '_', '-'; no '..')" >&2
+  exit 1
+fi
 if [ ! -f "cmd/$usage_name/main.go" ]; then
   echo "Error: cmd/$usage_name/main.go not found"
   exit 1
