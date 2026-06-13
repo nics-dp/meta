@@ -195,7 +195,7 @@ jobs:
             --config p/typescript \
             --config p/javascript \
             --sarif --output semgrep.sarif \
-            "$SCAN_PATH"
+            -- "$SCAN_PATH"
 
       - name: Upload semgrep SARIF
         if: always() && inputs.run_semgrep && hashFiles('semgrep.sarif') != ''
