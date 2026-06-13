@@ -39,6 +39,26 @@ jobs:
       # required to submit the resolved graph to the Dependency Submission API
       contents: write
     steps:
+      - name: Validate working_directory
+        env:
+          RAW_WD: ${{ inputs.working_directory }}
+        # A reusable workflow cannot trust its caller's inputs: a path that is
+        # empty, absolute, contains a '..' segment, or embeds a newline could run
+        # bun install / Syft outside the workspace or leak unexpected path data
+        # into the dependency snapshot. Fail fast here (mirrors the path
+        # validation in security-sarif.yml). Empty default is "." (see inputs).
+        run: |
+          case "$RAW_WD" in
+            "") echo "Error: working_directory must not be empty (use '.' for repo root)" >&2; exit 1 ;;
+            /*) echo "Error: working_directory must be relative, got absolute '$RAW_WD'" >&2; exit 1 ;;
+            *$'\n'* | *$'\r'*) echo "Error: working_directory must not contain newlines" >&2; exit 1 ;;
+          esac
+          # Segment-aware '..' check: wrapping in slashes matches '..' only as a
+          # whole path segment, so a legitimate name like 'my..dir' is allowed.
+          case "/$RAW_WD/" in
+            */../*) echo "Error: working_directory must not contain a '..' path segment" >&2; exit 1 ;;
+          esac
+
       - name: Checkout
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
@@ -59,7 +79,11 @@ jobs:
         # --frozen-lockfile installs exactly the versions resolved in bun.lock, so
         # the submitted graph matches the committed lockfile and the step fails if
         # bun.lock is stale rather than silently resolving different versions.
-        run: bun install --frozen-lockfile
+        # --ignore-scripts skips package lifecycle scripts (postinstall, etc.):
+        # they are not needed to materialize node_modules for cataloging, and
+        # skipping them removes arbitrary-code-execution surface if this workflow
+        # is ever run against untrusted (pull_request) content.
+        run: bun install --frozen-lockfile --ignore-scripts
 
       - name: Catalog node_modules and submit dependency snapshot
         uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
