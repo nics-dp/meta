@@ -1,1 +1,63 @@
-{"$schema":"https://docs.renovatebot.com/renovate-schema.json","extends":["github>nics-dp/meta:renovate-preset"],"github-actions":{"managerFilePatterns":[".github/workflows/**"]},"customManagers":[{"customType":"regex","description":"Update quill version in go-release workflow","managerFilePatterns":["/^\\.github/workflows/go-release\\.yml$/"],"matchStrings":["go install github\\.com/anchore/quill/cmd/quill@(?<currentValue>v\\d+\\.\\d+\\.\\d+)"],"depNameTemplate":"anchore/quill","datasourceTemplate":"github-releases"},{"customType":"regex","description":"Update parlay version in SBOM workflows","managerFilePatterns":["/^\\.github/workflows/sbom-(?:source|image)\\.yml$/"],"matchStrings":["go install github\\.com/snyk/parlay@(?<currentValue>v\\d+\\.\\d+\\.\\d+)"],"depNameTemplate":"snyk/parlay","datasourceTemplate":"github-releases"},{"customType":"regex","description":"Update pinned mise version in the mise-task reusable workflow","managerFilePatterns":["/^\\.github/workflows/mise-task\\.yml$/"],"matchStrings":["jdx/mise-action@[\\s\\S]*?version:\\s*\"(?<currentValue>\\d+\\.\\d+\\.\\d+)\""],"depNameTemplate":"jdx/mise","datasourceTemplate":"github-releases","extractVersionTemplate":"^v(?<version>.+)$"},{"customType":"regex","description":"Update air (air-verse/air) version in the go:dev mise task (tools header + config-free fallback)","managerFilePatterns":["/^\\.mise/tasks/go/dev$/"],"matchStrings":["go:github\\.com/air-verse/air\"=\"(?<currentValue>v\\d+\\.\\d+\\.\\d+)\"","go install github\\.com/air-verse/air@(?<currentValue>v\\d+\\.\\d+\\.\\d+)"],"depNameTemplate":"air-verse/air","datasourceTemplate":"github-releases"}]}
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "github>nics-dp/meta:renovate-preset"
+  ],
+  "github-actions": {
+    "managerFilePatterns": [
+      ".github/workflows/**"
+    ]
+  },
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "Update quill version in go-release workflow",
+      "managerFilePatterns": [
+        "/^\\.github/workflows/go-release\\.yml$/"
+      ],
+      "matchStrings": [
+        "go install github\\.com/anchore/quill/cmd/quill@(?<currentValue>v\\d+\\.\\d+\\.\\d+)"
+      ],
+      "depNameTemplate": "anchore/quill",
+      "datasourceTemplate": "github-releases"
+    },
+    {
+      "customType": "regex",
+      "description": "Update parlay version in SBOM workflows",
+      "managerFilePatterns": [
+        "/^\\.github/workflows/sbom-(?:source|image)\\.yml$/"
+      ],
+      "matchStrings": [
+        "go install github\\.com/snyk/parlay@(?<currentValue>v\\d+\\.\\d+\\.\\d+)"
+      ],
+      "depNameTemplate": "snyk/parlay",
+      "datasourceTemplate": "github-releases"
+    },
+    {
+      "customType": "regex",
+      "description": "Update pinned mise version in the mise-task reusable workflow",
+      "managerFilePatterns": [
+        "/^\\.github/workflows/mise-task\\.yml$/"
+      ],
+      "matchStrings": [
+        "jdx/mise-action@[\\s\\S]*?version:\\s*\"(?<currentValue>\\d+\\.\\d+\\.\\d+)\""
+      ],
+      "depNameTemplate": "jdx/mise",
+      "datasourceTemplate": "github-releases",
+      "extractVersionTemplate": "^v(?<version>.+)$"
+    },
+    {
+      "customType": "regex",
+      "description": "Update air (air-verse/air) version in the go:dev mise task (tools header + config-free fallback)",
+      "managerFilePatterns": [
+        "/^\\.mise/tasks/go/dev$/"
+      ],
+      "matchStrings": [
+        "go:github\\.com/air-verse/air\"=\"(?<currentValue>v\\d+\\.\\d+\\.\\d+)\"",
+        "go install github\\.com/air-verse/air@(?<currentValue>v\\d+\\.\\d+\\.\\d+)"
+      ],
+      "depNameTemplate": "air-verse/air",
+      "datasourceTemplate": "github-releases"
+    }
+  ]
+}
