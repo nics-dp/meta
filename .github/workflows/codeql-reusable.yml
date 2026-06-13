@@ -94,8 +94,8 @@ jobs:
             echo "GONOPROXY=github.com/nics-dp"
             echo "GONOSUMDB=github.com/nics-dp"
           } >> "$GITHUB_ENV"
-          git config --global url."https://${GH_PAT}@github.com/nics-dp".insteadOf "https://github.com/nics-dp"
-          git config --global url."https://${GH_PAT}@github.com/nics-dp/".insteadOf "git@github.com:nics-dp/"
+          git config --global url."https://x-access-token:${GH_PAT}@github.com/nics-dp".insteadOf "https://github.com/nics-dp"
+          git config --global url."https://x-access-token:${GH_PAT}@github.com/nics-dp/".insteadOf "git@github.com:nics-dp/"
 
       - name: Manual Go build for CodeQL
         if: matrix.language == 'go'
@@ -111,8 +111,8 @@ jobs:
         env:
           GH_PAT: ${{ steps.priv-token.outputs.token || secrets.GH_PAT_READ_NICSDP }}
         run: |
-          git config --global --remove-section "url.https://${GH_PAT}@github.com/nics-dp" 2>/dev/null || true
-          git config --global --remove-section "url.https://${GH_PAT}@github.com/nics-dp/" 2>/dev/null || true
+          git config --global --remove-section "url.https://x-access-token:${GH_PAT}@github.com/nics-dp" 2>/dev/null || true
+          git config --global --remove-section "url.https://x-access-token:${GH_PAT}@github.com/nics-dp/" 2>/dev/null || true
 
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@8aad20d150bbac5944a9f9d289da16a4b0d87c1e # v4.36.2
