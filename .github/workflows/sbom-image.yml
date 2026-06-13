@@ -31,7 +31,14 @@ on:
         required: false
         type: boolean
         default: true
-        description: "Generate a GitHub-native SBOM attestation binding the CycloneDX SBOM to the image digest (verifiable with `gh attestation verify`). Mirrors image-release.yml's `attest` input."
+        description: >
+          Generate a GitHub-native SBOM attestation binding the CycloneDX SBOM
+          to the image digest (verifiable with `gh attestation verify`). Mirrors
+          image-release.yml's `attest` input. A reusable workflow cannot raise
+          the caller's token scopes, so when this is enabled the caller's job
+          must grant attestations: write, id-token: write and (because the SBOM
+          attestation is pushed to GHCR) packages: write. Set attest: false to
+          skip it where the caller cannot grant those scopes.
       runs_on:
         required: false
         type: string
@@ -49,11 +56,18 @@ jobs:
     permissions:
       actions: read
       contents: write
-      packages: read
+      # packages: write (not read) because attest-sbom runs with
+      # push-to-registry: true, which pushes the SBOM attestation to the GHCR
+      # package - the same permission set image-release.yml's attestation steps
+      # use. The earlier `packages: read` was sufficient only for pulling the
+      # image to generate the SBOM.
+      packages: write
       security-events: write
       # attestations + id-token: write let actions/attest-sbom mint the SBOM
-      # attestation and obtain an OIDC token for keyless Sigstore signing.
+      # attestation and obtain an OIDC token for keyless Sigstore signing;
+      # artifact-metadata: write lets it create the artifact storage record.
       attestations: write
+      artifact-metadata: write
       id-token: write
     steps:
       - name: Checkout

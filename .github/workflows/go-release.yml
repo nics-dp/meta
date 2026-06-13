@@ -56,7 +56,14 @@ on:
         required: false
         type: boolean
         default: true
-        description: "Generate GitHub-native SLSA build provenance attestation for the released binaries (verifiable with `gh attestation verify`)"
+        description: >
+          Generate GitHub-native SLSA build provenance attestation for the
+          released binaries (verifiable with `gh attestation verify`). A
+          reusable workflow cannot raise the caller's token scopes, so when this
+          is enabled the caller's job must grant attestations: write and
+          id-token: write (the release job already needs id-token: write for the
+          existing cosign keyless flow). Set attest: false to skip it where the
+          caller cannot grant those scopes.
       snapshot:
         required: false
         type: boolean
