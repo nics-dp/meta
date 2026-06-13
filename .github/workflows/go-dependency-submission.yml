@@ -1,0 +1,78 @@
+# yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
+
+name: Go Dependency Submission
+
+# Resolves the Go module's dependency graph and submits it to GitHub's
+# Dependency Submission API (Dependency graph / Dependabot alerts). Running the
+# `go` resolver needs access to the org's PRIVATE Go modules, so the caller
+# passes an optional gh_pat secret that this workflow scopes to the nics-dp org
+# (mirrors mise-task.yml's private-module handling). Callers add a job that
+# `uses:` this workflow.
+on:
+  workflow_call:
+    inputs:
+      go_mod_path:
+        required: false
+        type: string
+        default: "go.mod"
+        description: "Repo path to the go.mod file used to detect dependencies."
+      go_build_target:
+        required: false
+        type: string
+        default: ""
+        description: "Build target to detect build dependencies for (e.g. './cmd/app'). Empty uses the action default of 'all' (every build target, including tests and tools)."
+    secrets:
+      gh_pat:
+        required: false
+        description: "Optional token for private Go module access (the resolver must fetch github.com/nics-dp/* modules)."
+
+permissions:
+  contents: read
+
+jobs:
+  go-dependency-submission:
+    # Pinned to ubuntu-latest: no caller passes a custom runner.
+    runs-on: ubuntu-latest
+    permissions:
+      # required to submit the resolved graph to the Dependency Submission API
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          fetch-depth: 1
+          # Do not persist the GITHUB_TOKEN into the checkout so later steps
+          # cannot be coerced into using it (CodeQL actions/untrusted-checkout).
+          # Private module access is granted separately via gh_pat below.
+          persist-credentials: false
+
+      - name: Configure git for private modules
+        env:
+          GH_PAT: ${{ secrets.gh_pat }}
+        run: |
+          if [ -n "$GH_PAT" ]; then
+            # Self-healing: drop any stale token-bearing url.*@github.com/nics-dp
+            # insteadOf rewrites left by a prior run before adding this run's
+            # fresh token, so an equal-length insteadOf tie can't pick up an
+            # expired token (mirrors codeql-reusable / go-release).
+            while read -r s; do
+              if [ -n "$s" ]; then git config --global --remove-section "$s" 2>/dev/null || true; fi
+            done < <(git config --global --name-only --get-regexp '^url\..*@github\.com/nics-dp' 2>/dev/null | sed -E 's/\.insteadof$//' | sort -u || true)
+            # Scope the rewrite to the nics-dp org prefix so only private org
+            # modules carry the token; public github.com fetches stay anonymous
+            # (do not rewrite all of github.com -- that over-scopes the token).
+            git config --global \
+              url."https://x-access-token:${GH_PAT}@github.com/nics-dp/".insteadOf "https://github.com/nics-dp/"
+            {
+              echo "GOPRIVATE=github.com/nics-dp/*"
+              echo "GONOSUMDB=github.com/nics-dp/*"
+            } >> "$GITHUB_ENV"
+          fi
+
+      - name: Submit Go dependency graph
+        uses: actions/go-dependency-submission@f35d5c9af13ce9cc32f7930b171e315e878f6921 # v2.0.3
+        with:
+          go-mod-path: ${{ inputs.go_mod_path }}
+          # Pass go_build_target through only when set; otherwise fall back to
+          # the action's own default ('all') so every build target is scanned.
+          go-build-target: ${{ inputs.go_build_target != '' && inputs.go_build_target || 'all' }}
