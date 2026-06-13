@@ -539,12 +539,12 @@ jobs:
           GH_PAT: ${{ steps.priv-token.outputs.token || secrets.gh_pat }}
         run: |
           if [[ "$HAS_PRIV" == "true" ]]; then
-            git config --global url."https://${GH_PAT}@github.com/nics-dp".insteadOf "https://github.com/nics-dp"
+            git config --global url."https://x-access-token:${GH_PAT}@github.com/nics-dp".insteadOf "https://github.com/nics-dp"
           fi
           go env -w GOPRIVATE=github.com/nics-dp GONOPROXY=github.com/nics-dp GONOSUMDB=github.com/nics-dp
           go mod vendor
           if [[ "$HAS_PRIV" == "true" ]]; then
-            git config --global --remove-section "url.https://${GH_PAT}@github.com/nics-dp" 2>/dev/null || true
+            git config --global --remove-section "url.https://x-access-token:${GH_PAT}@github.com/nics-dp" 2>/dev/null || true
           fi
 
       - name: Set up QEMU

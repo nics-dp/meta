@@ -214,9 +214,9 @@ jobs:
               echo "GONOPROXY=github.com/nics-dp"
               echo "GONOSUMDB=github.com/nics-dp"
             } >> "$GITHUB_ENV"
-            git config --global url."https://${GH_PAT}@github.com/nics-dp/".insteadOf "git@github.com:nics-dp/"
+            git config --global url."https://x-access-token:${GH_PAT}@github.com/nics-dp/".insteadOf "git@github.com:nics-dp/"
           fi
-          git config --global url."https://${GH_PAT}@github.com/nics-dp".insteadOf "https://github.com/nics-dp"
+          git config --global url."https://x-access-token:${GH_PAT}@github.com/nics-dp".insteadOf "https://github.com/nics-dp"
 
       - name: Cache vendor directory
         if: contains(inputs.extra_build_flags, '-mod=vendor')
@@ -349,8 +349,8 @@ jobs:
         env:
           GH_PAT: ${{ steps.priv-token.outputs.token || secrets.gh_pat }}
         run: |
-          git config --global --remove-section "url.https://${GH_PAT}@github.com/nics-dp/" 2>/dev/null || true
-          git config --global --remove-section "url.https://${GH_PAT}@github.com/nics-dp" 2>/dev/null || true
+          git config --global --remove-section "url.https://x-access-token:${GH_PAT}@github.com/nics-dp/" 2>/dev/null || true
+          git config --global --remove-section "url.https://x-access-token:${GH_PAT}@github.com/nics-dp" 2>/dev/null || true
 
   release:
     needs: [prepare, build]
