@@ -54,6 +54,12 @@ on:
       gh_pat:
         description: "GitHub PAT with read access to private modules (required when private-modules=true)"
         required: false
+      ci_read_app_id:
+        required: false
+        description: "App ID of the nics-dp-ci-read GitHub App. Preferred over gh_pat for private module access; pass via secrets: inherit. Falls back to gh_pat when empty."
+      ci_read_app_private_key:
+        required: false
+        description: "Private key of the nics-dp-ci-read GitHub App (pair with ci_read_app_id)."
 
 permissions:
   contents: read
@@ -79,7 +85,22 @@ jobs:
     env:
       MISE_MINIMUM_RELEASE_AGE: "0"
       MISE_USE_VERSIONS_HOST: "false"
+      # secrets cannot be used in step-level if:, so bridge them to env here.
+      HAS_CI_APP: ${{ secrets.ci_read_app_id != '' }}
+      HAS_GH_PAT: ${{ secrets.gh_pat != '' }}
     steps:
+      # Prefer a nics-dp-ci-read App token for private module access. The App secrets
+      # arrive via `secrets: inherit`; when absent (legacy callers) the step is skipped
+      # and the git-config below falls back to gh_pat. See nics-dp PAT->App migration.
+      - name: Setup | Mint private-module token
+        id: priv-token
+        if: env.HAS_CI_APP == 'true'
+        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2.2.2
+        with:
+          app-id: ${{ secrets.ci_read_app_id }}
+          private-key: ${{ secrets.ci_read_app_private_key }}
+          owner: ${{ github.repository_owner }}
+
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           fetch-depth: ${{ inputs.fetch-depth }}
@@ -92,10 +113,10 @@ jobs:
       - name: Configure git for private modules
         if: ${{ inputs.private-modules }}
         env:
-          GH_PAT: ${{ secrets.gh_pat }}
+          GH_PAT: ${{ steps.priv-token.outputs.token || secrets.gh_pat }}
         run: |
           if [ -z "$GH_PAT" ]; then
-            echo "::warning::private-modules=true but gh_pat secret is empty"
+            echo "::warning::private-modules=true but neither the ci-read App token nor gh_pat is available"
             exit 0
           fi
           git config --global url."https://x-access-token:${GH_PAT}@github.com/nics-dp/".insteadOf "https://github.com/nics-dp/"
