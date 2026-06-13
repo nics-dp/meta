@@ -52,7 +52,7 @@ on:
         default: false
     secrets:
       gh_pat:
-        description: "GitHub PAT with read access to private modules (required when private-modules=true)"
+        description: "Fallback PAT (read access to private modules) used only when the ci_read_app_* App secrets are not provided. Relevant when private-modules=true."
         required: false
       ci_read_app_id:
         required: false

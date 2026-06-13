@@ -128,7 +128,7 @@ on:
         required: true
       gh_pat:
         required: false
-        description: "Optional PAT for GitHub registry access; falls back to GITHUB_TOKEN when not provided (with its usual permission limits)."
+        description: "Fallback PAT for private module/repo access during checkout and build, used only when the ci_read_app_* App secrets are absent. GHCR push uses GITHUB_TOKEN, not this."
       ci_read_app_id:
         required: false
         description: "App ID of the nics-dp-ci-read GitHub App. Preferred over the PAT for private module access; pass via secrets: inherit. Falls back to the PAT when empty."
