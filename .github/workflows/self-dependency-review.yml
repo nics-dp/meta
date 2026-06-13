@@ -1,0 +1,17 @@
+# yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
+name: self-dependency-review
+
+# PR-time dependency review (vulnerable / disallowed-license deps) via the meta
+# reusable. Uses the GitHub dependency graph; posts a summary comment on failure
+# (the reusable's comment_summary_in_pr default is on-failure).
+on:
+  pull_request:
+    branches: [main, dev, "release/**"]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  review:
+    uses: nics-dp/meta/.github/workflows/dependency-review.yml@main
