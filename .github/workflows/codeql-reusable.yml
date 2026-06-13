@@ -25,11 +25,9 @@ on:
         type: string
         default: "false"
     secrets:
-      GH_PAT_READ_NICSDP:
-        required: false
       ci_read_app_id:
         required: false
-        description: "App ID of the nics-dp-ci-read GitHub App. Preferred over GH_PAT_READ_NICSDP for private module access; pass via secrets: inherit. Falls back to the PAT when empty."
+        description: "App ID of the nics-dp-ci-read GitHub App for private module access (pass via secrets: inherit)."
       ci_read_app_private_key:
         required: false
         description: "Private key of the nics-dp-ci-read GitHub App (pair with ci_read_app_id)."
@@ -44,9 +42,8 @@ jobs:
       actions: read
       contents: read
     env:
-      # secrets cannot be used in step-level if:, so bridge them to env here.
+      # secrets cannot be used in step-level if:, so bridge to env here.
       HAS_CI_APP: ${{ secrets.ci_read_app_id != '' && secrets.ci_read_app_private_key != '' }}
-      HAS_GH_PAT: ${{ secrets.GH_PAT_READ_NICSDP != '' }}
       USE_PRIVATE_GO: ${{ inputs.use-private-go-modules }}
 
     strategy:
@@ -55,13 +52,12 @@ jobs:
         include: ${{ fromJSON(inputs.matrix-include) }}
 
     steps:
-      # Prefer a nics-dp-ci-read App token for private module access. The App secrets
-      # arrive via `secrets: inherit`; when absent (legacy callers) the step is skipped
-      # and the later steps fall back to GH_PAT_READ_NICSDP. See nics-dp PAT->App migration.
+      # Mint a nics-dp-ci-read App token for private module access. The App secrets
+      # arrive via `secrets: inherit`; when absent the private-module steps are skipped.
       - name: Setup | Mint private-module token
         id: priv-token
         if: env.HAS_CI_APP == 'true'
-        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2.2.2
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
         with:
           app-id: ${{ secrets.ci_read_app_id }}
           private-key: ${{ secrets.ci_read_app_private_key }}
@@ -71,9 +67,9 @@ jobs:
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           submodules: ${{ inputs.submodules }}
-          # Use PAT only when checking out submodules (likely private nics-dp repos);
-          # default github.token suffices for the main repo and reduces token surface.
-          token: ${{ inputs.submodules != 'false' && (steps.priv-token.outputs.token || secrets.GH_PAT_READ_NICSDP) || github.token }}
+          # Use the App token only when checking out submodules (likely private nics-dp
+          # repos); default github.token suffices for the main repo and reduces token surface.
+          token: ${{ inputs.submodules != 'false' && steps.priv-token.outputs.token || github.token }}
 
       - name: Initialize CodeQL
         uses: github/codeql-action/init@8aad20d150bbac5944a9f9d289da16a4b0d87c1e # v4.36.2
@@ -82,18 +78,24 @@ jobs:
           build-mode: ${{ matrix.build-mode }}
           dependency-caching: true
           queries: security-extended,security-and-quality
-          external-repository-token: ${{ steps.priv-token.outputs.token || secrets.GH_PAT_READ_NICSDP }}
+          external-repository-token: ${{ steps.priv-token.outputs.token }}
 
       - name: Configure access to private Go modules
-        if: matrix.language == 'go' && env.USE_PRIVATE_GO == 'true' && (env.HAS_CI_APP == 'true' || env.HAS_GH_PAT == 'true')
+        if: matrix.language == 'go' && env.USE_PRIVATE_GO == 'true' && env.HAS_CI_APP == 'true'
         env:
-          GH_PAT: ${{ steps.priv-token.outputs.token || secrets.GH_PAT_READ_NICSDP }}
+          GH_PAT: ${{ steps.priv-token.outputs.token }}
         run: |
           {
             echo "GOPRIVATE=github.com/nics-dp"
             echo "GONOPROXY=github.com/nics-dp"
             echo "GONOSUMDB=github.com/nics-dp"
           } >> "$GITHUB_ENV"
+          # Self-healing: drop any stale token-bearing url.*@github.com/nics-dp
+          # insteadOf rewrites left by a prior run before adding this run's fresh
+          # token, so an equal-length insteadOf tie can't pick up an expired token.
+          while read -r s; do
+            if [ -n "$s" ]; then git config --global --remove-section "$s" 2>/dev/null || true; fi
+          done < <(git config --global --name-only --get-regexp '^url\..*@github\.com/nics-dp' 2>/dev/null | sed -E 's/\.insteadof$//' | sort -u || true)
           git config --global url."https://x-access-token:${GH_PAT}@github.com/nics-dp".insteadOf "https://github.com/nics-dp"
           git config --global url."https://x-access-token:${GH_PAT}@github.com/nics-dp/".insteadOf "git@github.com:nics-dp/"
 
@@ -107,9 +109,9 @@ jobs:
           go build -mod=vendor ./...
 
       - name: Revoke private module access
-        if: always() && matrix.language == 'go' && env.USE_PRIVATE_GO == 'true' && (env.HAS_CI_APP == 'true' || env.HAS_GH_PAT == 'true')
+        if: always() && matrix.language == 'go' && env.USE_PRIVATE_GO == 'true' && env.HAS_CI_APP == 'true'
         env:
-          GH_PAT: ${{ steps.priv-token.outputs.token || secrets.GH_PAT_READ_NICSDP }}
+          GH_PAT: ${{ steps.priv-token.outputs.token }}
         run: |
           git config --global --remove-section "url.https://x-access-token:${GH_PAT}@github.com/nics-dp" 2>/dev/null || true
           git config --global --remove-section "url.https://x-access-token:${GH_PAT}@github.com/nics-dp/" 2>/dev/null || true

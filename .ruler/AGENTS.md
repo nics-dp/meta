@@ -47,8 +47,8 @@ includes = ["git::https://github.com/nics-dp/meta.git//.mise/tasks?ref=main"]
 
 **Shared configs (`configs/`)**: Atoms fetch raw URLs at runtime (no commit to consumer repos). Trap cleanup removes the downloaded config when atom exits. Note: `.golangci.yml` is **per-repo committed** (not shared via curl) — `go:lint-check` / `go:lint-fix` read consumer's own file because gofumpt requires per-module `module-path` setting.
 
-**PAT split**:
-- `GH_PAT_READ_NICSDP` — private module access, CodeQL private-repo access, release/snapshot builds, `mise-task.yml` private-modules flag
+**Auth (GitHub App + DockerHub)**:
+- `CI_READ_APP_ID` / `CI_READ_APP_PRIVATE_KEY` — nics-dp-ci-read App token (org secrets): private module access, CodeQL private-repo access, release/snapshot builds, `mise-task.yml` private-modules flag. Callers pass via `secrets: inherit` (no PAT).
 - `DOCKERHUB_USERNAME` / `DOCKERHUB_TOKEN` — image-release.yml (Docker image push)
 
 ## Key Files
@@ -66,7 +66,7 @@ includes = ["git::https://github.com/nics-dp/meta.git//.mise/tasks?ref=main"]
 ## Workflow Architecture
 
 ### Core
-- **`mise-task.yml`** — Reusable. Inputs: `task`, `name`, `runs_on` (JSON via `fromJSON()`), `fetch-depth`, `private-modules`. Secret: `gh_pat`. Encapsulates checkout (SHA-pinned) + `jdx/mise-action@<sha>` + optional git private-modules config + run mise atom + step summary + enforce.
+- **`mise-task.yml`** — Reusable. Inputs: `task`, `name`, `runs_on` (JSON via `fromJSON()`), `fetch-depth`, `private-modules`. Secrets: `ci_read_app_id` / `ci_read_app_private_key`. Encapsulates checkout (SHA-pinned) + `jdx/mise-action@<sha>` + optional git private-modules config + run mise atom + step summary + enforce.
 
 ### Release & Build
 - **`go-release.yml`** — Multi-arch Go binary release (cosign, macOS notarize via quill, GitHub Release).

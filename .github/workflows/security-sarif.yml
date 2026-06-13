@@ -1,0 +1,305 @@
+# yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
+
+name: Security SARIF
+
+# Runs the security / IaC scanners that historically only GATED CI (no SARIF
+# export) and uploads their findings to GitHub code scanning (Security > Code
+# scanning), each under a distinct category. NON-BLOCKING by design: a scan
+# step erroring or finding issues never fails the caller's CI — findings only
+# populate the Security tab. Callers add a job that `uses:` this workflow.
+on:
+  workflow_call:
+    inputs:
+      ref:
+        required: false
+        type: string
+        default: ""
+        description: "Git ref to checkout (defaults to event ref)"
+      go_version:
+        required: false
+        type: string
+        default: "stable"
+        description: "Go toolchain version for gosec/govulncheck"
+      scan_path:
+        required: false
+        type: string
+        default: "."
+        description: "Directory to scan (trivy config / semgrep root)"
+      run_go:
+        required: false
+        type: boolean
+        default: true
+        description: "Run the Go scanners (gosec + govulncheck)"
+      run_dockerfile:
+        required: false
+        type: boolean
+        default: true
+        description: "Run the Dockerfile scanners (hadolint + trivy config)"
+      run_semgrep:
+        required: false
+        type: boolean
+        default: true
+        description: "Run the semgrep SAST scan"
+    secrets:
+      gh_pat:
+        required: false
+        description: "Optional PAT for private Go module access (gosec/govulncheck must build github.com/nics-dp/libdcf)"
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  security-sarif:
+    # Pinned to ubuntu-latest: this workflow depends on Linux/Docker-based
+    # actions (hadolint-action, trivy-action) and bash scan steps, so it is not
+    # portable to Windows/macOS runners. No caller passes a custom runner.
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # required by github/codeql-action/upload-sarif to write code-scanning results
+      security-events: write
+      actions: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          ref: ${{ inputs.ref }}
+          fetch-depth: 1
+          # The ref is a workflow_call input and may be attacker-influenced;
+          # do not persist the GITHUB_TOKEN into the checkout so later steps
+          # cannot be coerced into using it (CodeQL actions/untrusted-checkout).
+          # Private module access is granted separately via gh_pat below.
+          persist-credentials: false
+
+      # Pure fail-fast gate for the caller-supplied scan_path: reject an empty
+      # value, absolute paths, any '..' segment, and any newline/CR. This runs
+      # before every scanner (steps execute in order), so a path that escapes
+      # the workspace fails the job here instead of letting a scanner read
+      # out-of-tree files and leak their paths into the uploaded SARIF.
+      #
+      # The step ONLY validates -- it does not write the value to $GITHUB_ENV
+      # or $GITHUB_OUTPUT, so there is no user-controlled environment-file write
+      # (avoids CodeQL "env var from user-controlled source" / CRLF env-file
+      # injection). Each shell scanner re-bridges inputs.scan_path through its
+      # own per-step env var instead.
+      #
+      # Failing on a bad path does NOT break the non-blocking contract: an
+      # out-of-workspace scan_path is a CALLER CONFIGURATION error and should be
+      # surfaced loudly, which is distinct from a scanner FINDING (those never
+      # fail the job). Mirrors the allowlist-then-fail input validation used by
+      # the go:dev / go:run atoms.
+      - name: Validate scan path
+        env:
+          RAW_SCAN_PATH: ${{ inputs.scan_path }}
+        run: |
+          if [ -z "$RAW_SCAN_PATH" ]; then
+            echo "::error::scan_path must not be empty (use '.' for the repo root)"
+            exit 1
+          fi
+          case "$RAW_SCAN_PATH" in
+            /*)
+              echo "::error::scan_path must be workspace-relative, not absolute"
+              exit 1
+              ;;
+          esac
+          # Reject '..' only as a complete path segment (parent-dir traversal),
+          # not a literal substring -- pad with leading/trailing '/' so '*/../*'
+          # matches a real ".." segment while legitimate names like 'my..dir'
+          # are allowed.
+          case "/$RAW_SCAN_PATH/" in
+            */../*)
+              echo "::error::scan_path must not contain a '..' path segment"
+              exit 1
+              ;;
+          esac
+          # Reject newline / carriage-return (CRLF env-file / log-injection guard)
+          # by comparing the value against itself with those bytes stripped.
+          if [ "$(printf '%s' "$RAW_SCAN_PATH" | tr -d '\n\r')" != "$RAW_SCAN_PATH" ]; then
+            echo "::error::scan_path must not contain newline or carriage-return characters"
+            exit 1
+          fi
+
+      # ----------------------------------------------------------------------
+      # Go scanners: gosec (SAST) + govulncheck (known vulns). Both must BUILD
+      # the module, which imports the private github.com/nics-dp/libdcf, so we
+      # set up Go and configure git to fetch private modules via gh_pat.
+      # ----------------------------------------------------------------------
+      - name: Set up Go
+        if: inputs.run_go
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
+        with:
+          go-version: ${{ inputs.go_version }}
+          cache: false
+
+      - name: Configure git for private modules
+        if: inputs.run_go
+        env:
+          GH_PAT: ${{ secrets.gh_pat }}
+        run: |
+          if [ -n "$GH_PAT" ]; then
+            # Scope the PAT to a short-lived git config under $RUNNER_TEMP rather
+            # than the runner's default ~/.gitconfig, so the third-party
+            # trivy-action / hadolint-action that run later in this job cannot
+            # read the credential. GIT_CONFIG_GLOBAL is exported only for the
+            # Go-scan steps and the file is deleted by the cleanup step below.
+            PRIV_GITCONFIG="${RUNNER_TEMP}/security-sarif-gitconfig"
+            : > "$PRIV_GITCONFIG"
+            # Scope the rewrite to the nics-dp org prefix so only private org
+            # modules carry the token; public github.com fetches stay anonymous.
+            git config --file "$PRIV_GITCONFIG" \
+              url."https://x-access-token:${GH_PAT}@github.com/nics-dp/".insteadOf "https://github.com/nics-dp/"
+            {
+              echo "GIT_CONFIG_GLOBAL=${PRIV_GITCONFIG}"
+              echo "GOPRIVATE=github.com/nics-dp"
+              echo "GONOSUMDB=github.com/nics-dp"
+            } >> "$GITHUB_ENV"
+          fi
+
+      # Consumer repos may vendor (-mod=vendor). Refresh the vendor tree so
+      # gosec/govulncheck can type-check and build the module consistently;
+      # only acts when a vendor/ directory is present. continue-on-error keeps
+      # the non-blocking contract if private-module access / vendoring fails.
+      - name: Vendor Go modules
+        if: inputs.run_go
+        continue-on-error: true
+        run: |
+          if [ -d vendor ]; then
+            go mod vendor
+          fi
+
+      - name: Run gosec (SARIF)
+        if: inputs.run_go
+        continue-on-error: true
+        run: |
+          go install github.com/securego/gosec/v2/cmd/gosec@v2.27.1
+          # -no-fail keeps exit 0 regardless of findings; SARIF lands in gosec.sarif
+          gosec -fmt sarif -out gosec.sarif -no-fail ./...
+
+      - name: Upload gosec SARIF
+        if: always() && inputs.run_go && hashFiles('gosec.sarif') != ''
+        # non-blocking: a failed upload (API / permissions / SARIF format) must
+        # not fail the job and break the caller's CI.
+        continue-on-error: true
+        uses: github/codeql-action/upload-sarif@8aad20d150bbac5944a9f9d289da16a4b0d87c1e # v4.36.2
+        with:
+          sarif_file: gosec.sarif
+          category: gosec
+
+      - name: Run govulncheck (SARIF)
+        if: inputs.run_go
+        continue-on-error: true
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@v1.3.0
+          # -format sarif makes govulncheck exit 0 regardless of findings; the
+          # || true is a guard in case the build itself errors out.
+          govulncheck -format sarif ./... > govulncheck.sarif || true
+
+      - name: Upload govulncheck SARIF
+        if: always() && inputs.run_go && hashFiles('govulncheck.sarif') != ''
+        # non-blocking: a failed upload must not fail the job (see gosec upload).
+        continue-on-error: true
+        uses: github/codeql-action/upload-sarif@8aad20d150bbac5944a9f9d289da16a4b0d87c1e # v4.36.2
+        with:
+          sarif_file: govulncheck.sarif
+          category: govulncheck
+
+      # Revoke the private-module credential before any third-party action runs:
+      # delete the short-lived git config and clear GIT_CONFIG_GLOBAL so the
+      # PAT is no longer reachable by trivy-action / hadolint-action below.
+      - name: Revoke private-module credential
+        if: always() && inputs.run_go
+        run: |
+          if [ -n "${GIT_CONFIG_GLOBAL:-}" ]; then
+            rm -f "$GIT_CONFIG_GLOBAL"
+          fi
+          echo "GIT_CONFIG_GLOBAL=" >> "$GITHUB_ENV"
+
+      # ----------------------------------------------------------------------
+      # semgrep (SAST). Mirrors .mise/tasks/ci/semgrep config selection
+      # (p/ci baseline + go/python/typescript/javascript lang packs), minus
+      # --error so findings never fail the job.
+      # ----------------------------------------------------------------------
+      - name: Run semgrep (SARIF)
+        if: inputs.run_semgrep
+        continue-on-error: true
+        env:
+          # Per-step env bridge: keep inputs.scan_path out of the shell command
+          # text (no ${{ }} interpolation -> no shell injection); the value was
+          # already gated by "Validate scan path" above. Quoted + passed after
+          # `--` so a leading dash is never parsed as a semgrep option.
+          SCAN_PATH: ${{ inputs.scan_path }}
+        run: |
+          # pipx is preinstalled on GitHub-hosted runners and gives an isolated
+          # install (avoids PEP 668 externally-managed-environment failures),
+          # matching the pipx:semgrep tool used by the ci:semgrep mise task.
+          # --force reinstalls cleanly when a reused runner already has semgrep,
+          # instead of erroring out and silently skipping the scan.
+          pipx install --force semgrep
+          # --enable-nosem honours in-repo `nosem` suppression comments, mirroring
+          # .mise/tasks/ci/semgrep (this differs only by dropping --error so
+          # findings populate the Security tab without failing the job).
+          semgrep scan \
+            --enable-nosem \
+            --config p/ci \
+            --config p/golang \
+            --config p/python \
+            --config p/typescript \
+            --config p/javascript \
+            --sarif --output semgrep.sarif \
+            -- "$SCAN_PATH"
+
+      - name: Upload semgrep SARIF
+        if: always() && inputs.run_semgrep && hashFiles('semgrep.sarif') != ''
+        # non-blocking: a failed upload must not fail the job (see gosec upload).
+        continue-on-error: true
+        uses: github/codeql-action/upload-sarif@8aad20d150bbac5944a9f9d289da16a4b0d87c1e # v4.36.2
+        with:
+          sarif_file: semgrep.sarif
+          category: semgrep
+
+      # ----------------------------------------------------------------------
+      # IaC / Dockerfile scanners: trivy config (misconfig) + hadolint (lint).
+      # ----------------------------------------------------------------------
+      - name: Run trivy config (SARIF)
+        if: inputs.run_dockerfile
+        continue-on-error: true
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: config
+          # trivy-action is a third-party action with no shell we control, so the
+          # value goes straight into its `scan-ref` input. Path safety is enforced
+          # by the earlier "Validate scan path" gate, which fails the job before
+          # this step for any absolute / '..' / newline path.
+          scan-ref: ${{ inputs.scan_path }}
+          format: sarif
+          output: trivy-config.sarif
+          exit-code: "0"
+
+      - name: Upload trivy config SARIF
+        if: always() && inputs.run_dockerfile && hashFiles('trivy-config.sarif') != ''
+        # non-blocking: a failed upload must not fail the job (see gosec upload).
+        continue-on-error: true
+        uses: github/codeql-action/upload-sarif@8aad20d150bbac5944a9f9d289da16a4b0d87c1e # v4.36.2
+        with:
+          sarif_file: trivy-config.sarif
+          category: trivy-config
+
+      - name: Run hadolint (SARIF)
+        if: inputs.run_dockerfile
+        continue-on-error: true
+        uses: hadolint/hadolint-action@2332a7b74a6de0dda2e2221d575162eba76ba5e5 # v3.3.0
+        with:
+          dockerfile: Dockerfile*
+          recursive: true
+          format: sarif
+          output-file: hadolint.sarif
+          no-fail: true
+
+      - name: Upload hadolint SARIF
+        if: always() && inputs.run_dockerfile && hashFiles('hadolint.sarif') != ''
+        # non-blocking: a failed upload must not fail the job (see gosec upload).
+        continue-on-error: true
+        uses: github/codeql-action/upload-sarif@8aad20d150bbac5944a9f9d289da16a4b0d87c1e # v4.36.2
+        with:
+          sarif_file: hadolint.sarif
+          category: hadolint

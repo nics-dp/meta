@@ -9,7 +9,7 @@ unix_default_inline_shell_args = "bash -c"
 # ------------------------------------------------------------------------------
 [tools]
 # Python toolchain
-python = "3.14.5"
+python = "3.14.6"
 uv = "latest"
 
 [env]
