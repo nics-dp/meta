@@ -77,6 +77,10 @@ includes = ["git::https://github.com/nics-dp/meta.git//.mise/tasks?ref=main"]
 - **`codeql-reusable.yml`** — CodeQL Advanced analysis (configurable language matrix + Go build).
 - **`codeql.yml`** — meta repo's own CodeQL (workflow YAML scan only).
 
+### Security
+- **`security-sarif.yml`** — Reusable. Runs the gate-only scanners (gosec, govulncheck, semgrep, trivy config, hadolint) and uploads each as a distinct GitHub code-scanning SARIF category. Non-blocking: findings only populate the Security tab, never fail the caller's CI.
+- **`dependency-review.yml`** — Reusable. PR-time `actions/dependency-review-action` over the GitHub dependency graph (Go go.mod natively supported). BLOCKS PRs introducing dependencies with known vulnerabilities (>= `fail_on_severity`, default `high`) or disallowed licenses, and posts a summary comment (`comment_summary_in_pr`, default `on-failure`). Optional `allow_licenses` / `deny_licenses` SPDX lists. `runs-on: ubuntu-latest` (no runner input). Callers MUST invoke it from a `pull_request`-triggered workflow.
+
 ### Utility
 - **`artifacts-comment.yml`** — Sticky PR comment listing artifacts (nightly.link URLs).
 

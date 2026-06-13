@@ -1,0 +1,82 @@
+# yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
+
+name: Dependency Review
+
+# PR-time dependency review. Runs actions/dependency-review-action, which diffs
+# the base..head of a pull request against the GitHub dependency graph and FAILS
+# the job when the PR introduces a dependency with a known vulnerability at or
+# above `fail_on_severity`, or one carrying a disallowed license. Go go.mod is
+# natively understood by the dependency graph, so no extra setup is required.
+#
+# IMPORTANT: dependency-review-action only operates on `pull_request` /
+# `pull_request_target` events -- it needs the PR base/head refs to diff. Callers
+# MUST invoke this reusable workflow from a workflow that is triggered by
+# `pull_request` (or `pull_request_target`); on any other event the action errors.
+#
+# Caller example (.github/workflows/dependency-review.yml in a consumer repo):
+#   on:
+#     pull_request:
+#   jobs:
+#     dependency-review:
+#       uses: nics-dp/meta/.github/workflows/dependency-review.yml@main
+on:
+  workflow_call:
+    inputs:
+      fail_on_severity:
+        description: "Minimum vulnerability severity that fails the job (low | moderate | high | critical)"
+        required: false
+        type: string
+        default: "high"
+      comment_summary_in_pr:
+        description: "When to post the review summary as a PR comment (always | on-failure | never)"
+        required: false
+        type: string
+        default: "on-failure"
+      allow_licenses:
+        description: "Comma-separated SPDX allowlist; only these licenses are permitted. Empty = unset (no allowlist). Mutually exclusive with deny_licenses."
+        required: false
+        type: string
+        default: ""
+      deny_licenses:
+        description: "Comma-separated SPDX denylist; these licenses are rejected. Empty = unset (no denylist). Mutually exclusive with allow_licenses."
+        required: false
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+  # required so dependency-review-action can post / update its summary comment
+  pull-requests: write
+
+jobs:
+  dependency-review:
+    # Pinned to ubuntu-latest: dependency-review-action is a Linux/Node action
+    # and this workflow has no OS-specific needs, so there is no configurable
+    # runner input (a configurable runner was a footgun in security-sarif).
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          fetch-depth: 1
+          # No GITHUB_TOKEN is persisted into the checkout: the action reads the
+          # dependency diff from the GitHub API using the job token directly, so
+          # the on-disk checkout never needs credentials (CodeQL
+          # actions/untrusted-checkout hardening).
+          persist-credentials: false
+
+      - name: Dependency Review
+        uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
+        with:
+          fail-on-severity: ${{ inputs.fail_on_severity }}
+          comment-summary-in-pr: ${{ inputs.comment_summary_in_pr }}
+          # The action reads these via getOptionalInput + parseList: an empty
+          # string is coerced to "unset" (not "allow/deny nothing"), so passing
+          # the empty default through is equivalent to omitting the key. When
+          # both are left empty the action's "cannot set both" guard stays off;
+          # callers set at most one.
+          allow-licenses: ${{ inputs.allow_licenses }}
+          deny-licenses: ${{ inputs.deny_licenses }}
