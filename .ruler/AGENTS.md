@@ -77,6 +77,10 @@ includes = ["git::https://github.com/nics-dp/meta.git//.mise/tasks?ref=main"]
 - **`codeql-reusable.yml`** — CodeQL Advanced analysis (configurable language matrix + Go build).
 - **`codeql.yml`** — meta repo's own CodeQL (workflow YAML scan only).
 
+### Security & Supply Chain
+- **`scorecard.yml`** — Reusable. Runs OpenSSF Scorecard (`ossf/scorecard-action@<sha>`) and uploads `results.sarif` to code scanning (`category: scorecard`, non-blocking upload). Input `publish` (default false) wires `publish_results`; only publish from public repos. Perms: `security-events: write`, `id-token: write`, `contents: read`, `actions: read`.
+- **`go-dependency-submission.yml`** — Reusable. Submits the resolved Go dependency graph (`actions/go-dependency-submission@<sha>`) to the Dependency Submission API. Inputs: `go_mod_path` (default `go.mod`), `go_build_target` (empty omits the input so the action's own `all` default applies — split across two `if:`-gated steps). Secret `gh_pat` configures an org-scoped (`github.com/nics-dp/` only) private-module git rewrite in a short-lived `$RUNNER_TEMP` gitconfig via `GIT_CONFIG_GLOBAL` + `GOPRIVATE`. Perms: `contents: write`.
+
 ### Utility
 - **`artifacts-comment.yml`** — Sticky PR comment listing artifacts (nightly.link URLs).
 
