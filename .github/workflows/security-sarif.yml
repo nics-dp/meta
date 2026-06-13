@@ -129,6 +129,9 @@ jobs:
 
       - name: Upload gosec SARIF
         if: always() && inputs.run_go && hashFiles('gosec.sarif') != ''
+        # non-blocking: a failed upload (API / permissions / SARIF format) must
+        # not fail the job and break the caller's CI.
+        continue-on-error: true
         uses: github/codeql-action/upload-sarif@8aad20d150bbac5944a9f9d289da16a4b0d87c1e # v4.36.2
         with:
           sarif_file: gosec.sarif
@@ -145,6 +148,8 @@ jobs:
 
       - name: Upload govulncheck SARIF
         if: always() && inputs.run_go && hashFiles('govulncheck.sarif') != ''
+        # non-blocking: a failed upload must not fail the job (see gosec upload).
+        continue-on-error: true
         uses: github/codeql-action/upload-sarif@8aad20d150bbac5944a9f9d289da16a4b0d87c1e # v4.36.2
         with:
           sarif_file: govulncheck.sarif
@@ -176,7 +181,9 @@ jobs:
           # pipx is preinstalled on GitHub-hosted runners and gives an isolated
           # install (avoids PEP 668 externally-managed-environment failures),
           # matching the pipx:semgrep tool used by the ci:semgrep mise task.
-          pipx install semgrep
+          # --force reinstalls cleanly when a reused runner already has semgrep,
+          # instead of erroring out and silently skipping the scan.
+          pipx install --force semgrep
           # --enable-nosem honours in-repo `nosem` suppression comments, mirroring
           # .mise/tasks/ci/semgrep (this differs only by dropping --error so
           # findings populate the Security tab without failing the job).
@@ -192,6 +199,8 @@ jobs:
 
       - name: Upload semgrep SARIF
         if: always() && inputs.run_semgrep && hashFiles('semgrep.sarif') != ''
+        # non-blocking: a failed upload must not fail the job (see gosec upload).
+        continue-on-error: true
         uses: github/codeql-action/upload-sarif@8aad20d150bbac5944a9f9d289da16a4b0d87c1e # v4.36.2
         with:
           sarif_file: semgrep.sarif
@@ -213,6 +222,8 @@ jobs:
 
       - name: Upload trivy config SARIF
         if: always() && inputs.run_dockerfile && hashFiles('trivy-config.sarif') != ''
+        # non-blocking: a failed upload must not fail the job (see gosec upload).
+        continue-on-error: true
         uses: github/codeql-action/upload-sarif@8aad20d150bbac5944a9f9d289da16a4b0d87c1e # v4.36.2
         with:
           sarif_file: trivy-config.sarif
@@ -231,6 +242,8 @@ jobs:
 
       - name: Upload hadolint SARIF
         if: always() && inputs.run_dockerfile && hashFiles('hadolint.sarif') != ''
+        # non-blocking: a failed upload must not fail the job (see gosec upload).
+        continue-on-error: true
         uses: github/codeql-action/upload-sarif@8aad20d150bbac5944a9f9d289da16a4b0d87c1e # v4.36.2
         with:
           sarif_file: hadolint.sarif
