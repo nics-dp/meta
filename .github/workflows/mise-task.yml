@@ -19,7 +19,8 @@
 #         task: ${{ matrix.task }}
 #         private-modules: true
 #       secrets:
-#         gh_pat: ${{ secrets.GH_PAT_READ_NICSDP }}
+#         ci_read_app_id: ${{ secrets.CI_READ_APP_ID }}
+#         ci_read_app_private_key: ${{ secrets.CI_READ_APP_PRIVATE_KEY }}
 
 name: mise-task
 
@@ -46,17 +47,14 @@ on:
         type: number
         default: 1
       private-modules:
-        description: "Configure git to authenticate to private GitHub repos via gh_pat secret"
+        description: "Configure git to authenticate to private GitHub repos via the ci-read App token"
         required: false
         type: boolean
         default: false
     secrets:
-      gh_pat:
-        description: "Fallback PAT (read access to private modules) used only when the ci_read_app_* App secrets are not provided. Relevant when private-modules=true."
-        required: false
       ci_read_app_id:
         required: false
-        description: "App ID of the nics-dp-ci-read GitHub App. Preferred over gh_pat for private module access; pass via secrets: inherit. Falls back to gh_pat when empty."
+        description: "App ID of the nics-dp-ci-read GitHub App for private module access (pass via secrets: inherit). Relevant when private-modules=true."
       ci_read_app_private_key:
         required: false
         description: "Private key of the nics-dp-ci-read GitHub App (pair with ci_read_app_id)."
@@ -88,10 +86,8 @@ jobs:
       # secrets cannot be used in step-level if:, so bridge to env here.
       HAS_CI_APP: ${{ secrets.ci_read_app_id != '' && secrets.ci_read_app_private_key != '' }}
     steps:
-      # Prefer a nics-dp-ci-read App token for private module access, but only when this
-      # run actually needs private modules. The App secrets arrive via `secrets: inherit`;
-      # when absent (legacy callers) the step is skipped and the git-config below falls
-      # back to gh_pat. See nics-dp PAT->App migration.
+      # Mint a nics-dp-ci-read App token for private module access, but only when this
+      # run actually needs private modules. The App secrets arrive via `secrets: inherit`.
       - name: Setup | Mint private-module token
         id: priv-token
         if: ${{ env.HAS_CI_APP == 'true' && inputs.private-modules }}
@@ -113,10 +109,10 @@ jobs:
       - name: Configure git for private modules
         if: ${{ inputs.private-modules }}
         env:
-          GH_PAT: ${{ steps.priv-token.outputs.token || secrets.gh_pat }}
+          GH_PAT: ${{ steps.priv-token.outputs.token }}
         run: |
           if [ -z "$GH_PAT" ]; then
-            echo "::warning::private-modules=true but neither the ci-read App token nor gh_pat is available"
+            echo "::warning::private-modules=true but the ci-read App token is unavailable (ci_read_app_* secrets not inherited?)"
             exit 0
           fi
           git config --global url."https://x-access-token:${GH_PAT}@github.com/nics-dp/".insteadOf "https://github.com/nics-dp/"
