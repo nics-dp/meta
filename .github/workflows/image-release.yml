@@ -13,7 +13,10 @@ on:
         required: false
         type: string
         default: "linux/amd64,linux/arm64"
-        description: "Target platforms for multi-arch build"
+        description: >
+          Target platforms for multi-arch build. NOTE: ignored when
+          snapshot=true — snapshot builds are forced to linux/amd64 only to
+          skip emulated arm64 (see the "Resolve build platforms" step).
       runs_on:
         required: false
         type: string
@@ -553,6 +556,31 @@ jobs:
         run: |
           git config --global --remove-section "url.https://x-access-token:${GH_PAT}@github.com/nics-dp" 2>/dev/null || true
 
+      - name: Resolve build platforms
+        id: platforms
+        # runs_on is a caller-supplied JSON input that can resolve to a Windows
+        # runner (default shell pwsh); pin bash since this uses bash-only [[ ]]
+        # syntax. Mirrors the "Compute version metadata" step above.
+        shell: bash
+        env:
+          SNAPSHOT: ${{ inputs.snapshot }}
+          PLATFORMS_IN: ${{ inputs.platforms }}
+        run: |
+          # Snapshot builds are ephemeral, SHA-tagged dev images. Under the
+          # current deployment model only linux/amd64 is consumed from them
+          # (prod runs amd64; arm64 images are published only on real releases,
+          # for local dev on Apple Silicon). Building the linux/arm64 variant on
+          # snapshot means emulating arm64 under QEMU on the amd64 runners, which
+          # dominates snapshot build wall-clock. Force amd64-only on snapshot and
+          # ignore inputs.platforms; release builds (snapshot=false) honor
+          # inputs.platforms unchanged.
+          if [[ "$SNAPSHOT" == "true" ]]; then
+            PLATFORMS="linux/amd64"
+          else
+            PLATFORMS="$PLATFORMS_IN"
+          fi
+          echo "list=${PLATFORMS}" >> "$GITHUB_OUTPUT"
+
       - name: Set up QEMU
         uses: docker/setup-qemu-action@06116385d9baf250c9f4dcb4858b16962ea869c3 # v4.1.0
 
@@ -597,7 +625,7 @@ jobs:
           # stage (current behaviour). Service callers pass target: runtime to
           # ship the hardened runtime stage instead of the trailing debug stage.
           target: ${{ inputs.target }}
-          platforms: ${{ inputs.platforms }}
+          platforms: ${{ steps.platforms.outputs.list }}
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
