@@ -78,11 +78,9 @@ on:
         default: '"windows-latest"'
         description: "Runner for Windows build jobs as JSON"
     secrets:
-      gh_pat:
-        required: false
       ci_read_app_id:
         required: false
-        description: "App ID of the nics-dp-ci-read GitHub App. Preferred over gh_pat for private module access; pass via secrets: inherit. Falls back to gh_pat when empty."
+        description: "App ID of the nics-dp-ci-read GitHub App for private module access (pass via secrets: inherit)."
       ci_read_app_private_key:
         required: false
         description: "Private key of the nics-dp-ci-read GitHub App (pair with ci_read_app_id)."
@@ -173,13 +171,11 @@ jobs:
       fail-fast: false
       matrix: ${{ fromJSON(needs.prepare.outputs.matrix) }}
     env:
-      # secrets cannot be used in step-level if:, so bridge them to env here.
+      # secrets cannot be used in step-level if:, so bridge to env here.
       HAS_CI_APP: ${{ secrets.ci_read_app_id != '' && secrets.ci_read_app_private_key != '' }}
-      HAS_GH_PAT: ${{ secrets.gh_pat != '' }}
     steps:
-      # Prefer a nics-dp-ci-read App token for private module access. The App secrets
-      # arrive via `secrets: inherit`; when absent (legacy callers) the step is skipped
-      # and the later steps fall back to gh_pat. See nics-dp PAT->App migration.
+      # Mint a nics-dp-ci-read App token for private module access. The App secrets
+      # arrive via `secrets: inherit`; when absent the private-module steps are skipped.
       - name: Setup | Mint private-module token
         id: priv-token
         if: env.HAS_CI_APP == 'true'
@@ -194,7 +190,7 @@ jobs:
           ref: ${{ inputs.ref }}
           # The ref is a workflow_call input and may be attacker-influenced;
           # do not persist the GITHUB_TOKEN. Private module access is granted
-          # separately via the App token / gh_pat (CodeQL actions/untrusted-checkout).
+          # separately via the App token (CodeQL actions/untrusted-checkout).
           persist-credentials: false
 
       - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
@@ -203,9 +199,9 @@ jobs:
           cache: true
 
       - name: Configure private git repository
-        if: ${{ env.HAS_CI_APP == 'true' || env.HAS_GH_PAT == 'true' }}
+        if: env.HAS_CI_APP == 'true'
         env:
-          GH_PAT: ${{ steps.priv-token.outputs.token || secrets.gh_pat }}
+          GH_PAT: ${{ steps.priv-token.outputs.token }}
           GO_PRIVATE_FULL: ${{ inputs.go_private_full }}
         run: |
           if [[ "$GO_PRIVATE_FULL" == "true" ]]; then
@@ -345,9 +341,9 @@ jobs:
           retention-days: ${{ inputs.snapshot && 7 || 30 }}
 
       - name: Revoke private git repository access
-        if: ${{ always() && (env.HAS_CI_APP == 'true' || env.HAS_GH_PAT == 'true') }}
+        if: ${{ always() && env.HAS_CI_APP == 'true' }}
         env:
-          GH_PAT: ${{ steps.priv-token.outputs.token || secrets.gh_pat }}
+          GH_PAT: ${{ steps.priv-token.outputs.token }}
         run: |
           git config --global --remove-section "url.https://${GH_PAT}@github.com/nics-dp/" 2>/dev/null || true
           git config --global --remove-section "url.https://${GH_PAT}@github.com/nics-dp" 2>/dev/null || true

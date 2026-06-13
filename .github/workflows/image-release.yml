@@ -126,12 +126,9 @@ on:
         required: true
       dockerhub_token:
         required: true
-      gh_pat:
-        required: false
-        description: "Fallback PAT for private module/repo access during checkout and build, used only when the ci_read_app_* App secrets are absent. GHCR push uses GITHUB_TOKEN, not this."
       ci_read_app_id:
         required: false
-        description: "App ID of the nics-dp-ci-read GitHub App. Preferred over the PAT for private module access; pass via secrets: inherit. Falls back to the PAT when empty."
+        description: "App ID of the nics-dp-ci-read GitHub App for private module/repo access during checkout and build (pass via secrets: inherit). GHCR push uses GITHUB_TOKEN, not this."
       ci_read_app_private_key:
         required: false
         description: "Private key of the nics-dp-ci-read GitHub App (pair with ci_read_app_id)."
@@ -155,14 +152,12 @@ jobs:
       attestations: write
       id-token: write
     env:
-      # secrets cannot be used in step-level if:, so bridge them to env here.
+      # secrets cannot be used in step-level if:, so bridge to env here.
       HAS_CI_APP: ${{ secrets.ci_read_app_id != '' && secrets.ci_read_app_private_key != '' }}
-      HAS_GH_PAT: ${{ secrets.gh_pat != '' }}
 
     steps:
-      # Prefer a nics-dp-ci-read App token for private module access. The App secrets
-      # arrive via `secrets: inherit`; when absent (legacy callers) the step is skipped
-      # and the later steps fall back to gh_pat. See nics-dp PAT->App migration.
+      # Mint a nics-dp-ci-read App token for private module access. The App secrets
+      # arrive via `secrets: inherit`; when absent the private-module steps are skipped.
       - name: Setup | Mint private-module token
         id: priv-token
         if: env.HAS_CI_APP == 'true'
@@ -471,7 +466,7 @@ jobs:
           repository: ${{ inputs.external_repo }}
           ref: ${{ inputs.external_ref }}
           path: ${{ inputs.external_path }}
-          token: ${{ steps.priv-token.outputs.token || secrets.gh_pat || github.token }}
+          token: ${{ steps.priv-token.outputs.token || github.token }}
           # This checkout IS the docker build context. The token is still used
           # for the initial fetch, but must not be persisted afterwards: never
           # run authenticated git here, and keep credential material out of the
@@ -533,10 +528,9 @@ jobs:
       - name: Configure private modules and vendor
         if: inputs.go_vendor
         env:
-          # Prefer the minted App token; fall back to gh_pat. HAS_PRIV is true
-          # when either credential is available.
-          HAS_PRIV: ${{ env.HAS_CI_APP == 'true' || env.HAS_GH_PAT == 'true' }}
-          GH_PAT: ${{ steps.priv-token.outputs.token || secrets.gh_pat }}
+          # the minted App token (empty when ci_read_app_* not inherited).
+          HAS_PRIV: ${{ env.HAS_CI_APP == 'true' }}
+          GH_PAT: ${{ steps.priv-token.outputs.token }}
         run: |
           if [[ "$HAS_PRIV" == "true" ]]; then
             git config --global url."https://${GH_PAT}@github.com/nics-dp".insteadOf "https://github.com/nics-dp"
@@ -602,7 +596,7 @@ jobs:
             ${{ inputs.build_args }}
             ${{ steps.env-args.outputs.build_args }}
           secrets: |
-            github_token=${{ steps.priv-token.outputs.token || secrets.gh_pat || secrets.GITHUB_TOKEN }}
+            github_token=${{ steps.priv-token.outputs.token || secrets.GITHUB_TOKEN }}
           cache-from: type=registry,ref=${{ env.REGISTRY_GHCR }}/${{ env.GHCR_NAMESPACE }}/${{ env.IMAGE_NAME }}:buildcache
           cache-to: type=registry,ref=${{ env.REGISTRY_GHCR }}/${{ env.GHCR_NAMESPACE }}/${{ env.IMAGE_NAME }}:buildcache,mode=max
           sbom: ${{ inputs.sbom }}
