@@ -73,6 +73,37 @@ jobs:
           # Private module access is granted separately via gh_pat below.
           persist-credentials: false
 
+      # Constrain the caller-supplied scan_path to a workspace-relative path:
+      # reject absolute paths and any '..' segment so a misconfigured caller
+      # cannot point a scanner outside the checkout (which would otherwise leak
+      # out-of-tree file paths into the uploaded SARIF). The validated value is
+      # exported once as SCAN_PATH and reused by the semgrep and trivy steps.
+      #
+      # This step fails fast on an invalid path. That does NOT break the
+      # non-blocking contract: an out-of-workspace scan_path is a CALLER
+      # CONFIGURATION error and should be surfaced loudly, which is distinct
+      # from a scanner FINDING (those never fail the job). Mirrors the
+      # allowlist-then-fail input validation used by the go:dev / go:run atoms.
+      - name: Validate scan path
+        env:
+          RAW_SCAN_PATH: ${{ inputs.scan_path }}
+        run: |
+          if [ -z "$RAW_SCAN_PATH" ]; then
+            echo "::error::scan_path must not be empty (use '.' for the repo root)"
+            exit 1
+          fi
+          case "$RAW_SCAN_PATH" in
+            /*)
+              echo "::error::scan_path '${RAW_SCAN_PATH}' must be workspace-relative, not absolute"
+              exit 1
+              ;;
+            *..*)
+              echo "::error::scan_path '${RAW_SCAN_PATH}' must not contain '..'"
+              exit 1
+              ;;
+          esac
+          echo "SCAN_PATH=${RAW_SCAN_PATH}" >> "$GITHUB_ENV"
+
       # ----------------------------------------------------------------------
       # Go scanners: gosec (SAST) + govulncheck (known vulns). Both must BUILD
       # the module, which imports the private github.com/nics-dp/libdcf, so we
@@ -176,9 +207,6 @@ jobs:
       - name: Run semgrep (SARIF)
         if: inputs.run_semgrep
         continue-on-error: true
-        env:
-          # bridge the input to env to avoid shell injection via ${{ }} interpolation
-          SCAN_PATH: ${{ inputs.scan_path }}
         run: |
           # pipx is preinstalled on GitHub-hosted runners and gives an isolated
           # install (avoids PEP 668 externally-managed-environment failures),
@@ -217,7 +245,8 @@ jobs:
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           scan-type: config
-          scan-ref: ${{ inputs.scan_path }}
+          # use the validated workspace-relative path (set by "Validate scan path")
+          scan-ref: ${{ env.SCAN_PATH }}
           format: sarif
           output: trivy-config.sarif
           exit-code: "0"
