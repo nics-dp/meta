@@ -9,6 +9,21 @@
   "registryAliases": {
     "dhi.io": "dhi.io"
   },
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "Update air (air-verse/air) version pinned in dev compose `go install`",
+      "managerFilePatterns": [
+        "/(^|/)compose\\.ya?ml$/",
+        "/(^|/)deploy/compose\\.[^/]*\\.ya?ml$/"
+      ],
+      "matchStrings": [
+        "go install github\\.com/air-verse/air@(?<currentValue>v\\d+\\.\\d+\\.\\d+)"
+      ],
+      "depNameTemplate": "air-verse/air",
+      "datasourceTemplate": "github-releases"
+    }
+  ],
   "packageRules": [
     {
       "description": "Group Go module updates (dashboard-only, no PR until approved)",

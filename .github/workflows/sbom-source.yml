@@ -33,6 +33,12 @@ on:
       gh_pat:
         required: false
         description: "Optional PAT for private Go module access"
+      ci_read_app_id:
+        required: false
+        description: "App ID of the nics-dp-ci-read GitHub App. Preferred over the PAT for private module access; pass via secrets: inherit. Falls back to the PAT when empty."
+      ci_read_app_private_key:
+        required: false
+        description: "Private key of the nics-dp-ci-read GitHub App (pair with ci_read_app_id)."
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
@@ -44,16 +50,35 @@ jobs:
       actions: read
       contents: write
       security-events: write
+    env:
+      # secrets cannot be used in step-level if:, so bridge to env here.
+      HAS_CI_APP: ${{ secrets.ci_read_app_id != '' && secrets.ci_read_app_private_key != '' }}
     steps:
+      # Prefer a nics-dp-ci-read App token for private module access. The App secrets
+      # arrive via `secrets: inherit`; when absent (legacy callers) the step is skipped
+      # and the git-config below falls back to gh_pat. See nics-dp PAT->App migration.
+      - name: Setup | Mint private-module token
+        id: priv-token
+        if: env.HAS_CI_APP == 'true'
+        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2.2.2
+        with:
+          app-id: ${{ secrets.ci_read_app_id }}
+          private-key: ${{ secrets.ci_read_app_private_key }}
+          owner: ${{ github.repository_owner }}
+
       - name: Checkout
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           ref: ${{ inputs.ref }}
           fetch-depth: 1
+          # The ref is a workflow_call input and may be attacker-influenced;
+          # do not persist the GITHUB_TOKEN. Private module access is granted
+          # separately via gh_pat (CodeQL actions/untrusted-checkout).
+          persist-credentials: false
 
       - name: Configure git for private modules
         env:
-          GH_PAT: ${{ secrets.gh_pat }}
+          GH_PAT: ${{ steps.priv-token.outputs.token || secrets.gh_pat }}
         run: |
           if [ -n "$GH_PAT" ]; then
             git config --global url."https://x-access-token:${GH_PAT}@github.com/".insteadOf "https://github.com/"

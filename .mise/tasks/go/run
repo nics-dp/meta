@@ -9,18 +9,34 @@
 # shellcheck disable=SC1091
 source "$(dirname "$0")/../lib/go-version"
 
+# nullglob so an unmatched cmd/*/main.go expands to nothing (count 0) instead of
+# the literal pattern — otherwise an empty repo auto-detects usage_name='*' and
+# prints a misleading "cmd/*/main.go not found".
+shopt -s nullglob
 if [ "$usage_name" = "" ]; then
   entries=(cmd/*/main.go)
   if [ "${#entries[@]}" -eq 1 ]; then
     usage_name=$(basename "$(dirname "${entries[0]}")")
+  elif [ "${#entries[@]}" -eq 0 ]; then
+    echo "Error: no cmd/*/main.go found" >&2
+    exit 1
   else
-    echo "Multiple cmd entries found. Please specify one of:"
-    for e in "${entries[@]}"; do basename "$(dirname "$e")"; done
+    echo "Multiple cmd entries found. Please specify one of:" >&2
+    for e in "${entries[@]}"; do basename "$(dirname "$e")"; done >&2
     exit 1
   fi
 fi
+# Allowlist-validate the name: it is interpolated into the "./cmd/$usage_name"
+# path, so restrict to a safe set and reject `..` to prevent escaping ./cmd.
+# (Unlike go:dev this value is not re-parsed by a second shell, so it is not a
+# shell-injection vector; the guard blocks path traversal and keeps the two
+# atoms consistent.)
+if ! [[ "$usage_name" =~ ^[A-Za-z0-9._-]+$ ]] || [[ "$usage_name" == *..* ]]; then
+  echo "Error: invalid name '$usage_name' (allowed: letters, digits, '.', '_', '-'; no '..')" >&2
+  exit 1
+fi
 if [ ! -f "cmd/$usage_name/main.go" ]; then
-  echo "Error: cmd/$usage_name/main.go not found"
+  echo "Error: cmd/$usage_name/main.go not found" >&2
   exit 1
 fi
 # usage_args is a shell-escaped string for a variadic arg; eval into an array
@@ -31,4 +47,12 @@ if ! eval "args=(${usage_args:-})"; then
   echo "Error: failed to parse arguments: ${usage_args:-}" >&2
   exit 1
 fi
-go run -mod=vendor -ldflags "${VERSION_LDFLAGS}" "./cmd/$usage_name" "${args[@]}"
+# Module mode by repo layout (mirrors lib/go-env): -mod=vendor only when a
+# vendor/ tree exists, else -mod=mod — hard-coding vendor breaks a non-vendored
+# repo with "inconsistent vendoring".
+if [ -d vendor ]; then go_mod="vendor"; else go_mod="mod"; fi
+# ${VERSION_LDFLAGS} stays double-quoted (unlike go:dev's single-quote): this
+# `go run` is exec'd directly by this shell, so the value is expanded once and
+# NOT re-parsed by a second shell — there is no command-substitution stage to
+# guard against here.
+go run -mod="${go_mod}" -ldflags "${VERSION_LDFLAGS}" "./cmd/$usage_name" "${args[@]}"

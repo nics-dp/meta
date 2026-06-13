@@ -52,6 +52,10 @@ jobs:
         with:
           ref: ${{ inputs.ref }}
           fetch-depth: 1
+          # The ref is a workflow_call input and may be attacker-influenced;
+          # do not persist the GITHUB_TOKEN into the checkout so later steps
+          # cannot be coerced into using it (CodeQL actions/untrusted-checkout).
+          persist-credentials: false
 
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee # v4.2.0
