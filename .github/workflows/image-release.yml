@@ -537,9 +537,17 @@ jobs:
           fi
           go env -w GOPRIVATE=github.com/nics-dp GONOPROXY=github.com/nics-dp GONOSUMDB=github.com/nics-dp
           go mod vendor
-          if [[ "$HAS_PRIV" == "true" ]]; then
-            git config --global --remove-section "url.https://x-access-token:${GH_PAT}@github.com/nics-dp" 2>/dev/null || true
-          fi
+
+      - name: Revoke private module access
+        # Separate always()-guarded step: go mod vendor runs under `set -e`, so an
+        # inline revoke after it would be skipped on vendor failure, leaving the
+        # token-bearing insteadOf rewrite in the runner's global git config
+        # (the releasers group runners are not ephemeral). Mirrors go-release.yml.
+        if: ${{ always() && inputs.go_vendor && env.HAS_CI_APP == 'true' }}
+        env:
+          GH_PAT: ${{ steps.priv-token.outputs.token }}
+        run: |
+          git config --global --remove-section "url.https://x-access-token:${GH_PAT}@github.com/nics-dp" 2>/dev/null || true
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@06116385d9baf250c9f4dcb4858b16962ea869c3 # v4.1.0
