@@ -1,0 +1,97 @@
+# yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
+
+name: Node Dependency Submission
+
+# Resolves a bun project's FULL transitive dependency graph and submits it to
+# GitHub's Dependency Submission API (Dependency graph / Dependabot alerts).
+#
+# Why this is needed: GitHub's native dependency graph does NOT parse bun.lock.
+# It only reads package.json (direct dependencies), so Dependabot alerts are
+# blind to the hundreds of transitive npm packages bun actually resolves. This
+# workflow runs `bun install` to materialize node_modules, then has Syft
+# (anchore/sbom-action) catalog the installed tree and upload it as a GitHub
+# dependency snapshot, giving Dependabot alerts full transitive coverage.
+#
+# All dependencies are public npm packages, so no registry token is required.
+# Callers add a job that `uses:` this workflow.
+on:
+  workflow_call:
+    inputs:
+      working_directory:
+        required: false
+        type: string
+        default: "."
+        description: "Repo path to the bun project root (where package.json and bun.lock live)."
+      bun_version:
+        required: false
+        type: string
+        default: "latest"
+        description: "Bun version for oven-sh/setup-bun (e.g. '1.2.0'). Default 'latest'."
+
+permissions:
+  contents: read
+
+jobs:
+  node-dependency-submission:
+    # Pinned to ubuntu-latest: no caller passes a custom runner.
+    runs-on: ubuntu-latest
+    permissions:
+      # required to submit the resolved graph to the Dependency Submission API
+      contents: write
+    steps:
+      - name: Validate working_directory
+        env:
+          RAW_WD: ${{ inputs.working_directory }}
+        # A reusable workflow cannot trust its caller's inputs: a path that is
+        # empty, absolute, contains a '..' segment, or embeds a newline could run
+        # bun install / Syft outside the workspace or leak unexpected path data
+        # into the dependency snapshot. Fail fast here (mirrors the path
+        # validation in security-sarif.yml). Empty default is "." (see inputs).
+        run: |
+          case "$RAW_WD" in
+            "") echo "Error: working_directory must not be empty (use '.' for repo root)" >&2; exit 1 ;;
+            /*) echo "Error: working_directory must be relative, got absolute '$RAW_WD'" >&2; exit 1 ;;
+            *$'\n'* | *$'\r'*) echo "Error: working_directory must not contain newlines" >&2; exit 1 ;;
+          esac
+          # Segment-aware '..' check: wrapping in slashes matches '..' only as a
+          # whole path segment, so a legitimate name like 'my..dir' is allowed.
+          case "/$RAW_WD/" in
+            */../*) echo "Error: working_directory must not contain a '..' path segment" >&2; exit 1 ;;
+          esac
+
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          fetch-depth: 1
+          # Do not persist the GITHUB_TOKEN into the checkout so later steps
+          # (including the third-party setup-bun / sbom-action) cannot reuse it
+          # (CodeQL actions/untrusted-checkout). The default GITHUB_TOKEN from the
+          # job still authorizes the snapshot upload via the action's own env.
+          persist-credentials: false
+
+      - name: Set up bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: ${{ inputs.bun_version }}
+
+      - name: Install dependencies (frozen lockfile)
+        working-directory: ${{ inputs.working_directory }}
+        # --frozen-lockfile installs exactly the versions resolved in bun.lock, so
+        # the submitted graph matches the committed lockfile and the step fails if
+        # bun.lock is stale rather than silently resolving different versions.
+        # --ignore-scripts skips package lifecycle scripts (postinstall, etc.):
+        # they are not needed to materialize node_modules for cataloging, and
+        # skipping them removes arbitrary-code-execution surface if this workflow
+        # is ever run against untrusted (pull_request) content.
+        run: bun install --frozen-lockfile --ignore-scripts
+
+      - name: Catalog node_modules and submit dependency snapshot
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
+        with:
+          # Scan the installed tree: Syft's node cataloger reads each package's
+          # own package.json, capturing the FULL transitive set that GitHub's
+          # bun.lock-blind native parser misses.
+          path: ${{ inputs.working_directory }}
+          # Upload the SBOM to GitHub's dependency graph as a snapshot so
+          # Dependabot alerts cover transitive npm dependencies.
+          dependency-snapshot: true
