@@ -68,8 +68,8 @@ jobs:
               url."https://x-access-token:${GH_PAT}@github.com/nics-dp/".insteadOf "https://github.com/nics-dp/"
             {
               echo "GIT_CONFIG_GLOBAL=${PRIV_GITCONFIG}"
-              echo "GOPRIVATE=github.com/nics-dp/*"
-              echo "GONOSUMDB=github.com/nics-dp/*"
+              echo "GOPRIVATE=github.com/nics-dp"
+              echo "GONOSUMDB=github.com/nics-dp"
             } >> "$GITHUB_ENV"
           fi
 
