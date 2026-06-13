@@ -36,7 +36,8 @@ on:
           to the image digest (verifiable with `gh attestation verify`). Mirrors
           image-release.yml's `attest` input. A reusable workflow cannot raise
           the caller's token scopes, so when this is enabled the caller's job
-          must grant attestations: write, id-token: write and (because the SBOM
+          must grant attestations: write, id-token: write, artifact-metadata:
+          write (for the attestation storage record) and (because the SBOM
           attestation is pushed to GHCR) packages: write. Set attest: false to
           skip it where the caller cannot grant those scopes.
       runs_on:
