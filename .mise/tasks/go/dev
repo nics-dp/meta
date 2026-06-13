@@ -1,0 +1,79 @@
+#!/usr/bin/env bash
+#MISE description="Run a Go cmd from cmd/ with air live-reload (hot reload on save)"
+#MISE hide=true
+#MISE raw=true
+#MISE tools={"go:github.com/air-verse/air"="v1.65.3"}
+#USAGE arg "[name]" help="Script name to run (auto-detected if cmd/ has only one entry)"
+# shellcheck disable=SC2154 # usage_name is set by mise USAGE
+
+# shellcheck disable=SC1091
+source "$(dirname "$0")/../lib/go-version"
+# Export so a repo-local .air.toml's `${VERSION:-dev}` ldflags expansion (which
+# air runs via the shell) inherits the same git-derived version as go:run /
+# go:build. lib/go-version sets these but does not export them.
+export VERSION COMMIT BUILD_DATE
+
+# A repo-local .air.toml wins (e.g. dcf services also watch embedded .sql). It
+# inherits VERSION/COMMIT/BUILD_DATE from the environment exported above, and
+# carries its own build.cmd/bin, so short-circuit here BEFORE the cmd/ auto-
+# detection below — that detection only feeds the config-free fallback, and a
+# repo with .air.toml may legitimately have multiple cmd entries or a non-
+# standard layout that would otherwise fail before air ever runs.
+if [ -f .air.toml ]; then
+  air -c .air.toml
+  exit $?
+fi
+
+# nullglob so an unmatched cmd/*/main.go expands to nothing (count 0) instead of
+# the literal pattern — otherwise the empty-repo case auto-detects usage_name='*'
+# and prints a misleading "cmd/*/main.go not found".
+shopt -s nullglob
+if [ "$usage_name" = "" ]; then
+  entries=(cmd/*/main.go)
+  if [ "${#entries[@]}" -eq 1 ]; then
+    usage_name=$(basename "$(dirname "${entries[0]}")")
+  elif [ "${#entries[@]}" -eq 0 ]; then
+    echo "Error: no cmd/*/main.go found" >&2
+    exit 1
+  else
+    echo "Multiple cmd entries found. Please specify one of:" >&2
+    for e in "${entries[@]}"; do basename "$(dirname "$e")"; done >&2
+    exit 1
+  fi
+fi
+# Allowlist-validate the name: it is interpolated into -build.cmd, which air
+# runs via /bin/sh -c, so a name with whitespace/quotes/`;`/`$`/backticks would
+# be a shell-injection vector (and `/` or `..` would escape ./cmd / ./tmp).
+# Restrict to a safe character set that still covers real Go cmd dir names
+# (letters, digits, dot, underscore, dash), and reject `..` traversal.
+if ! [[ "$usage_name" =~ ^[A-Za-z0-9._-]+$ ]] || [[ "$usage_name" == *..* ]]; then
+  echo "Error: invalid name '$usage_name' (allowed: letters, digits, '.', '_', '-'; no '..')" >&2
+  exit 1
+fi
+if [ ! -f "cmd/$usage_name/main.go" ]; then
+  echo "Error: cmd/$usage_name/main.go not found" >&2
+  exit 1
+fi
+
+# Pick the module mode the same way lib/go-env does: -mod=vendor only when a
+# vendor/ tree exists, otherwise -mod=mod. Hard-coding -mod=vendor would make
+# `go build` fail with "inconsistent vendoring" on a non-vendored repo, which
+# contradicts the "any Go repo" claim below.
+if [ -d vendor ]; then go_mod="vendor"; else go_mod="mod"; fi
+
+# Config-free fallback: drive air via flags so the task works in any Go repo
+# without committing an .air.toml. Use -build.entrypoint (the deprecated
+# -build.bin flag is NOT honored for the run step) and watch go/mod/sum.
+#
+# air runs -build.cmd via /bin/sh -c, so the ldflags string is re-parsed by a
+# shell. Single-quote ${VERSION_LDFLAGS} (not double) so that shell does NOT
+# re-expand it: a VERSION/COMMIT override containing $(...) or backticks would
+# otherwise be command-substituted at air's shell stage. lib/go-version already
+# rejects whitespace/quotes but NOT $ or backticks, so single-quoting here is
+# the layer that neutralizes those. VERSION_LDFLAGS never contains a single
+# quote (lib/go-version rejects it), so the value passes through intact.
+air \
+  -build.cmd "go build -mod=${go_mod} -ldflags '${VERSION_LDFLAGS}' -o ./tmp/${usage_name} ./cmd/${usage_name}" \
+  -build.entrypoint "./tmp/${usage_name}" \
+  -build.include_ext "go,mod,sum" \
+  -build.exclude_dir "vendor,tmp,bin,test,testdata,asset,deploy,scripts"

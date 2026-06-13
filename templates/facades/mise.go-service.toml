@@ -56,6 +56,10 @@ depends = ["go:build"]
 description = "Run Go service from cmd/"
 depends = ["go:run"]
 
+[tasks.dev]
+description = "Run Go service from cmd/ with air live-reload (hot reload on save)"
+depends = ["go:dev"]
+
 [tasks.bench]
 description = "Run Go benchmarks (single pass)"
 depends = ["go:test --bench"]
