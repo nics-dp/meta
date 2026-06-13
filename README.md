@@ -186,7 +186,7 @@ jobs:
 | `fetch-depth`     | number  | `1`              | git fetch depth                                               |
 | `private-modules` | boolean | `false`          | 啟用 ci-read App token git config for private modules         |
 
-App 認證（nics-dp-ci-read，用於 `private-modules=true`）：client-id 由 org **變數** `CI_READ_APP_CLIENT_ID` 提供（reusable workflow 經 `vars` context 自動取得，毋須傳遞）；caller 僅需以 secret 傳 `ci_read_app_private_key`（org secret `CI_READ_APP_PRIVATE_KEY`）。legacy `ci_read_app_id` 輸入已停用、保留相容但忽略。
+App 認證（nics-dp-ci-read，用於 `private-modules=true`）：client-id 由 org **變數** `CI_READ_APP_CLIENT_ID` 提供（reusable workflow 經 `vars` context 自動取得，毋須傳遞）；caller 僅需以 secret 傳 `ci_read_app_private_key`（org secret `CI_READ_APP_PRIVATE_KEY`）。legacy `ci_read_app_id` 輸入已移除（不再宣告,請勿再傳）。
 
 每 job 結尾自動 emit `## <name>` block 至 GitHub Actions step summary，含 ✅/❌ 狀態 + `<details>` 包 tail 300 行 stdout/stderr。
 
