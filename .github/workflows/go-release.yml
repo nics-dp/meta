@@ -208,6 +208,12 @@ jobs:
           GH_PAT: ${{ steps.priv-token.outputs.token || secrets.gh_pat }}
           GO_PRIVATE_FULL: ${{ inputs.go_private_full }}
         run: |
+          # Self-healing: drop any stale token-bearing url.*@github.com/nics-dp
+          # insteadOf rewrites left by a prior run before adding this run's fresh
+          # token, so an equal-length insteadOf tie can't pick up an expired token.
+          while read -r s; do
+            if [ -n "$s" ]; then git config --global --remove-section "$s" 2>/dev/null || true; fi
+          done < <(git config --global --name-only --get-regexp '^url\..*@github\.com/nics-dp' 2>/dev/null | sed -E 's/\.insteadof$//' | sort -u || true)
           if [[ "$GO_PRIVATE_FULL" == "true" ]]; then
             {
               echo "GOPRIVATE=github.com/nics-dp"
