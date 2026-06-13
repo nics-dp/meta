@@ -41,11 +41,16 @@ jobs:
               return;
             }
 
-            // List artifacts for current workflow run
+            // List artifacts for current workflow run.
+            // NOTE: do NOT pass a map function here. octokit's paginate has a
+            // built-in normalizer that already unwraps the {total_count, artifacts}
+            // envelope, so `response.data` is the artifacts array inside the map —
+            // `response.data.artifacts` is then undefined and every page maps to []
+            // (silent "No valid artifacts found"). Paginate without a map returns
+            // the artifacts directly.
             const artifacts = (await github.paginate(
               github.rest.actions.listWorkflowRunArtifacts,
-              {owner, repo, run_id: context.runId},
-              (response) => response.data.artifacts || []
+              {owner, repo, run_id: context.runId, per_page: 100}
             )).filter(art => {
               const name = typeof art?.name === 'string' ? art.name.trim() : '';
               return art?.id && name && name !== 'undefined';
