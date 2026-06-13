@@ -151,7 +151,10 @@ jobs:
           # bridge the input to env to avoid shell injection via ${{ }} interpolation
           SCAN_PATH: ${{ inputs.scan_path }}
         run: |
-          python3 -m pip install --quiet --upgrade semgrep
+          # pipx is preinstalled on GitHub-hosted runners and gives an isolated
+          # install (avoids PEP 668 externally-managed-environment failures),
+          # matching the pipx:semgrep tool used by the ci:semgrep mise task.
+          pipx install semgrep
           semgrep scan \
             --config p/ci \
             --config p/golang \
