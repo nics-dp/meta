@@ -173,7 +173,8 @@ jobs:
       runs_on: '{"group":"releasers"}'
       private-modules: true
     secrets:
-      gh_pat: ${{ secrets.GH_PAT_READ_NICSDP }}
+      ci_read_app_id: ${{ secrets.CI_READ_APP_ID }}
+      ci_read_app_private_key: ${{ secrets.CI_READ_APP_PRIVATE_KEY }}
 ```
 
 | Input             | Type    | Default          | 用途                                                          |
@@ -182,9 +183,9 @@ jobs:
 | `name`            | string  | task             | display name for GH job summary                               |
 | `runs_on`         | string  | `'"ubuntu-latest"'` | runner（JSON 經 `fromJSON()` 解析；可傳 `'{"group":"X"}'`） |
 | `fetch-depth`     | number  | `1`              | git fetch depth                                               |
-| `private-modules` | boolean | `false`          | 啟用 GH PAT git config for private modules                    |
+| `private-modules` | boolean | `false`          | 啟用 ci-read App token git config for private modules         |
 
-Secret `gh_pat`：required when `private-modules=true`。
+Secrets `ci_read_app_id` / `ci_read_app_private_key`（nics-dp-ci-read App）：用於 `private-modules=true`；caller 建議以 `secrets: inherit` 傳遞 org secrets `CI_READ_APP_ID` / `CI_READ_APP_PRIVATE_KEY`。
 
 每 job 結尾自動 emit `## <name>` block 至 GitHub Actions step summary，含 ✅/❌ 狀態 + `<details>` 包 tail 300 行 stdout/stderr。
 
@@ -269,8 +270,8 @@ Meta repo 自家 `renovate.json` 額外 customManagers 處理：
 2. 確認 `[task_config].includes = ["git::https://github.com/nics-dp/meta.git//.mise/tasks?ref=main"]`
 3. 加 repo-specific tasks/tools/env at end
 4. 寫 `.github/workflows/ci.yml`，用 matrix 呼叫 `nics-dp/meta/.github/workflows/mise-task.yml@main`
-5. 設 secrets:
-   - `GH_PAT_READ_NICSDP` (Go 私模 + CodeQL private repo + release/snapshot)
+5. 設 secrets（caller 用 `secrets: inherit` 傳 org secrets）:
+   - `CI_READ_APP_ID` + `CI_READ_APP_PRIVATE_KEY` (nics-dp-ci-read App：Go 私模 + CodeQL private repo + release/snapshot)
    - `DOCKERHUB_USERNAME` + `DOCKERHUB_TOKEN` (Docker image repos)
 
 驗證：`mise tasks ls` 應顯示 ~10 facade 名 + repo-specific extras（atoms hidden）；`mise run --dry-run ci test sbom` resolve 無誤。
