@@ -173,8 +173,9 @@ jobs:
       runs_on: '{"group":"releasers"}'
       private-modules: true
     secrets:
-      ci_read_app_id: ${{ secrets.CI_READ_APP_ID }}
       ci_read_app_private_key: ${{ secrets.CI_READ_APP_PRIVATE_KEY }}
+    # client-id is read from the CI_READ_APP_CLIENT_ID org variable (auto-available
+    # in reusable workflows); no need to pass it as a secret.
 ```
 
 | Input             | Type    | Default          | 用途                                                          |
@@ -185,7 +186,7 @@ jobs:
 | `fetch-depth`     | number  | `1`              | git fetch depth                                               |
 | `private-modules` | boolean | `false`          | 啟用 ci-read App token git config for private modules         |
 
-Secrets `ci_read_app_id` / `ci_read_app_private_key`（nics-dp-ci-read App）：用於 `private-modules=true`；caller 建議以 `secrets: inherit` 傳遞 org secrets `CI_READ_APP_ID` / `CI_READ_APP_PRIVATE_KEY`。
+App 認證（nics-dp-ci-read，用於 `private-modules=true`）：client-id 由 org **變數** `CI_READ_APP_CLIENT_ID` 提供（reusable workflow 經 `vars` context 自動取得，毋須傳遞）；caller 僅需以 secret 傳 `ci_read_app_private_key`（org secret `CI_READ_APP_PRIVATE_KEY`）。legacy `ci_read_app_id` 輸入已停用、保留相容但忽略。
 
 每 job 結尾自動 emit `## <name>` block 至 GitHub Actions step summary，含 ✅/❌ 狀態 + `<details>` 包 tail 300 行 stdout/stderr。
 
@@ -270,8 +271,9 @@ Meta repo 自家 `renovate.json` 額外 customManagers 處理：
 2. 確認 `[task_config].includes = ["git::https://github.com/nics-dp/meta.git//.mise/tasks?ref=main"]`
 3. 加 repo-specific tasks/tools/env at end
 4. 寫 `.github/workflows/ci.yml`，用 matrix 呼叫 `nics-dp/meta/.github/workflows/mise-task.yml@main`
-5. 設 secrets（caller 用 `secrets: inherit` 傳 org secrets）:
-   - `CI_READ_APP_ID` + `CI_READ_APP_PRIVATE_KEY` (nics-dp-ci-read App：Go 私模 + CodeQL private repo + release/snapshot)
+5. 設 org 變數 + secrets:
+   - org **變數** `CI_READ_APP_CLIENT_ID`（nics-dp-ci-read App 的 client-id；reusable 經 `vars` 自動取得）
+   - org **secret** `CI_READ_APP_PRIVATE_KEY`（caller 以 `secrets:` 顯式傳 `ci_read_app_private_key`：Go 私模 + CodeQL private repo + release/snapshot）
    - `DOCKERHUB_USERNAME` + `DOCKERHUB_TOKEN` (Docker image repos)
 
 驗證：`mise tasks ls` 應顯示 ~10 facade 名 + repo-specific extras（atoms hidden）；`mise run --dry-run ci test sbom` resolve 無誤。
