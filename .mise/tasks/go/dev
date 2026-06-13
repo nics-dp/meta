@@ -55,11 +55,17 @@ if [ ! -f "cmd/$usage_name/main.go" ]; then
   exit 1
 fi
 
+# Pick the module mode the same way lib/go-env does: -mod=vendor only when a
+# vendor/ tree exists, otherwise -mod=mod. Hard-coding -mod=vendor would make
+# `go build` fail with "inconsistent vendoring" on a non-vendored repo, which
+# contradicts the "any Go repo" claim below.
+if [ -d vendor ]; then go_mod="vendor"; else go_mod="mod"; fi
+
 # Config-free fallback: drive air via flags so the task works in any Go repo
 # without committing an .air.toml. Use -build.entrypoint (the deprecated
 # -build.bin flag is NOT honored for the run step) and watch go/mod/sum.
 air \
-  -build.cmd "go build -mod=vendor -ldflags \"${VERSION_LDFLAGS}\" -o ./tmp/${usage_name} ./cmd/${usage_name}" \
+  -build.cmd "go build -mod=${go_mod} -ldflags \"${VERSION_LDFLAGS}\" -o ./tmp/${usage_name} ./cmd/${usage_name}" \
   -build.entrypoint "./tmp/${usage_name}" \
   -build.include_ext "go,mod,sum" \
   -build.exclude_dir "vendor,tmp,bin,test,testdata,asset,deploy,scripts"
