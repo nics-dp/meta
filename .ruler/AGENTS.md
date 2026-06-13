@@ -48,7 +48,7 @@ includes = ["git::https://github.com/nics-dp/meta.git//.mise/tasks?ref=main"]
 **Shared configs (`configs/`)**: Atoms fetch raw URLs at runtime (no commit to consumer repos). Trap cleanup removes the downloaded config when atom exits. Note: `.golangci.yml` is **per-repo committed** (not shared via curl) — `go:lint-check` / `go:lint-fix` read consumer's own file because gofumpt requires per-module `module-path` setting.
 
 **Auth (GitHub App + DockerHub)**:
-- nics-dp-ci-read App token (private module access, CodeQL private-repo access, release/snapshot builds, `mise-task.yml` private-modules flag): client-id from org **variable** `CI_READ_APP_CLIENT_ID` (auto-available in reusable workflows via `vars`); private key from org **secret** `CI_READ_APP_PRIVATE_KEY`, passed by callers as `ci_read_app_private_key`. Legacy `ci_read_app_id` input retired (kept for compat, ignored). No PAT.
+- nics-dp-ci-read App token (private module access, CodeQL private-repo access, release/snapshot builds, `mise-task.yml` private-modules flag): client-id from org **variable** `CI_READ_APP_CLIENT_ID` (auto-available in reusable workflows via `vars`); private key from org **secret** `CI_READ_APP_PRIVATE_KEY`, passed by callers as `ci_read_app_private_key`. The legacy `ci_read_app_id` input has been removed (no longer declared; do not pass it). No PAT.
 - `DOCKERHUB_USERNAME` / `DOCKERHUB_TOKEN` — image-release.yml (Docker image push)
 
 ## Key Files
@@ -66,7 +66,7 @@ includes = ["git::https://github.com/nics-dp/meta.git//.mise/tasks?ref=main"]
 ## Workflow Architecture
 
 ### Core
-- **`mise-task.yml`** — Reusable. Inputs: `task`, `name`, `runs_on` (JSON via `fromJSON()`), `fetch-depth`, `private-modules`. Secret: `ci_read_app_private_key` (client-id via `CI_READ_APP_CLIENT_ID` org var; legacy `ci_read_app_id` input ignored). Encapsulates checkout (SHA-pinned) + `jdx/mise-action@<sha>` + optional git private-modules config + run mise atom + step summary + enforce.
+- **`mise-task.yml`** — Reusable. Inputs: `task`, `name`, `runs_on` (JSON via `fromJSON()`), `fetch-depth`, `private-modules`. Secret: `ci_read_app_private_key` (client-id via `CI_READ_APP_CLIENT_ID` org var; legacy `ci_read_app_id` input removed). Encapsulates checkout (SHA-pinned) + `jdx/mise-action@<sha>` + optional git private-modules config + run mise atom + step summary + enforce.
 
 ### Release & Build
 - **`go-release.yml`** — Multi-arch Go binary release (cosign, macOS notarize via quill, GitHub Release).
