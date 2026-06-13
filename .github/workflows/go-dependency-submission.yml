@@ -22,9 +22,12 @@ on:
         default: ""
         description: "Build target to detect build dependencies for (e.g. './cmd/app'). Empty uses the action default of 'all' (every build target, including tests and tools)."
     secrets:
-      gh_pat:
+      ci_read_app_id:
         required: false
-        description: "Optional token for private Go module access (the resolver must fetch github.com/nics-dp/* modules)."
+        description: "Legacy/unused: the nics-dp-ci-read App is now identified by the CI_READ_APP_CLIENT_ID org variable (client-id); kept only for backward compatibility with callers still passing it, and is ignored."
+      ci_read_app_private_key:
+        required: false
+        description: "Private key of the nics-dp-ci-read GitHub App (paired with the CI_READ_APP_CLIENT_ID org variable). Minted into a short-lived token so the resolver can fetch github.com/nics-dp/* modules."
 
 permissions:
   contents: read
@@ -36,22 +39,39 @@ jobs:
     permissions:
       # required to submit the resolved graph to the Dependency Submission API
       contents: write
+    env:
+      # secrets cannot be used in step-level if:, so bridge to env here. Mirrors
+      # mise-task.yml: the ci-read App is identified by the CI_READ_APP_CLIENT_ID
+      # org variable (client-id) plus the ci_read_app_private_key secret.
+      HAS_CI_APP: ${{ vars.CI_READ_APP_CLIENT_ID != '' && secrets.ci_read_app_private_key != '' }}
     steps:
+      # Mint a nics-dp-ci-read App token for private module access. The PAT model
+      # was retired org-wide, so callers pass only ci_read_app_private_key and
+      # the token is minted here (mirrors mise-task.yml).
+      - name: Mint private-module token
+        id: priv-token
+        if: ${{ env.HAS_CI_APP == 'true' }}
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          client-id: ${{ vars.CI_READ_APP_CLIENT_ID }}
+          private-key: ${{ secrets.ci_read_app_private_key }}
+          owner: ${{ github.repository_owner }}
+
       - name: Checkout
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           fetch-depth: 1
           # Do not persist the GITHUB_TOKEN into the checkout so later steps
           # cannot be coerced into using it (CodeQL actions/untrusted-checkout).
-          # Private module access is granted separately via gh_pat below.
+          # Private module access is granted separately via the minted token.
           persist-credentials: false
 
       - name: Configure git for private modules
         env:
-          GH_PAT: ${{ secrets.gh_pat }}
+          GH_PAT: ${{ steps.priv-token.outputs.token }}
         run: |
           if [ -n "$GH_PAT" ]; then
-            # Scope the PAT to a short-lived git config under $RUNNER_TEMP rather
+            # Scope the token to a short-lived git config under $RUNNER_TEMP rather
             # than the runner's default ~/.gitconfig. GIT_CONFIG_GLOBAL points git
             # at this file for the rest of the job so the submission action below
             # CAN use it to fetch private modules (that is the point); the benefit
