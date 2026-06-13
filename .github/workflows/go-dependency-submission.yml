@@ -91,6 +91,12 @@ jobs:
               echo "GOPRIVATE=github.com/nics-dp"
               echo "GONOSUMDB=github.com/nics-dp"
             } >> "$GITHUB_ENV"
+          else
+            # No token: the ci-read App is not configured/inherited. Warn loudly
+            # rather than skip silently -- the resolver would otherwise fail with
+            # an opaque "cannot fetch github.com/nics-dp/... module" error
+            # (mirrors mise-task.yml's private-modules warning).
+            echo "::warning::ci-read App token unavailable (pass ci_read_app_private_key and set the CI_READ_APP_CLIENT_ID org variable); the resolver cannot fetch private github.com/nics-dp modules and submission may be incomplete."
           fi
 
       # Two variants so go-build-target is genuinely OMITTED when go_build_target
