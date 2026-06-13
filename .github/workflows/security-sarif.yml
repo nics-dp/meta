@@ -41,9 +41,9 @@ on:
         default: true
         description: "Run the semgrep SAST scan"
     secrets:
-      gh_pat:
+      ci_read_app_private_key:
         required: false
-        description: "Optional PAT for private Go module access (gosec/govulncheck must build github.com/nics-dp/libdcf)"
+        description: "Private key of the nics-dp-ci-read GitHub App (paired with the CI_READ_APP_CLIENT_ID org variable). Used to mint a short-lived token for private Go module access (gosec/govulncheck must build github.com/nics-dp/libdcf)."
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
@@ -59,7 +59,25 @@ jobs:
       # required by github/codeql-action/upload-sarif to write code-scanning results
       security-events: write
       actions: read
+    env:
+      # secrets cannot be used in step-level if:, so bridge to env here. Mirrors
+      # mise-task.yml: the ci-read App is identified by the CI_READ_APP_CLIENT_ID
+      # org variable (client-id) plus the ci_read_app_private_key secret.
+      HAS_CI_APP: ${{ vars.CI_READ_APP_CLIENT_ID != '' && secrets.ci_read_app_private_key != '' }}
     steps:
+      # Mint a nics-dp-ci-read App token for private Go module access, but only
+      # when the Go scanners run and the App is configured. The PAT model was
+      # retired org-wide, so callers pass only ci_read_app_private_key and the
+      # token is minted here (mirrors mise-task.yml).
+      - name: Mint private-module token
+        id: priv-token
+        if: ${{ env.HAS_CI_APP == 'true' && inputs.run_go }}
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          client-id: ${{ vars.CI_READ_APP_CLIENT_ID }}
+          private-key: ${{ secrets.ci_read_app_private_key }}
+          owner: ${{ github.repository_owner }}
+
       - name: Checkout
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
@@ -122,7 +140,8 @@ jobs:
       # ----------------------------------------------------------------------
       # Go scanners: gosec (SAST) + govulncheck (known vulns). Both must BUILD
       # the module, which imports the private github.com/nics-dp/libdcf, so we
-      # set up Go and configure git to fetch private modules via gh_pat.
+      # set up Go and configure git to fetch private modules via the ci-read App
+      # token minted above.
       # ----------------------------------------------------------------------
       - name: Set up Go
         if: inputs.run_go
@@ -134,11 +153,11 @@ jobs:
       - name: Configure git for private modules
         if: inputs.run_go
         env:
-          GH_PAT: ${{ secrets.gh_pat }}
+          GH_PAT: ${{ steps.priv-token.outputs.token }}
         run: |
           if [ -n "$GH_PAT" ]; then
-            # Scope the PAT to a short-lived git config under $RUNNER_TEMP rather
-            # than the runner's default ~/.gitconfig, so the third-party
+            # Scope the token to a short-lived git config under $RUNNER_TEMP
+            # rather than the runner's default ~/.gitconfig, so the third-party
             # trivy-action / hadolint-action that run later in this job cannot
             # read the credential. GIT_CONFIG_GLOBAL is exported only for the
             # Go-scan steps and the file is deleted by the cleanup step below.
@@ -153,6 +172,12 @@ jobs:
               echo "GOPRIVATE=github.com/nics-dp"
               echo "GONOSUMDB=github.com/nics-dp"
             } >> "$GITHUB_ENV"
+          else
+            # No token: the ci-read App is not configured/inherited. Warn loudly
+            # rather than skip silently -- gosec/govulncheck would otherwise fail
+            # later with an opaque "cannot fetch github.com/nics-dp/... module"
+            # error (mirrors mise-task.yml's private-modules warning).
+            echo "::warning::ci-read App token unavailable (pass ci_read_app_private_key and set the CI_READ_APP_CLIENT_ID org variable); gosec/govulncheck cannot fetch private github.com/nics-dp modules and may fail to build."
           fi
 
       # Consumer repos may vendor (-mod=vendor). Refresh the vendor tree so
