@@ -36,8 +36,8 @@ if [ "$usage_name" = "" ]; then
     echo "Error: no cmd/*/main.go found" >&2
     exit 1
   else
-    echo "Multiple cmd entries found. Please specify one of:"
-    for e in "${entries[@]}"; do basename "$(dirname "$e")"; done
+    echo "Multiple cmd entries found. Please specify one of:" >&2
+    for e in "${entries[@]}"; do basename "$(dirname "$e")"; done >&2
     exit 1
   fi
 fi
@@ -51,7 +51,7 @@ if ! [[ "$usage_name" =~ ^[A-Za-z0-9._-]+$ ]] || [[ "$usage_name" == *..* ]]; th
   exit 1
 fi
 if [ ! -f "cmd/$usage_name/main.go" ]; then
-  echo "Error: cmd/$usage_name/main.go not found"
+  echo "Error: cmd/$usage_name/main.go not found" >&2
   exit 1
 fi
 
