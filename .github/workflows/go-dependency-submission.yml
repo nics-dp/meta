@@ -51,28 +51,39 @@ jobs:
           GH_PAT: ${{ secrets.gh_pat }}
         run: |
           if [ -n "$GH_PAT" ]; then
-            # Self-healing: drop any stale token-bearing url.*@github.com/nics-dp
-            # insteadOf rewrites left by a prior run before adding this run's
-            # fresh token, so an equal-length insteadOf tie can't pick up an
-            # expired token (mirrors codeql-reusable / go-release).
-            while read -r s; do
-              if [ -n "$s" ]; then git config --global --remove-section "$s" 2>/dev/null || true; fi
-            done < <(git config --global --name-only --get-regexp '^url\..*@github\.com/nics-dp' 2>/dev/null | sed -E 's/\.insteadof$//' | sort -u || true)
+            # Scope the PAT to a short-lived git config under $RUNNER_TEMP rather
+            # than the runner's default ~/.gitconfig, so the third-party
+            # go-dependency-submission action that runs later cannot read the
+            # credential and a reused (non-ephemeral) runner keeps no stale token.
+            # GIT_CONFIG_GLOBAL points git at this file for the rest of the job;
+            # because the file is fresh each run there is no stale-rewrite scrub
+            # to do (mirrors security-sarif.yml).
+            PRIV_GITCONFIG="${RUNNER_TEMP}/go-dep-submission-gitconfig"
+            : > "$PRIV_GITCONFIG"
             # Scope the rewrite to the nics-dp org prefix so only private org
             # modules carry the token; public github.com fetches stay anonymous
             # (do not rewrite all of github.com -- that over-scopes the token).
-            git config --global \
+            git config --file "$PRIV_GITCONFIG" \
               url."https://x-access-token:${GH_PAT}@github.com/nics-dp/".insteadOf "https://github.com/nics-dp/"
             {
+              echo "GIT_CONFIG_GLOBAL=${PRIV_GITCONFIG}"
               echo "GOPRIVATE=github.com/nics-dp/*"
               echo "GONOSUMDB=github.com/nics-dp/*"
             } >> "$GITHUB_ENV"
           fi
 
-      - name: Submit Go dependency graph
+      # Two variants so go-build-target is genuinely OMITTED when go_build_target
+      # is empty -- the action then applies its own default ('all', every build
+      # target including tests and tools) instead of us hardcoding it here.
+      - name: Submit Go dependency graph (all targets)
+        if: inputs.go_build_target == ''
         uses: actions/go-dependency-submission@f35d5c9af13ce9cc32f7930b171e315e878f6921 # v2.0.3
         with:
           go-mod-path: ${{ inputs.go_mod_path }}
-          # Pass go_build_target through only when set; otherwise fall back to
-          # the action's own default ('all') so every build target is scanned.
-          go-build-target: ${{ inputs.go_build_target != '' && inputs.go_build_target || 'all' }}
+
+      - name: Submit Go dependency graph (target)
+        if: inputs.go_build_target != ''
+        uses: actions/go-dependency-submission@f35d5c9af13ce9cc32f7930b171e315e878f6921 # v2.0.3
+        with:
+          go-mod-path: ${{ inputs.go_mod_path }}
+          go-build-target: ${{ inputs.go_build_target }}
