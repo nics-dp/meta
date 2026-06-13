@@ -579,6 +579,17 @@ jobs:
           else
             PLATFORMS="$PLATFORMS_IN"
           fi
+          # PLATFORMS is interpolated into $GITHUB_OUTPUT below and consumed by
+          # build-push. inputs.platforms is a caller-supplied string; reject any
+          # character outside the platform-list charset (os/arch[/variant],
+          # comma-separated) so a stray newline/CR can't break the output-file
+          # format or inject an extra output key. Mirrors the whitespace/quote
+          # guard in "Compute version metadata"; don't echo the offending value
+          # (it would land in CI logs and could itself carry workflow commands).
+          if [[ "$PLATFORMS" =~ [^A-Za-z0-9/,._-] ]]; then
+            echo "::error::resolved platforms contains characters outside [A-Za-z0-9/,._-]"
+            exit 1
+          fi
           echo "list=${PLATFORMS}" >> "$GITHUB_OUTPUT"
 
       - name: Set up QEMU
