@@ -52,6 +52,11 @@ on:
         type: boolean
         default: false
         description: "Sign and notarize macOS binaries with quill"
+      attest:
+        required: false
+        type: boolean
+        default: true
+        description: "Generate GitHub-native SLSA build provenance attestation for the released binaries (verifiable with `gh attestation verify`)"
       snapshot:
         required: false
         type: boolean
@@ -360,6 +365,11 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      # attestations + id-token: write are required for
+      # actions/attest-build-provenance to mint the SLSA provenance attestation
+      # and request an OIDC token for keyless signing. id-token: write is also
+      # what cosign sign-blob already relies on for its keyless flow.
+      attestations: write
       id-token: write
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
@@ -398,6 +408,18 @@ jobs:
       - name: Sign checksums with cosign
         working-directory: dist
         run: cosign sign-blob --bundle checksums.txt.sigstore.json checksums.txt --yes
+
+      # GitHub-native SLSA build provenance, complementary to the cosign
+      # sign-blob above. subject-checksums points at the same checksums.txt
+      # that enumerates every released archive (sha256sum ./*.tar.gz ./*.zip),
+      # so one attestation covers all artifacts and each is verifiable with
+      # `gh attestation verify <archive>` and appears under the repo's
+      # /attestations. checksums.txt itself is signed by cosign above.
+      - name: Attest build provenance
+        if: inputs.attest
+        uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32 # v4
+        with:
+          subject-checksums: dist/checksums.txt
 
       - name: Upload release assets
         env:
