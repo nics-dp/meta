@@ -15,11 +15,6 @@ on:
         type: string
         default: ""
         description: "Git ref to checkout (defaults to event ref)"
-      runs_on:
-        required: false
-        type: string
-        default: '"ubuntu-latest"'
-        description: 'Runner as JSON (e.g., ''"ubuntu-latest"'' or ''{"group":"releasers"}'')'
       go_version:
         required: false
         type: string
@@ -55,7 +50,10 @@ env:
 
 jobs:
   security-sarif:
-    runs-on: ${{ fromJSON(inputs.runs_on) }}
+    # Pinned to ubuntu-latest: this workflow depends on Linux/Docker-based
+    # actions (hadolint-action, trivy-action) and bash scan steps, so it is not
+    # portable to Windows/macOS runners. No caller passes a custom runner.
+    runs-on: ubuntu-latest
     permissions:
       contents: read
       # required by github/codeql-action/upload-sarif to write code-scanning results
@@ -103,8 +101,14 @@ jobs:
               echo "::error::scan_path must be workspace-relative, not absolute"
               exit 1
               ;;
-            *..*)
-              echo "::error::scan_path must not contain '..'"
+          esac
+          # Reject '..' only as a complete path segment (parent-dir traversal),
+          # not a literal substring -- pad with leading/trailing '/' so '*/../*'
+          # matches a real ".." segment while legitimate names like 'my..dir'
+          # are allowed.
+          case "/$RAW_SCAN_PATH/" in
+            */../*)
+              echo "::error::scan_path must not contain a '..' path segment"
               exit 1
               ;;
           esac
