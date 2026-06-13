@@ -98,8 +98,10 @@ jobs:
             # Go-scan steps and the file is deleted by the cleanup step below.
             PRIV_GITCONFIG="${RUNNER_TEMP}/security-sarif-gitconfig"
             : > "$PRIV_GITCONFIG"
+            # Scope the rewrite to the nics-dp org prefix so only private org
+            # modules carry the token; public github.com fetches stay anonymous.
             git config --file "$PRIV_GITCONFIG" \
-              url."https://x-access-token:${GH_PAT}@github.com/".insteadOf "https://github.com/"
+              url."https://x-access-token:${GH_PAT}@github.com/nics-dp/".insteadOf "https://github.com/nics-dp/"
             {
               echo "GIT_CONFIG_GLOBAL=${PRIV_GITCONFIG}"
               echo "GOPRIVATE=github.com/nics-dp"
