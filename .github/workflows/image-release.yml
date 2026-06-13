@@ -591,8 +591,23 @@ jobs:
             exit 1
           fi
           echo "list=${PLATFORMS}" >> "$GITHUB_OUTPUT"
+          # QEMU (binfmt) is only needed to emulate a NON-native architecture.
+          # When the resolved platform list is exactly the runner's native arch
+          # there is nothing to emulate, so skip the otherwise-unconditional QEMU
+          # setup to save its fixed cost on amd64-only snapshot builds. Decide
+          # from the actual runner arch (uname), not just the platform string, so
+          # a non-x86_64 runner building linux/amd64 still gets QEMU. Any
+          # cross-arch / multi-arch target also keeps it.
+          if [[ "$PLATFORMS" == "linux/amd64" && "$(uname -m)" == "x86_64" ]]; then
+            echo "needs_qemu=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "needs_qemu=true" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Set up QEMU
+        # Skip emulation setup for native amd64-only builds (see the resolve
+        # step); required for every cross-arch / multi-arch build.
+        if: steps.platforms.outputs.needs_qemu == 'true'
         uses: docker/setup-qemu-action@06116385d9baf250c9f4dcb4858b16962ea869c3 # v4.1.0
 
       - name: Set up Buildx
