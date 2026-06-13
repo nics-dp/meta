@@ -64,8 +64,16 @@ if [ -d vendor ]; then go_mod="vendor"; else go_mod="mod"; fi
 # Config-free fallback: drive air via flags so the task works in any Go repo
 # without committing an .air.toml. Use -build.entrypoint (the deprecated
 # -build.bin flag is NOT honored for the run step) and watch go/mod/sum.
+#
+# air runs -build.cmd via /bin/sh -c, so the ldflags string is re-parsed by a
+# shell. Single-quote ${VERSION_LDFLAGS} (not double) so that shell does NOT
+# re-expand it: a VERSION/COMMIT override containing $(...) or backticks would
+# otherwise be command-substituted at air's shell stage. lib/go-version already
+# rejects whitespace/quotes but NOT $ or backticks, so single-quoting here is
+# the layer that neutralizes those. VERSION_LDFLAGS never contains a single
+# quote (lib/go-version rejects it), so the value passes through intact.
 air \
-  -build.cmd "go build -mod=${go_mod} -ldflags \"${VERSION_LDFLAGS}\" -o ./tmp/${usage_name} ./cmd/${usage_name}" \
+  -build.cmd "go build -mod=${go_mod} -ldflags '${VERSION_LDFLAGS}' -o ./tmp/${usage_name} ./cmd/${usage_name}" \
   -build.entrypoint "./tmp/${usage_name}" \
   -build.include_ext "go,mod,sum" \
   -build.exclude_dir "vendor,tmp,bin,test,testdata,asset,deploy,scripts"
