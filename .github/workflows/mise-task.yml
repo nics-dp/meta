@@ -86,7 +86,7 @@ jobs:
       MISE_MINIMUM_RELEASE_AGE: "0"
       MISE_USE_VERSIONS_HOST: "false"
       # secrets cannot be used in step-level if:, so bridge them to env here.
-      HAS_CI_APP: ${{ secrets.ci_read_app_id != '' }}
+      HAS_CI_APP: ${{ secrets.ci_read_app_id != '' && secrets.ci_read_app_private_key != '' }}
       HAS_GH_PAT: ${{ secrets.gh_pat != '' }}
     steps:
       # Prefer a nics-dp-ci-read App token for private module access. The App secrets
