@@ -90,6 +90,12 @@ jobs:
             echo "GONOPROXY=github.com/nics-dp"
             echo "GONOSUMDB=github.com/nics-dp"
           } >> "$GITHUB_ENV"
+          # Self-healing: drop any stale token-bearing url.*@github.com/nics-dp
+          # insteadOf rewrites left by a prior run before adding this run's fresh
+          # token, so an equal-length insteadOf tie can't pick up an expired token.
+          while read -r s; do
+            if [ -n "$s" ]; then git config --global --remove-section "$s" 2>/dev/null || true; fi
+          done < <(git config --global --name-only --get-regexp '^url\..*@github\.com/nics-dp' 2>/dev/null | sed -E 's/\.insteadof$//' | sort -u || true)
           git config --global url."https://x-access-token:${GH_PAT}@github.com/nics-dp".insteadOf "https://github.com/nics-dp"
           git config --global url."https://x-access-token:${GH_PAT}@github.com/nics-dp/".insteadOf "git@github.com:nics-dp/"
 

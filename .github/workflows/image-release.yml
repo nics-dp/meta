@@ -533,6 +533,13 @@ jobs:
           GH_PAT: ${{ steps.priv-token.outputs.token }}
         run: |
           if [[ "$HAS_PRIV" == "true" ]]; then
+            # Self-healing: drop any stale token-bearing url.*@github.com/nics-dp
+            # insteadOf rewrites left by a prior run before adding this run's
+            # fresh token, so an equal-length insteadOf tie can't pick up an
+            # expired token.
+            while read -r s; do
+              if [ -n "$s" ]; then git config --global --remove-section "$s" 2>/dev/null || true; fi
+            done < <(git config --global --name-only --get-regexp '^url\..*@github\.com/nics-dp' 2>/dev/null | sed -E 's/\.insteadof$//' | sort -u || true)
             git config --global url."https://x-access-token:${GH_PAT}@github.com/nics-dp".insteadOf "https://github.com/nics-dp"
           fi
           go env -w GOPRIVATE=github.com/nics-dp GONOPROXY=github.com/nics-dp GONOSUMDB=github.com/nics-dp
