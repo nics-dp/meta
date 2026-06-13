@@ -32,7 +32,7 @@ on:
     secrets:
       ci_read_app_id:
         required: false
-        description: "App ID of the nics-dp-ci-read GitHub App. Preferred over the PAT for private module access; pass via secrets: inherit. Falls back to the PAT when empty."
+        description: "App ID of the nics-dp-ci-read GitHub App for private module access. Mints an installation token to fetch private nics-dp Go modules; pass via secrets: inherit. When absent the private-module steps are skipped."
       ci_read_app_private_key:
         required: false
         description: "Private key of the nics-dp-ci-read GitHub App (pair with ci_read_app_id)."
