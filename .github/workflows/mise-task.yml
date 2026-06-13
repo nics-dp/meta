@@ -85,16 +85,16 @@ jobs:
     env:
       MISE_MINIMUM_RELEASE_AGE: "0"
       MISE_USE_VERSIONS_HOST: "false"
-      # secrets cannot be used in step-level if:, so bridge them to env here.
+      # secrets cannot be used in step-level if:, so bridge to env here.
       HAS_CI_APP: ${{ secrets.ci_read_app_id != '' && secrets.ci_read_app_private_key != '' }}
-      HAS_GH_PAT: ${{ secrets.gh_pat != '' }}
     steps:
-      # Prefer a nics-dp-ci-read App token for private module access. The App secrets
-      # arrive via `secrets: inherit`; when absent (legacy callers) the step is skipped
-      # and the git-config below falls back to gh_pat. See nics-dp PAT->App migration.
+      # Prefer a nics-dp-ci-read App token for private module access, but only when this
+      # run actually needs private modules. The App secrets arrive via `secrets: inherit`;
+      # when absent (legacy callers) the step is skipped and the git-config below falls
+      # back to gh_pat. See nics-dp PAT->App migration.
       - name: Setup | Mint private-module token
         id: priv-token
-        if: env.HAS_CI_APP == 'true'
+        if: ${{ env.HAS_CI_APP == 'true' && inputs.private-modules }}
         uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2.2.2
         with:
           app-id: ${{ secrets.ci_read_app_id }}

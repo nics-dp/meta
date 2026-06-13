@@ -51,9 +51,8 @@ jobs:
       contents: write
       security-events: write
     env:
-      # secrets cannot be used in step-level if:, so bridge them to env here.
+      # secrets cannot be used in step-level if:, so bridge to env here.
       HAS_CI_APP: ${{ secrets.ci_read_app_id != '' && secrets.ci_read_app_private_key != '' }}
-      HAS_GH_PAT: ${{ secrets.gh_pat != '' }}
     steps:
       # Prefer a nics-dp-ci-read App token for private module access. The App secrets
       # arrive via `secrets: inherit`; when absent (legacy callers) the step is skipped
