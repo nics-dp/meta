@@ -13,26 +13,46 @@ source "$(dirname "$0")/../lib/go-version"
 # go:build. lib/go-version sets these but does not export them.
 export VERSION COMMIT BUILD_DATE
 
+# A repo-local .air.toml wins (e.g. dcf services also watch embedded .sql). It
+# inherits VERSION/COMMIT/BUILD_DATE from the environment exported above, and
+# carries its own build.cmd/bin, so short-circuit here BEFORE the cmd/ auto-
+# detection below — that detection only feeds the config-free fallback, and a
+# repo with .air.toml may legitimately have multiple cmd entries or a non-
+# standard layout that would otherwise fail before air ever runs.
+if [ -f .air.toml ]; then
+  air -c .air.toml
+  exit $?
+fi
+
+# nullglob so an unmatched cmd/*/main.go expands to nothing (count 0) instead of
+# the literal pattern — otherwise the empty-repo case auto-detects usage_name='*'
+# and prints a misleading "cmd/*/main.go not found".
+shopt -s nullglob
 if [ "$usage_name" = "" ]; then
   entries=(cmd/*/main.go)
   if [ "${#entries[@]}" -eq 1 ]; then
     usage_name=$(basename "$(dirname "${entries[0]}")")
+  elif [ "${#entries[@]}" -eq 0 ]; then
+    echo "Error: no cmd/*/main.go found" >&2
+    exit 1
   else
     echo "Multiple cmd entries found. Please specify one of:"
     for e in "${entries[@]}"; do basename "$(dirname "$e")"; done
     exit 1
   fi
 fi
+# Reject a name containing path separators or traversal: usage_name is
+# interpolated into -build.cmd / -build.entrypoint / ./tmp/<name>, so a value
+# like "../x" or "a/b" would escape ./cmd and ./tmp.
+case "$usage_name" in
+  */* | *..*)
+    echo "Error: invalid name '$usage_name' (must not contain '/' or '..')" >&2
+    exit 1
+    ;;
+esac
 if [ ! -f "cmd/$usage_name/main.go" ]; then
   echo "Error: cmd/$usage_name/main.go not found"
   exit 1
-fi
-
-# A repo-local .air.toml wins (e.g. dcf services also watch embedded .sql). It
-# inherits VERSION/COMMIT/BUILD_DATE from the environment exported above.
-if [ -f .air.toml ]; then
-  air -c .air.toml
-  exit $?
 fi
 
 # Config-free fallback: drive air via flags so the task works in any Go repo
