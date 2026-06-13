@@ -91,8 +91,17 @@ jobs:
           GH_PAT: ${{ secrets.gh_pat }}
         run: |
           if [ -n "$GH_PAT" ]; then
-            git config --global url."https://x-access-token:${GH_PAT}@github.com/".insteadOf "https://github.com/"
+            # Scope the PAT to a short-lived git config under $RUNNER_TEMP rather
+            # than the runner's default ~/.gitconfig, so the third-party
+            # trivy-action / hadolint-action that run later in this job cannot
+            # read the credential. GIT_CONFIG_GLOBAL is exported only for the
+            # Go-scan steps and the file is deleted by the cleanup step below.
+            PRIV_GITCONFIG="${RUNNER_TEMP}/security-sarif-gitconfig"
+            : > "$PRIV_GITCONFIG"
+            git config --file "$PRIV_GITCONFIG" \
+              url."https://x-access-token:${GH_PAT}@github.com/".insteadOf "https://github.com/"
             {
+              echo "GIT_CONFIG_GLOBAL=${PRIV_GITCONFIG}"
               echo "GOPRIVATE=github.com/nics-dp"
               echo "GONOSUMDB=github.com/nics-dp"
             } >> "$GITHUB_ENV"
@@ -100,9 +109,11 @@ jobs:
 
       # Consumer repos may vendor (-mod=vendor). Refresh the vendor tree so
       # gosec/govulncheck can type-check and build the module consistently;
-      # only acts when a vendor/ directory is present.
+      # only acts when a vendor/ directory is present. continue-on-error keeps
+      # the non-blocking contract if private-module access / vendoring fails.
       - name: Vendor Go modules
         if: inputs.run_go
+        continue-on-error: true
         run: |
           if [ -d vendor ]; then
             go mod vendor
@@ -139,6 +150,17 @@ jobs:
           sarif_file: govulncheck.sarif
           category: govulncheck
 
+      # Revoke the private-module credential before any third-party action runs:
+      # delete the short-lived git config and clear GIT_CONFIG_GLOBAL so the
+      # PAT is no longer reachable by trivy-action / hadolint-action below.
+      - name: Revoke private-module credential
+        if: always() && inputs.run_go
+        run: |
+          if [ -n "${GIT_CONFIG_GLOBAL:-}" ]; then
+            rm -f "$GIT_CONFIG_GLOBAL"
+          fi
+          echo "GIT_CONFIG_GLOBAL=" >> "$GITHUB_ENV"
+
       # ----------------------------------------------------------------------
       # semgrep (SAST). Mirrors .mise/tasks/ci/semgrep config selection
       # (p/ci baseline + go/python/typescript/javascript lang packs), minus
@@ -155,7 +177,11 @@ jobs:
           # install (avoids PEP 668 externally-managed-environment failures),
           # matching the pipx:semgrep tool used by the ci:semgrep mise task.
           pipx install semgrep
+          # --enable-nosem honours in-repo `nosem` suppression comments, mirroring
+          # .mise/tasks/ci/semgrep (this differs only by dropping --error so
+          # findings populate the Security tab without failing the job).
           semgrep scan \
+            --enable-nosem \
             --config p/ci \
             --config p/golang \
             --config p/python \
