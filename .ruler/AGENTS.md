@@ -77,6 +77,9 @@ includes = ["git::https://github.com/nics-dp/meta.git//.mise/tasks?ref=main"]
 - **`codeql-reusable.yml`** — CodeQL Advanced analysis (configurable language matrix + Go build).
 - **`codeql.yml`** — meta repo's own CodeQL (workflow YAML scan only).
 
+### Security
+- **`security-sarif.yml`** — Reusable. Runs the gate-only scanners (gosec, govulncheck, semgrep, trivy config, hadolint) and uploads each as a distinct GitHub code-scanning SARIF category. Non-blocking: findings only populate the Security tab, never fail the caller's CI.
+- **`dependency-review.yml`** — Reusable. PR-time `actions/dependency-review-action` over the GitHub dependency graph (Go go.mod natively supported). BLOCKS PRs introducing dependencies with known vulnerabilities (>= `fail_on_severity`, default `high`) or disallowed licenses, and posts a summary comment (`comment_summary_in_pr`, default `on-failure`). Optional `allow_licenses` / `deny_licenses` SPDX lists. `runs-on: ubuntu-latest` (no runner input). Callers MUST invoke it from a `pull_request`-triggered workflow.
 ### Security & Supply Chain
 - **`scorecard.yml`** — Reusable. Runs OpenSSF Scorecard (`ossf/scorecard-action@<sha>`) and uploads `results.sarif` to code scanning (`category: scorecard`, non-blocking upload). Input `publish` (default false) wires `publish_results`; only publish from public repos. Perms: `security-events: write`, `id-token: write`, `contents: read`, `actions: read`.
 - **`go-dependency-submission.yml`** — Reusable. Submits the resolved Go dependency graph (`actions/go-dependency-submission@<sha>`) to the Dependency Submission API. Inputs: `go_mod_path` (default `go.mod`), `go_build_target` (empty omits the input so the action's own `all` default applies — split across two `if:`-gated steps). Secret `gh_pat` configures an org-scoped (`github.com/nics-dp/` only) private-module git rewrite in a short-lived `$RUNNER_TEMP` gitconfig via `GIT_CONFIG_GLOBAL` + `GOPRIVATE`. Perms: `contents: write`.
