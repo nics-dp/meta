@@ -73,17 +73,23 @@ jobs:
           # Private module access is granted separately via gh_pat below.
           persist-credentials: false
 
-      # Constrain the caller-supplied scan_path to a workspace-relative path:
-      # reject absolute paths and any '..' segment so a misconfigured caller
-      # cannot point a scanner outside the checkout (which would otherwise leak
-      # out-of-tree file paths into the uploaded SARIF). The validated value is
-      # exported once as SCAN_PATH and reused by the semgrep and trivy steps.
+      # Pure fail-fast gate for the caller-supplied scan_path: reject an empty
+      # value, absolute paths, any '..' segment, and any newline/CR. This runs
+      # before every scanner (steps execute in order), so a path that escapes
+      # the workspace fails the job here instead of letting a scanner read
+      # out-of-tree files and leak their paths into the uploaded SARIF.
       #
-      # This step fails fast on an invalid path. That does NOT break the
-      # non-blocking contract: an out-of-workspace scan_path is a CALLER
-      # CONFIGURATION error and should be surfaced loudly, which is distinct
-      # from a scanner FINDING (those never fail the job). Mirrors the
-      # allowlist-then-fail input validation used by the go:dev / go:run atoms.
+      # The step ONLY validates -- it does not write the value to $GITHUB_ENV
+      # or $GITHUB_OUTPUT, so there is no user-controlled environment-file write
+      # (avoids CodeQL "env var from user-controlled source" / CRLF env-file
+      # injection). Each shell scanner re-bridges inputs.scan_path through its
+      # own per-step env var instead.
+      #
+      # Failing on a bad path does NOT break the non-blocking contract: an
+      # out-of-workspace scan_path is a CALLER CONFIGURATION error and should be
+      # surfaced loudly, which is distinct from a scanner FINDING (those never
+      # fail the job). Mirrors the allowlist-then-fail input validation used by
+      # the go:dev / go:run atoms.
       - name: Validate scan path
         env:
           RAW_SCAN_PATH: ${{ inputs.scan_path }}
@@ -94,15 +100,20 @@ jobs:
           fi
           case "$RAW_SCAN_PATH" in
             /*)
-              echo "::error::scan_path '${RAW_SCAN_PATH}' must be workspace-relative, not absolute"
+              echo "::error::scan_path must be workspace-relative, not absolute"
               exit 1
               ;;
             *..*)
-              echo "::error::scan_path '${RAW_SCAN_PATH}' must not contain '..'"
+              echo "::error::scan_path must not contain '..'"
               exit 1
               ;;
           esac
-          echo "SCAN_PATH=${RAW_SCAN_PATH}" >> "$GITHUB_ENV"
+          # Reject newline / carriage-return (CRLF env-file / log-injection guard)
+          # by comparing the value against itself with those bytes stripped.
+          if [ "$(printf '%s' "$RAW_SCAN_PATH" | tr -d '\n\r')" != "$RAW_SCAN_PATH" ]; then
+            echo "::error::scan_path must not contain newline or carriage-return characters"
+            exit 1
+          fi
 
       # ----------------------------------------------------------------------
       # Go scanners: gosec (SAST) + govulncheck (known vulns). Both must BUILD
@@ -207,6 +218,12 @@ jobs:
       - name: Run semgrep (SARIF)
         if: inputs.run_semgrep
         continue-on-error: true
+        env:
+          # Per-step env bridge: keep inputs.scan_path out of the shell command
+          # text (no ${{ }} interpolation -> no shell injection); the value was
+          # already gated by "Validate scan path" above. Quoted + passed after
+          # `--` so a leading dash is never parsed as a semgrep option.
+          SCAN_PATH: ${{ inputs.scan_path }}
         run: |
           # pipx is preinstalled on GitHub-hosted runners and gives an isolated
           # install (avoids PEP 668 externally-managed-environment failures),
@@ -245,8 +262,11 @@ jobs:
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           scan-type: config
-          # use the validated workspace-relative path (set by "Validate scan path")
-          scan-ref: ${{ env.SCAN_PATH }}
+          # trivy-action is a third-party action with no shell we control, so the
+          # value goes straight into its `scan-ref` input. Path safety is enforced
+          # by the earlier "Validate scan path" gate, which fails the job before
+          # this step for any absolute / '..' / newline path.
+          scan-ref: ${{ inputs.scan_path }}
           format: sarif
           output: trivy-config.sarif
           exit-code: "0"
