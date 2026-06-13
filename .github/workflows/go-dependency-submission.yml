@@ -52,12 +52,13 @@ jobs:
         run: |
           if [ -n "$GH_PAT" ]; then
             # Scope the PAT to a short-lived git config under $RUNNER_TEMP rather
-            # than the runner's default ~/.gitconfig, so the third-party
-            # go-dependency-submission action that runs later cannot read the
-            # credential and a reused (non-ephemeral) runner keeps no stale token.
-            # GIT_CONFIG_GLOBAL points git at this file for the rest of the job;
-            # because the file is fresh each run there is no stale-rewrite scrub
-            # to do (mirrors security-sarif.yml).
+            # than the runner's default ~/.gitconfig. GIT_CONFIG_GLOBAL points git
+            # at this file for the rest of the job so the submission action below
+            # CAN use it to fetch private modules (that is the point); the benefit
+            # is that nothing is written to ~/.gitconfig, a reused (non-ephemeral)
+            # runner keeps no stale credential, and the cleanup step can revoke it
+            # right after submission. Because the file is fresh each run there is
+            # also no stale-rewrite scrub to do (mirrors security-sarif.yml).
             PRIV_GITCONFIG="${RUNNER_TEMP}/go-dep-submission-gitconfig"
             : > "$PRIV_GITCONFIG"
             # Scope the rewrite to the nics-dp org prefix so only private org
@@ -87,3 +88,15 @@ jobs:
         with:
           go-mod-path: ${{ inputs.go_mod_path }}
           go-build-target: ${{ inputs.go_build_target }}
+
+      # Revoke the private-module credential after submission: delete the
+      # short-lived git config and clear GIT_CONFIG_GLOBAL so the PAT is no
+      # longer reachable by any step a future edit might append (mirrors
+      # security-sarif.yml's "Revoke private-module credential").
+      - name: Revoke private-module credential
+        if: always()
+        run: |
+          if [ -n "${GIT_CONFIG_GLOBAL:-}" ]; then
+            rm -f "$GIT_CONFIG_GLOBAL"
+          fi
+          echo "GIT_CONFIG_GLOBAL=" >> "$GITHUB_ENV"
