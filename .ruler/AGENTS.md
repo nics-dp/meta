@@ -48,7 +48,7 @@ includes = ["git::https://github.com/nics-dp/meta.git//.mise/tasks?ref=main"]
 **Shared configs (`configs/`)**: Atoms fetch raw URLs at runtime (no commit to consumer repos). Trap cleanup removes the downloaded config when atom exits. Note: `.golangci.yml` is **per-repo committed** (not shared via curl) — `go:lint-check` / `go:lint-fix` read consumer's own file because gofumpt requires per-module `module-path` setting.
 
 **Auth (GitHub App + DockerHub)**:
-- `CI_READ_APP_ID` / `CI_READ_APP_PRIVATE_KEY` — nics-dp-ci-read App token (org secrets): private module access, CodeQL private-repo access, release/snapshot builds, `mise-task.yml` private-modules flag. Callers pass via `secrets: inherit` (no PAT).
+- nics-dp-ci-read App token (private module access, CodeQL private-repo access, release/snapshot builds, `mise-task.yml` private-modules flag): client-id from org **variable** `CI_READ_APP_CLIENT_ID` (auto-available in reusable workflows via `vars`); private key from org **secret** `CI_READ_APP_PRIVATE_KEY`, passed by callers as `ci_read_app_private_key`. Legacy `ci_read_app_id` input retired (kept for compat, ignored). No PAT.
 - `DOCKERHUB_USERNAME` / `DOCKERHUB_TOKEN` — image-release.yml (Docker image push)
 
 ## Key Files
@@ -66,7 +66,7 @@ includes = ["git::https://github.com/nics-dp/meta.git//.mise/tasks?ref=main"]
 ## Workflow Architecture
 
 ### Core
-- **`mise-task.yml`** — Reusable. Inputs: `task`, `name`, `runs_on` (JSON via `fromJSON()`), `fetch-depth`, `private-modules`. Secrets: `ci_read_app_id` / `ci_read_app_private_key`. Encapsulates checkout (SHA-pinned) + `jdx/mise-action@<sha>` + optional git private-modules config + run mise atom + step summary + enforce.
+- **`mise-task.yml`** — Reusable. Inputs: `task`, `name`, `runs_on` (JSON via `fromJSON()`), `fetch-depth`, `private-modules`. Secret: `ci_read_app_private_key` (client-id via `CI_READ_APP_CLIENT_ID` org var; legacy `ci_read_app_id` input ignored). Encapsulates checkout (SHA-pinned) + `jdx/mise-action@<sha>` + optional git private-modules config + run mise atom + step summary + enforce.
 
 ### Release & Build
 - **`go-release.yml`** — Multi-arch Go binary release (cosign, macOS notarize via quill, GitHub Release).
@@ -80,6 +80,9 @@ includes = ["git::https://github.com/nics-dp/meta.git//.mise/tasks?ref=main"]
 ### Security
 - **`security-sarif.yml`** — Reusable. Runs the gate-only scanners (gosec, govulncheck, semgrep, trivy config, hadolint) and uploads each as a distinct GitHub code-scanning SARIF category. Non-blocking: findings only populate the Security tab, never fail the caller's CI.
 - **`dependency-review.yml`** — Reusable. PR-time `actions/dependency-review-action` over the GitHub dependency graph (Go go.mod natively supported). BLOCKS PRs introducing dependencies with known vulnerabilities (>= `fail_on_severity`, default `high`) or disallowed licenses, and posts a summary comment (`comment_summary_in_pr`, default `on-failure`). Optional `allow_licenses` / `deny_licenses` SPDX lists. `runs-on: ubuntu-latest` (no runner input). Callers MUST invoke it from a `pull_request`-triggered workflow.
+### Security & Supply Chain
+- **`scorecard.yml`** — Reusable. Runs OpenSSF Scorecard (`ossf/scorecard-action@<sha>`) and uploads `results.sarif` to code scanning (`category: scorecard`, non-blocking upload). Input `publish` (default false) wires `publish_results`; only publish from public repos. Perms: `security-events: write`, `id-token: write`, `contents: read`, `actions: read`.
+- **`go-dependency-submission.yml`** — Reusable. Submits the resolved Go dependency graph (`actions/go-dependency-submission@<sha>`) to the Dependency Submission API. Inputs: `go_mod_path` (default `go.mod`), `go_build_target` (empty omits the input so the action's own `all` default applies — split across two `if:`-gated steps). Secret `gh_pat` configures an org-scoped (`github.com/nics-dp/` only) private-module git rewrite in a short-lived `$RUNNER_TEMP` gitconfig via `GIT_CONFIG_GLOBAL` + `GOPRIVATE`. Perms: `contents: write`.
 
 ### Utility
 - **`artifacts-comment.yml`** — Sticky PR comment listing artifacts (nightly.link URLs).

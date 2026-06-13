@@ -1,0 +1,61 @@
+# yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
+
+name: Scorecard
+
+# Runs OpenSSF Scorecard against the caller's repository and uploads the
+# findings to GitHub code scanning (Security > Code scanning) under the
+# `scorecard` category. NON-BLOCKING upload by design: a SARIF upload failure
+# never fails the caller's CI (mirrors security-sarif.yml). Callers add a job
+# that `uses:` this workflow.
+on:
+  workflow_call:
+    inputs:
+      publish:
+        required: false
+        type: boolean
+        default: false
+        description: "Publish results to the public OpenSSF Scorecard API. Only works for PUBLIC repos; defaults false so it stays safe for the org's mostly-private repos."
+
+permissions:
+  contents: read
+
+jobs:
+  scorecard:
+    # Pinned to ubuntu-latest: scorecard-action is a Linux/Docker-based action
+    # and no caller passes a custom runner.
+    runs-on: ubuntu-latest
+    permissions:
+      # required by github/codeql-action/upload-sarif to write code-scanning results
+      security-events: write
+      # required for the publish path to authenticate to the Scorecard API via OIDC
+      id-token: write
+      contents: read
+      # scorecard reads branch-protection / workflow settings via the API
+      actions: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          fetch-depth: 1
+          # Do not persist the GITHUB_TOKEN into the checkout so later steps
+          # cannot be coerced into using it (CodeQL actions/untrusted-checkout).
+          persist-credentials: false
+
+      - name: Run OpenSSF Scorecard
+        uses: ossf/scorecard-action@4eaacf0543bb3f2c246792bd56e8cdeffafb205a # v2.4.3
+        with:
+          results_format: sarif
+          results_file: results.sarif
+          # Publishing to the public Scorecard API only works for public repos;
+          # default false keeps it safe for the org's mostly-private repos.
+          publish_results: ${{ inputs.publish }}
+
+      - name: Upload Scorecard SARIF
+        if: always() && hashFiles('results.sarif') != ''
+        # non-blocking: a failed upload (API / permissions / SARIF format) must
+        # not fail the job and break the caller's CI (mirrors security-sarif.yml).
+        continue-on-error: true
+        uses: github/codeql-action/upload-sarif@8aad20d150bbac5944a9f9d289da16a4b0d87c1e # v4.36.2
+        with:
+          sarif_file: results.sarif
+          category: scorecard

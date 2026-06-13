@@ -32,10 +32,10 @@ on:
     secrets:
       ci_read_app_id:
         required: false
-        description: "App ID of the nics-dp-ci-read GitHub App for private module access. Mints an installation token to fetch private nics-dp Go modules; pass via secrets: inherit. When absent the private-module steps are skipped."
+        description: "Legacy/unused: the nics-dp-ci-read App is now identified by the CI_READ_APP_CLIENT_ID org variable (client-id); this input is kept only for backward compatibility with callers still passing it, and is ignored."
       ci_read_app_private_key:
         required: false
-        description: "Private key of the nics-dp-ci-read GitHub App (pair with ci_read_app_id)."
+        description: "Private key of the nics-dp-ci-read GitHub App (paired with the CI_READ_APP_CLIENT_ID org variable)."
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
@@ -49,16 +49,16 @@ jobs:
       security-events: write
     env:
       # secrets cannot be used in step-level if:, so bridge to env here.
-      HAS_CI_APP: ${{ secrets.ci_read_app_id != '' && secrets.ci_read_app_private_key != '' }}
+      HAS_CI_APP: ${{ vars.CI_READ_APP_CLIENT_ID != '' && secrets.ci_read_app_private_key != '' }}
     steps:
-      # Mint a nics-dp-ci-read App token for private module access. The App secrets
-      # arrive via `secrets: inherit`; when absent the git-config below is a no-op.
+      # Mint a nics-dp-ci-read App token for private module access. The client-id comes
+      # from the CI_READ_APP_CLIENT_ID org variable; when the private key is absent the git-config below is a no-op.
       - name: Setup | Mint private-module token
         id: priv-token
         if: env.HAS_CI_APP == 'true'
         uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
         with:
-          app-id: ${{ secrets.ci_read_app_id }}
+          client-id: ${{ vars.CI_READ_APP_CLIENT_ID }}
           private-key: ${{ secrets.ci_read_app_private_key }}
           owner: ${{ github.repository_owner }}
 

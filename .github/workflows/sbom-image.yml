@@ -27,6 +27,19 @@ on:
         type: boolean
         default: false
         description: "Snapshot mode (skip release upload)"
+      attest:
+        required: false
+        type: boolean
+        default: true
+        description: >
+          Generate a GitHub-native SBOM attestation binding the CycloneDX SBOM
+          to the image digest (verifiable with `gh attestation verify`). Mirrors
+          image-release.yml's `attest` input. A reusable workflow cannot raise
+          the caller's token scopes, so when this is enabled the caller's job
+          must grant attestations: write, id-token: write, artifact-metadata:
+          write (for the attestation storage record) and (because the SBOM
+          attestation is pushed to GHCR) packages: write. Set attest: false to
+          skip it where the caller cannot grant those scopes.
       runs_on:
         required: false
         type: string
@@ -44,8 +57,19 @@ jobs:
     permissions:
       actions: read
       contents: write
-      packages: read
+      # packages: write (not read) because attest-sbom runs with
+      # push-to-registry: true, which pushes the SBOM attestation to the GHCR
+      # package - the same permission set image-release.yml's attestation steps
+      # use. The earlier `packages: read` was sufficient only for pulling the
+      # image to generate the SBOM.
+      packages: write
       security-events: write
+      # attestations + id-token: write let actions/attest-sbom mint the SBOM
+      # attestation and obtain an OIDC token for keyless Sigstore signing;
+      # artifact-metadata: write lets it create the artifact storage record.
+      attestations: write
+      artifact-metadata: write
+      id-token: write
     steps:
       - name: Checkout
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
@@ -85,6 +109,21 @@ jobs:
           format: cyclonedx-json
           output-file: sbom-image.cdx.json
           upload-artifact: false
+
+      # GitHub-native SBOM attestation: bind the CycloneDX SBOM to the image
+      # digest the SBOM was generated from. Both the subject (inputs.digest)
+      # and the SBOM file exist in this job, so this is the correct place to
+      # attest. Attests the as-generated sbom-image.cdx.json rather than the
+      # parlay-enriched copy, so the attested document matches the SBOM the
+      # scanners below consume. Verifiable with `gh attestation verify`.
+      - name: Attest SBOM
+        if: inputs.attest
+        uses: actions/attest-sbom@c604332985a26aa8cf1bdc465b92731239ec6b9e # v4.1.0
+        with:
+          subject-name: ${{ env.REGISTRY_GHCR }}/${{ env.GHCR_NAMESPACE }}/${{ inputs.image_name }}
+          subject-digest: ${{ inputs.digest }}
+          sbom-path: sbom-image.cdx.json
+          push-to-registry: true
 
       - name: Set up Go (for tooling)
         uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
