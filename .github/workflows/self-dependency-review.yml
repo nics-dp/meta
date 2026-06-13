@@ -1,5 +1,5 @@
 # yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
-name: dependency-review
+name: self-dependency-review
 
 # PR-time dependency review (vulnerable / disallowed-license deps) via the meta
 # reusable. Uses the GitHub dependency graph; posts a summary comment on failure
