@@ -50,6 +50,10 @@ jobs:
         with:
           ref: ${{ inputs.ref }}
           fetch-depth: 1
+          # The ref is a workflow_call input and may be attacker-influenced;
+          # do not persist the GITHUB_TOKEN. Private module access is granted
+          # separately via gh_pat (CodeQL actions/untrusted-checkout).
+          persist-credentials: false
 
       - name: Configure git for private modules
         env:
