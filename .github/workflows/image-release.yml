@@ -88,6 +88,16 @@ on:
         type: string
         default: "stable"
         description: "Go version for vendor step (only used when go_vendor is true)"
+      submodules:
+        required: false
+        type: string
+        default: "false"
+        description: >
+          Submodule checkout mode for the build context: "false", "true", or
+          "recursive". Use "recursive" when the Dockerfile copies a git submodule
+          into the image. Private submodules are fetched with the minted ci-read
+          App token, so pass ci_read_app_private_key too. Typed as string (not
+          boolean) so callers can request recursive checkout.
       external_repo:
         required: false
         type: string
@@ -181,12 +191,44 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Validate submodules input
+        # actions/checkout silently treats any submodules value other than
+        # true/recursive (case-insensitive) as false rather than erroring, so a
+        # caller typo (e.g. "recursiv") would skip submodule fetch and only fail
+        # later at the Dockerfile COPY. Fail fast with an explicit message here.
+        # runs_on is caller-supplied JSON, so pin bash rather than rely on the
+        # runner default. submodules is passed via env, never interpolated into
+        # the script body.
+        shell: bash
+        env:
+          SUBMODULES: ${{ inputs.submodules }}
+        run: |
+          case "$(printf '%s' "$SUBMODULES" | tr '[:upper:]' '[:lower:]')" in
+            false | true | recursive) ;;
+            *)
+              # Sanitize before emitting: strip CR/LF (which would truncate or
+              # inject the ::error:: annotation) and percent-encode % per the
+              # runner's workflow-command encoding, so the annotation stays
+              # well-formed for any value.
+              safe=$(printf '%s' "$SUBMODULES" | tr -d '\r\n' | sed 's/%/%25/g')
+              echo "::error::invalid submodules input '${safe}'; expected one of: false, true, recursive"
+              exit 1
+              ;;
+          esac
+
       - name: Checkout
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           ref: ${{ inputs.ref }}
-          # No authenticated git is run against this checkout afterwards, and in
-          # non-external mode the workspace root is the docker build context.
+          submodules: ${{ inputs.submodules }}
+          # Private submodules need a token that can read other nics-dp repos;
+          # use the minted ci-read App token when submodules are requested, else
+          # fall back to the default token (current behaviour for non-submodule
+          # repos). checkout uses this only to fetch during the step.
+          token: ${{ (inputs.submodules != 'false' && steps.priv-token.outputs.token) || github.token }}
+          # The token above is used only to fetch (incl. submodules) during this
+          # step; no authenticated git is run against this checkout afterwards, and
+          # in non-external mode the workspace root is the docker build context.
           # Opt out of credential persistence (least privilege) so no token
           # material lingers in or near the build context.
           persist-credentials: false
