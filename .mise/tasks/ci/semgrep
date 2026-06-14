@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-#MISE description="Run semgrep static analysis (p/ci baseline + lang packs)"
+#MISE description="Static analysis via OpenGrep (semgrep-compatible; p/ci baseline + lang packs)"
 #MISE hide=true
 #MISE raw=true
 #MISE tools={"aqua:opengrep/opengrep"="latest"}
