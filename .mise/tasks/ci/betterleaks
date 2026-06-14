@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+#MISE description="Scan for leaked secrets (betterleaks; PR gate)"
+#MISE hide=true
+#MISE raw=true
+#MISE tools={"github:betterleaks/betterleaks"="latest"}
+set -euo pipefail
+
+# betterleaks: fast, configurable secret scanner from the Gitleaks authors. Used
+# as the PR gate -- its default `--exit-code 1` on findings makes the caller's
+# mise-task.yml "Enforce" step fail CI. --redact keeps secret values out of the
+# CI logs; --no-banner trims noise from the job summary.
+#
+# On a pull_request we scan ONLY the commits the PR introduces (base..HEAD) so a
+# pre-existing historical leak does not block every unrelated PR. On push /
+# workflow_dispatch we scan the full history. Both require the caller to checkout
+# with fetch-depth: 0 (so the base ref and full graph are present).
+common=(git . --redact --no-banner)
+
+if [ "${GITHUB_EVENT_NAME:-}" = "pull_request" ] && [ -n "${GITHUB_BASE_REF:-}" ]; then
+  # Bring the PR's base branch into the local graph; harmless if already present.
+  git fetch --no-tags --quiet origin \
+    "+refs/heads/${GITHUB_BASE_REF}:refs/remotes/origin/${GITHUB_BASE_REF}" || true
+  betterleaks "${common[@]}" --log-opts="--no-merges origin/${GITHUB_BASE_REF}..HEAD"
+else
+  betterleaks "${common[@]}"
+fi
