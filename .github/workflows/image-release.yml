@@ -88,6 +88,16 @@ on:
         type: string
         default: "stable"
         description: "Go version for vendor step (only used when go_vendor is true)"
+      submodules:
+        required: false
+        type: string
+        default: "false"
+        description: >
+          Submodule checkout mode for the build context: "false", "true", or
+          "recursive". Use "recursive" when the Dockerfile copies a git submodule
+          into the image. Private submodules are fetched with the minted ci-read
+          App token, so pass ci_read_app_private_key too. Typed as string (not
+          boolean) so callers can request recursive checkout.
       external_repo:
         required: false
         type: string
@@ -185,8 +195,15 @@ jobs:
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           ref: ${{ inputs.ref }}
-          # No authenticated git is run against this checkout afterwards, and in
-          # non-external mode the workspace root is the docker build context.
+          submodules: ${{ inputs.submodules }}
+          # Private submodules need a token that can read other nics-dp repos;
+          # use the minted ci-read App token when submodules are requested, else
+          # fall back to the default token (current behaviour for non-submodule
+          # repos). checkout uses this only to fetch during the step.
+          token: ${{ (inputs.submodules != 'false' && steps.priv-token.outputs.token) || github.token }}
+          # The token above is used only to fetch (incl. submodules) during this
+          # step; no authenticated git is run against this checkout afterwards, and
+          # in non-external mode the workspace root is the docker build context.
           # Opt out of credential persistence (least privilege) so no token
           # material lingers in or near the build context.
           persist-credentials: false
