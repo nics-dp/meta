@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+#MISE description="Scan for verified live secrets (trufflehog; deep/release scan)"
+#MISE hide=true
+#MISE raw=true
+#MISE tools={"aqua:trufflesecurity/trufflehog"="latest"}
+set -euo pipefail
+
+# trufflehog: broad detector set (800+) plus ACTIVE verification. This is the
+# deep/release scan, not the per-PR gate. --results=verified reports only LIVE
+# credentials (verification confirmed via the issuing API), so historical dead
+# secrets do not fire. --fail exits 183 when a result is found, gating the
+# release. --no-update skips the self-update network call in CI;
+# --github-actions formats findings for the Actions log.
+#
+# Full-history sweep: we omit --since-commit/--branch so every commit is walked,
+# which requires the caller to checkout with fetch-depth: 0.
+trufflehog git file://. --results=verified --fail --no-update --github-actions
