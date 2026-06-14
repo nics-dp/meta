@@ -71,6 +71,16 @@ jobs:
       # org variable (client-id) plus the ci_read_app_private_key secret.
       HAS_CI_APP: ${{ vars.CI_READ_APP_CLIENT_ID != '' && secrets.ci_read_app_private_key != '' }}
     steps:
+      # Fail fast with a clear message if a caller overrides runs_on to a
+      # non-Linux runner: the Docker-based actions (hadolint, trivy) and bash
+      # scan steps below are Linux-only, so an early guard beats a confusing
+      # mid-run failure. Enforces the "Must stay Linux" contract documented above.
+      - name: Guard against non-Linux runner
+        if: ${{ runner.os != 'Linux' }}
+        run: |
+          echo "::error::security-sarif requires a Linux runner (got '${{ runner.os }}'); its Docker-based actions and bash scan steps are not portable. Set runs_on to a Linux runner." >&2
+          exit 1
+
       # Mint a nics-dp-ci-read App token for private Go module access, but only
       # when the Go scanners run and the App is configured. The PAT model was
       # retired org-wide, so callers pass only ci_read_app_private_key and the
