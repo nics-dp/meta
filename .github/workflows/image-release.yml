@@ -100,10 +100,15 @@ on:
           prebuilt-linux-arm64) and feed them to the build as a `binctx` build context
           with BIN_STAGE=prebuilt. The caller's image-build job MUST set
           needs:[go-release] so the artifacts exist, and the Dockerfile MUST have
-          the dual-mode prebuilt stage (COPY --from=binctx ${TARGETARCH}/<bin>).
-          Eliminates the in-image compile, so the RUN-free runtime stage builds
-          every arch with no QEMU (snapshot can then stay multi-arch). go_vendor
-          is unnecessary in this mode.
+          the dual-mode prebuilt stage. binctx is keyed by
+          ${TARGETARCH}${TARGETVARIANT} (amd64, arm64, armv7, ...), so the
+          Dockerfile COPYs `--from=binctx ${TARGETARCH}${TARGETVARIANT}/<bin>`
+          (declare both ARGs in the stage). For amd64/arm64 the variant is empty,
+          so a plain `${TARGETARCH}/<bin>` still resolves; only same-arch variant
+          builds (e.g. arm/v6 + arm/v7) need the variant in the path. Eliminates
+          the in-image compile, so the RUN-free runtime stage builds every arch
+          with no QEMU (snapshot can then stay multi-arch). go_vendor is
+          unnecessary in this mode.
       submodules:
         required: false
         type: string
@@ -706,18 +711,17 @@ jobs:
           IFS=',' read -ra PLATS <<< "$PLATFORMS"
           for p in "${PLATS[@]}"; do
             [[ "$p" == linux/* ]] || continue
-            full="${p#linux/}"                       # e.g. arm64  or  arm/v7
-            arch="${full%%/*}"                       # TARGETARCH: arm64 / arm
-            srcname="prebuilt-linux-${full//\//-}"   # artifact: prebuilt-linux-arm64 / prebuilt-linux-arm-v7
+            full="${p#linux/}"                       # e.g. amd64 | arm64 | arm/v7
+            # Key the build-context dir by Docker's ${TARGETARCH}${TARGETVARIANT}
+            # (arm/v7 -> armv7, arm64 -> arm64, amd64 -> amd64) so two variants of
+            # the same arch don't collide and the Dockerfile can resolve any of
+            # them. (For amd64/arm64 this equals ${TARGETARCH}, so a Dockerfile
+            # that COPYs ${TARGETARCH}/<bin> still works; variant builds need it to
+            # COPY ${TARGETARCH}${TARGETVARIANT}/<bin>.)
+            key="${full//\//}"                       # armv7 | arm64 | amd64
+            srcname="prebuilt-linux-${full//\//-}"   # artifact: prebuilt-linux-arm-v7 | -arm64 | -amd64
             src="${BINROOT}/${srcname}"
-            dest="${BINCTX}/${arch}"                 # keyed by TARGETARCH for the Dockerfile's COPY
-            # binctx is keyed by TARGETARCH, which can't distinguish two variants
-            # of the same arch (e.g. arm/v6 + arm/v7). Fail loudly rather than
-            # silently overwrite one with the other.
-            if [[ -d "$dest" && -n "$(ls -A "$dest" 2>/dev/null)" ]]; then
-              echo "::error::prebuilt: platforms '${PLATFORMS}' map more than one variant onto TARGETARCH '${arch}'; binctx can't disambiguate. Build a single variant per arch."
-              exit 1
-            fi
+            dest="${BINCTX}/${key}"
             mkdir -p "$dest"
             if [[ ! -d "$src" ]] || [[ -z "$(ls -A "$src" 2>/dev/null)" ]]; then
               echo "::error::prebuilt: missing binaries for ${p} (expected go-release artifact ${srcname}; ensure image-build needs:[go-release] and go-release builds ${p})"
@@ -831,11 +835,7 @@ jobs:
           IFS=',' read -ra PLATS <<< "$PLATFORMS"
           for p in "${PLATS[@]}"; do
             [[ "$p" == linux/* ]] || continue
-            arch="${p#linux/}"; arch="${arch//\//-}"   # variant-safe filename (arm/v7 -> arm-v7)
-            # Downloadable image tarballs are published only for amd64/arm64 (the
-            # arches the fleet ships and the only ones with upload steps below).
-            # Skip anything else so we don't save a tarball that never uploads.
-            case "$arch" in amd64|arm64) ;; *) echo "skip image tarball for linux/${arch} (only amd64/arm64 are published)"; continue ;; esac
+            arch="${p#linux/}"; arch="${arch//\//-}"   # filename-safe (arm/v7 -> arm-v7)
             # Pull the arch-specific image from the manifest list by digest, then
             # re-tag to the branch tag so `docker load` restores a usable name.
             docker pull --quiet --platform "$p" "$REF"
@@ -846,21 +846,18 @@ jobs:
             docker rmi "$NAMED" >/dev/null 2>&1 || true
           done
 
-      - name: Upload image tarball (amd64)
-        if: inputs.snapshot && contains(steps.platforms.outputs.list, 'linux/amd64')
+      - name: Upload image tarballs
+        # One artifact holding every built arch's docker-loadable tar
+        # (image-linux-<arch>.tar inside). A single dir upload works for any
+        # platform set — amd64/arm64, other arches, or arm variants — without a
+        # per-arch step. GitHub wraps it in a .zip on download.
+        if: inputs.snapshot
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: image-linux-amd64
-          path: ${{ runner.temp }}/images/image-linux-amd64.tar
+          name: images
+          path: ${{ runner.temp }}/images/
           retention-days: 7
-
-      - name: Upload image tarball (arm64)
-        if: inputs.snapshot && contains(steps.platforms.outputs.list, 'linux/arm64')
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: image-linux-arm64
-          path: ${{ runner.temp }}/images/image-linux-arm64.tar
-          retention-days: 7
+          if-no-files-found: ignore
 
       - name: Generate artifact attestation (DockerHub)
         if: inputs.attest

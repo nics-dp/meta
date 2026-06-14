@@ -68,10 +68,10 @@ jobs:
             // artifact name convention. GitHub wraps every artifact in a .zip on
             // download, so the inner file is named without that wrapper.
             const describe = (name) => {
-              if (name.startsWith('image-linux-')) {
-                const arch = name.slice('image-linux-'.length);
-                return `**Container image** (linux/${arch}) — load and run it locally, no registry needed: ` +
-                  `\`unzip ${name}.zip && docker load -i ${name}.tar\`, then \`docker run\` the loaded tag.`;
+              if (name === 'images') {
+                return `**Container images** (one \`.tar\` per built arch) — load and run locally, no registry ` +
+                  `needed: \`unzip images.zip\`, then \`docker load -i image-linux-<arch>.tar\` for your arch and ` +
+                  `\`docker run\` the loaded tag.`;
               }
               if (name.startsWith('binary-')) {
                 const t = name.slice('binary-'.length);
