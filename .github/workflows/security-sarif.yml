@@ -78,7 +78,7 @@ jobs:
       - name: Guard against non-Linux runner
         if: ${{ runner.os != 'Linux' }}
         run: |
-          echo "::error::security-sarif requires a Linux runner (got '${{ runner.os }}'); its Docker-based actions and bash scan steps are not portable. Set runs_on to a Linux runner." >&2
+          echo "::error::security-sarif requires a Linux runner (got '$RUNNER_OS'); its Docker-based actions and bash scan steps are not portable. Set runs_on to a Linux runner." >&2
           exit 1
 
       # Mint a nics-dp-ci-read App token for private Go module access, but only
