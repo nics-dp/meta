@@ -74,7 +74,7 @@ on:
         required: false
         type: boolean
         default: false
-        description: "Snapshot mode: use SHA-based tags only (no semver, no latest)"
+        description: "Snapshot mode: tag images by source-branch name (no semver, no latest); pin a specific build by digest."
       ref:
         required: false
         type: string

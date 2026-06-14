@@ -348,7 +348,7 @@ jobs:
             echo "file=${ARCHIVE_DIR}.tar.gz" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Upload build artifact
+      - name: Upload binary archive
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: binary-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.goarm && format('-v{0}', matrix.goarm) || '' }}
