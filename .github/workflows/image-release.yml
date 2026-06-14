@@ -191,6 +191,26 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Validate submodules input
+        # actions/checkout silently treats any submodules value other than
+        # true/recursive (case-insensitive) as false rather than erroring, so a
+        # caller typo (e.g. "recursiv") would skip submodule fetch and only fail
+        # later at the Dockerfile COPY. Fail fast with an explicit message here.
+        # runs_on is caller-supplied JSON, so pin bash rather than rely on the
+        # runner default. submodules is passed via env, never interpolated into
+        # the script body.
+        shell: bash
+        env:
+          SUBMODULES: ${{ inputs.submodules }}
+        run: |
+          case "$(printf '%s' "$SUBMODULES" | tr '[:upper:]' '[:lower:]')" in
+            false | true | recursive) ;;
+            *)
+              echo "::error::invalid submodules input '${SUBMODULES}'; expected one of: false, true, recursive"
+              exit 1
+              ;;
+          esac
+
       - name: Checkout
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
