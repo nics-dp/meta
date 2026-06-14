@@ -14,9 +14,11 @@ on:
         type: string
         default: "linux/amd64,linux/arm64"
         description: >
-          Target platforms for multi-arch build. NOTE: ignored when
-          snapshot=true — snapshot builds are forced to linux/amd64 only to
-          skip emulated arm64 (see the "Resolve build platforms" step).
+          Target platforms for multi-arch build. NOTE: in compiled mode it is
+          ignored when snapshot=true — snapshot builds are forced to linux/amd64
+          only to skip emulated arm64. In prebuilt=true mode it is always
+          honored (the RUN-free runtime needs no QEMU, so multi-arch is free even
+          on snapshot). See the "Resolve build platforms" step.
       runs_on:
         required: false
         type: string
@@ -88,6 +90,20 @@ on:
         type: string
         default: "stable"
         description: "Go version for vendor step (only used when go_vendor is true)"
+      prebuilt:
+        required: false
+        type: boolean
+        default: false
+        description: >
+          Prebuilt mode: instead of compiling in-image, download the raw linux
+          binaries the go-release job uploaded (artifacts bin-linux-amd64 /
+          bin-linux-arm64) and feed them to the build as a `binctx` build context
+          with BIN_STAGE=prebuilt. The caller's image-build job MUST set
+          needs:[go-release] so the artifacts exist, and the Dockerfile MUST have
+          the dual-mode prebuilt stage (COPY --from=binctx ${TARGETARCH}/<bin>).
+          Eliminates the in-image compile, so the RUN-free runtime stage builds
+          every arch with no QEMU (snapshot can then stay multi-arch). go_vendor
+          is unnecessary in this mode.
       submodules:
         required: false
         type: string
@@ -606,17 +622,22 @@ jobs:
         shell: bash
         env:
           SNAPSHOT: ${{ inputs.snapshot }}
+          PREBUILT: ${{ inputs.prebuilt }}
           PLATFORMS_IN: ${{ inputs.platforms }}
         run: |
-          # Snapshot builds are ephemeral, SHA-tagged dev images. Under the
-          # current deployment model only linux/amd64 is consumed from them
-          # (prod runs amd64; arm64 images are published only on real releases,
-          # for local dev on Apple Silicon). Building the linux/arm64 variant on
-          # snapshot means emulating arm64 under QEMU on the amd64 runners, which
-          # dominates snapshot build wall-clock. Force amd64-only on snapshot and
-          # ignore inputs.platforms; release builds (snapshot=false) honor
-          # inputs.platforms unchanged.
-          if [[ "$SNAPSHOT" == "true" ]]; then
+          # Prebuilt mode COPYs host-built binaries into a RUN-free runtime, so
+          # every arch assembles with no foreign-arch RUN and thus no QEMU.
+          # Honor the caller's full platform list even on snapshot (multi-arch is
+          # free), and never set up QEMU below.
+          #
+          # Compiled mode (no prebuilt): snapshot builds emulate arm64 under QEMU
+          # on the amd64 runners, which dominates wall-clock, and under the
+          # deployment model only linux/amd64 is consumed from snapshots. So
+          # force amd64-only on snapshot and ignore inputs.platforms; release
+          # builds honor inputs.platforms unchanged.
+          if [[ "$PREBUILT" == "true" ]]; then
+            PLATFORMS="$PLATFORMS_IN"
+          elif [[ "$SNAPSHOT" == "true" ]]; then
             PLATFORMS="linux/amd64"
           else
             PLATFORMS="$PLATFORMS_IN"
@@ -640,7 +661,11 @@ jobs:
           # from the actual runner arch (uname), not just the platform string, so
           # a non-x86_64 runner building linux/amd64 still gets QEMU. Any
           # cross-arch / multi-arch target also keeps it.
-          if [[ "$PLATFORMS" == "linux/amd64" && "$(uname -m)" == "x86_64" ]]; then
+          if [[ "$PREBUILT" == "true" ]]; then
+            # RUN-free runtime: no foreign-arch execution, so no emulation even
+            # for multi-arch.
+            echo "needs_qemu=false" >> "$GITHUB_OUTPUT"
+          elif [[ "$PLATFORMS" == "linux/amd64" && "$(uname -m)" == "x86_64" ]]; then
             echo "needs_qemu=false" >> "$GITHUB_OUTPUT"
           else
             echo "needs_qemu=true" >> "$GITHUB_OUTPUT"
@@ -654,6 +679,37 @@ jobs:
 
       - name: Set up Buildx
         uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # v4.1.0
+
+      - name: Download prebuilt binaries
+        if: inputs.prebuilt
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: bin-linux-*
+          path: ${{ runner.temp }}/binroot
+
+      - name: Assemble binctx build context
+        if: inputs.prebuilt
+        shell: bash
+        env:
+          BINROOT: ${{ runner.temp }}/binroot
+          BINCTX: ${{ runner.temp }}/binctx
+        run: |
+          # go-release uploads raw linux binaries as bin-linux-<arch> artifacts;
+          # download-artifact placed each under <binroot>/bin-linux-<arch>/.
+          # Re-key them by Docker TARGETARCH (amd64/arm64) so the Dockerfile's
+          # prebuilt stage (COPY --from=binctx ${TARGETARCH}/<bin>) resolves.
+          set -euo pipefail
+          for arch in amd64 arm64; do
+            src="${BINROOT}/bin-linux-${arch}"
+            dest="${BINCTX}/${arch}"
+            mkdir -p "$dest"
+            if [[ ! -d "$src" ]] || [[ -z "$(ls -A "$src" 2>/dev/null)" ]]; then
+              echo "::error::prebuilt: missing binaries for linux/${arch} (expected go-release artifact bin-linux-${arch}; ensure image-build needs:[go-release] and go-release builds linux/${arch})"
+              exit 1
+            fi
+            cp -a "${src}/." "${dest}/"
+            chmod +x "${dest}"/*
+          done
 
       - name: Extract metadata (tags, labels)
         id: meta
@@ -694,6 +750,10 @@ jobs:
           # ship the hardened runtime stage instead of the trailing debug stage.
           target: ${{ inputs.target }}
           platforms: ${{ steps.platforms.outputs.list }}
+          # In prebuilt mode, expose the host-built binaries (laid out by arch
+          # under <runner.temp>/binctx) as the `binctx` named build context that
+          # the Dockerfile's prebuilt stage COPYs from. Empty otherwise.
+          build-contexts: ${{ inputs.prebuilt && format('binctx={0}/binctx', runner.temp) || '' }}
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
@@ -701,6 +761,7 @@ jobs:
             VERSION=${{ steps.version.outputs.version }}
             COMMIT=${{ steps.version.outputs.commit }}
             BUILD_DATE=${{ steps.version.outputs.build_date }}
+            ${{ inputs.prebuilt && 'BIN_STAGE=prebuilt' || '' }}
             ${{ inputs.build_args }}
             ${{ steps.env-args.outputs.build_args }}
           secrets: |

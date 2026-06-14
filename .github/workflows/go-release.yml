@@ -355,6 +355,19 @@ jobs:
           path: ${{ steps.archive.outputs.file }}
           retention-days: ${{ inputs.snapshot && 7 || 30 }}
 
+      # Raw (unarchived) linux binaries so image-release's prebuilt mode can
+      # COPY them straight into the container without unpacking an archive. Linux
+      # only — container images are linux; darwin/windows binaries ship as
+      # release archives, not images. Short retention: consumed within the same
+      # run by the image-build job.
+      - name: Upload raw binary for image prebuilt
+        if: matrix.goos == 'linux'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: bin-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: output/
+          retention-days: 1
+
       - name: Revoke private git repository access
         if: ${{ always() && env.HAS_CI_APP == 'true' }}
         env:
