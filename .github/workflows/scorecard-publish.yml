@@ -1,0 +1,66 @@
+# yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
+
+name: Scorecard (publish)
+
+# PUBLIC-repo variant of OpenSSF Scorecard: runs Scorecard, uploads SARIF to
+# code scanning, AND publishes results to the public OpenSSF API (badge). Only
+# works for PUBLIC repos (meta). Callers add a job that `uses:` this workflow.
+#
+# The publish path is verified server-side by the OpenSSF API against a strict
+# allowlist: no global/job env or defaults, no global write permissions, only
+# the scorecard job may set id-token: write, and steps are limited to
+# {checkout, upload-artifact, codeql upload-sarif, scorecard-action,
+# harden-runner}. This file is therefore deliberately minimal and canonical --
+# do NOT add a job env, a token-mint step, or a second scorecard-action job
+# here. Private repos use the separate scorecard.yml (publish:false), which can
+# mint an App token precisely because it never hits this verification.
+on:
+  workflow_call:
+    inputs:
+      publish:
+        required: false
+        type: boolean
+        default: true
+        description: "Publish results to the public OpenSSF Scorecard API. Only works for PUBLIC repos. Defaults true (this is the publish variant)."
+
+permissions:
+  contents: read
+
+jobs:
+  scorecard:
+    # Pinned to ubuntu-latest: scorecard-action is a Linux/Docker-based action.
+    runs-on: ubuntu-latest
+    permissions:
+      # required by github/codeql-action/upload-sarif to write code-scanning results
+      security-events: write
+      # required for the publish path to authenticate to the Scorecard API via OIDC
+      id-token: write
+      contents: read
+      # scorecard reads branch-protection / workflow settings via the API
+      actions: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          fetch-depth: 1
+          # Do not persist the GITHUB_TOKEN into the checkout so later steps
+          # cannot be coerced into using it (CodeQL actions/untrusted-checkout).
+          persist-credentials: false
+
+      - name: Run OpenSSF Scorecard
+        # No continue-on-error: on the publish path scorecard succeeds (public
+        # repo) and a real failure must surface.
+        uses: ossf/scorecard-action@4eaacf0543bb3f2c246792bd56e8cdeffafb205a # v2.4.3
+        with:
+          results_format: sarif
+          results_file: results.sarif
+          publish_results: ${{ inputs.publish }}
+
+      - name: Upload Scorecard SARIF
+        if: always() && hashFiles('results.sarif') != ''
+        # non-blocking: a failed upload must not fail the job (mirrors security-sarif.yml).
+        continue-on-error: true
+        uses: github/codeql-action/upload-sarif@8aad20d150bbac5944a9f9d289da16a4b0d87c1e # v4.36.2
+        with:
+          sarif_file: results.sarif
+          category: scorecard

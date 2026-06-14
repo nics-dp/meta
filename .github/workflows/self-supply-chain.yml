@@ -21,6 +21,6 @@ jobs:
       id-token: write
       contents: read
       actions: read
-    uses: nics-dp/meta/.github/workflows/scorecard.yml@main
+    uses: nics-dp/meta/.github/workflows/scorecard-publish.yml@main
     with:
       publish: true
