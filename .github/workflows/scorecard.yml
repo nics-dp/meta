@@ -102,10 +102,14 @@ jobs:
       # plus the scorecard_app_private_key secret (mirrors mise-task.yml).
       HAS_SCORECARD_APP: ${{ vars.SCORECARD_APP_CLIENT_ID != '' && secrets.scorecard_app_private_key != '' }}
     steps:
-      # Mint a nics-dp-scorecard App token to use as repo_token. Scoped to the
-      # caller repo. Skipped when the App is not configured -- scorecard then
-      # falls back to GITHUB_TOKEN (queries fail on a private repo) and
-      # continue-on-error keeps CI green until the App is wired.
+      # Mint a nics-dp-scorecard App token to use as repo_token. With neither
+      # owner nor repositories set, create-github-app-token scopes the token to
+      # the current repository (least privilege) -- do not pass github.event.*,
+      # which is absent on some workflow_call triggers and would either error or,
+      # with owner set, widen the token to the whole owner installation. Skipped
+      # when the App is not configured -- scorecard then falls back to
+      # GITHUB_TOKEN (queries fail on a private repo) and continue-on-error keeps
+      # CI green until the App is wired.
       - name: Mint Scorecard repo-read token
         id: sc-token
         if: ${{ env.HAS_SCORECARD_APP == 'true' }}
@@ -113,8 +117,6 @@ jobs:
         with:
           client-id: ${{ vars.SCORECARD_APP_CLIENT_ID }}
           private-key: ${{ secrets.scorecard_app_private_key }}
-          owner: ${{ github.repository_owner }}
-          repositories: ${{ github.event.repository.name }}
 
       - name: Checkout
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
