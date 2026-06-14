@@ -785,8 +785,12 @@ jobs:
             ${{ steps.env-args.outputs.build_args }}
           secrets: |
             github_token=${{ steps.priv-token.outputs.token || secrets.GITHUB_TOKEN }}
-          cache-from: type=registry,ref=${{ env.REGISTRY_GHCR }}/${{ env.GHCR_NAMESPACE }}/${{ env.IMAGE_NAME }}:buildcache
-          cache-to: type=registry,ref=${{ env.REGISTRY_GHCR }}/${{ env.GHCR_NAMESPACE }}/${{ env.IMAGE_NAME }}:buildcache,mode=max
+          # Push the BuildKit cache manifest to a SEPARATE package
+          # (<image>-buildcache), not a :buildcache tag on the image package —
+          # otherwise GitHub shows that non-runnable cache tag as the package's
+          # "Latest" because it's pushed last, hiding the real image tags.
+          cache-from: type=registry,ref=${{ env.REGISTRY_GHCR }}/${{ env.GHCR_NAMESPACE }}/${{ env.IMAGE_NAME }}-buildcache:cache
+          cache-to: type=registry,ref=${{ env.REGISTRY_GHCR }}/${{ env.GHCR_NAMESPACE }}/${{ env.IMAGE_NAME }}-buildcache:cache,mode=max
           sbom: ${{ inputs.sbom }}
           provenance: ${{ inputs.provenance && 'mode=max' || 'false' }}
 
