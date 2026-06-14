@@ -64,12 +64,34 @@ jobs:
               return;
             }
 
+            // Per-artifact "what is this / how to use it" note, keyed off the
+            // artifact name convention. GitHub wraps every artifact in a .zip on
+            // download, so the inner file is named without that wrapper.
+            const describe = (name) => {
+              if (name.startsWith('image-linux-')) {
+                const arch = name.slice('image-linux-'.length);
+                return `**Container image** (linux/${arch}) — load and run it locally, no registry needed: ` +
+                  `\`unzip ${name}.zip && docker load -i ${name}.tar.gz\`, then \`docker run\` the loaded tag.`;
+              }
+              if (name.startsWith('binary-')) {
+                const t = name.slice('binary-'.length);
+                return `**Standalone binary** (${t}) — \`unzip ${name}.zip\`, extract the inner \`.tar.gz\`, ` +
+                  `then run the executable directly (no container).`;
+              }
+              if (name.endsWith('.dockerbuild')) {
+                return `**Build record** (debug) — import into Docker Desktop -> Builds ` +
+                  `(or \`docker buildx history import\`) to inspect this build's steps and timings.`;
+              }
+              return `Build artifact — download and \`unzip\`.`;
+            };
+
             // Build comment body
             const marker = '<!-- bot: artifacts -->';
             const runUrl = `${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}`;
             let body = `${marker}\n## Build Artifacts\n\n`;
             for (const art of artifacts) {
-              body += `* [\`${art.name}.zip\`](https://nightly.link/${owner}/${repo}/actions/artifacts/${art.id}.zip)\n`;
+              const url = `https://nightly.link/${owner}/${repo}/actions/artifacts/${art.id}.zip`;
+              body += `* [\`${art.name}.zip\`](${url})\n  ${describe(art.name)}\n`;
             }
             body += `\n*From [workflow run #${context.runNumber}](${runUrl})*`;
 
