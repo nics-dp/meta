@@ -86,14 +86,18 @@ jobs:
             };
 
             // Build comment body
+            const fmt = (iso) => iso ? `${iso.slice(0, 16).replace('T', ' ')} UTC` : 'unknown';
             const marker = '<!-- bot: artifacts -->';
             const runUrl = `${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}`;
             let body = `${marker}\n## Build Artifacts\n\n`;
             for (const art of artifacts) {
               const url = `https://nightly.link/${owner}/${repo}/actions/artifacts/${art.id}.zip`;
-              body += `* [\`${art.name}.zip\`](${url})\n  ${describe(art.name)}\n`;
+              // Retention differs per artifact type, so show each one's expiry.
+              body += `* [\`${art.name}.zip\`](${url})\n  ${describe(art.name)}\n  _expires ${fmt(art.expires_at)}_\n`;
             }
-            body += `\n*From [workflow run #${context.runNumber}](${runUrl})*`;
+            // All artifacts in a run are uploaded together, so one built time covers the batch.
+            const built = fmt(artifacts[0] && artifacts[0].created_at);
+            body += `\n*From [workflow run #${context.runNumber}](${runUrl}) - built ${built}*`;
 
             // Upsert comment
             const comments = await github.paginate(
