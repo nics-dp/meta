@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+#MISE description="Shadow type-check via tsgo (TS7 native); .ts only — vue-tsc stays authoritative"
+#MISE hide=true
+#MISE raw=true
+#MISE tools={bun="latest"}
+#MISE depends=["node:install"]
+
+# tsgo (@typescript/native-preview, TypeScript 7 native, Go single binary), run
+# through bun (--bun) so no Node runtime is needed — a bare `bunx -p` would walk
+# the node shebang. Parallel/shadow type-check that runs ALONGSIDE node:typecheck
+# (vue-tsc): tsgo re-checks every .ts fast, resolving *.vue imports via a
+# repo-local `*.vue` shim (e.g. src/env.d.ts). It does NOT type-check .vue SFC
+# internals — vue-tsc stays authoritative for those.
+# Build mode mirrors node:typecheck: vue-tsc present -> `-b` (solution/project
+# references) so the shadow check honours the same tsconfig layout.
+# No pinned version: bunx resolves @typescript/native-preview from the consumer's
+# node_modules, so the version is controlled by each repo's package.json devDeps
+# (renovate-bumped, knip-ignored) — avoids @latest drift across repos.
+
+if [ -f package.json ] && grep -q '"vue-tsc"' package.json; then
+  bunx --bun -p @typescript/native-preview tsgo -b --noEmit
+else
+  bunx --bun -p @typescript/native-preview tsgo --noEmit
+fi
