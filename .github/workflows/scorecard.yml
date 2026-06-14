@@ -4,22 +4,30 @@ name: Scorecard
 
 # Runs OpenSSF Scorecard against the caller's repository and uploads the
 # findings to GitHub code scanning (Security > Code scanning) under the
-# `scorecard` category. NON-BLOCKING on the default publish: false path: a SARIF
-# upload failure never fails the caller's CI, and a scorecard run error is
-# swallowed too (mirrors security-sarif.yml). On the publish: true path (public
-# meta) a scorecard run error is intentionally NOT swallowed, so a real publish
-# failure surfaces. Callers add a job that `uses:` this workflow.
+# `scorecard` category. Callers add a job that `uses:` this workflow.
 #
-# PRIVATE repos: scorecard's GraphQL queries (e.g. ListCommits) need repo read
-# that the default GITHUB_TOKEN lacks, so it exits with "Resource not accessible
-# by integration". The non-blocking guard below keeps that from failing the
-# caller's CI -- but ONLY on the default publish: false path; a private repo
-# that sets publish: true would still fail (and also cannot publish). NOTE:
-# this reusable cannot mint a repo_token here -- scorecard's
-# publish path (used by public meta, publish: true) only permits an allowlisted
-# set of steps and forbids job-level env, so an App-token step is not possible
-# in the shared workflow. Real scores on private repos would need a separate,
-# publish:false-only variant.
+# Two mutually-exclusive jobs gated on `publish`, because Scorecard's publish
+# path and the private-repo token path have incompatible requirements:
+#
+#   publish == true  (public repos, e.g. meta): posts to the public OpenSSF API
+#     for the badge. The API enforces a strict workflow allowlist -- no job-level
+#     env, steps limited to {checkout, upload-artifact, codeql upload-sarif,
+#     scorecard-action, harden-runner}. So the `publish` job stays canonical:
+#     no token-mint step, no env, default GITHUB_TOKEN (sufficient on public
+#     repos), and a real failure is allowed to surface (no continue-on-error).
+#
+#   publish == false (the org's private repos): no publish, no allowlist. The
+#     `private` job mints a dedicated nics-dp-scorecard App token and passes it
+#     as repo_token so Scorecard's queries work on a private repo and the
+#     Branch-Protection check (which needs Administration: Read) actually scores.
+#     Without the App it falls back to GITHUB_TOKEN (queries fail on a private
+#     repo) and continue-on-error keeps the caller's CI green. NON-BLOCKING:
+#     a scorecard/upload failure never fails the caller's CI (mirrors
+#     security-sarif.yml).
+#
+# These cannot share one job: a token-mint step or job env in the publish job
+# trips the OpenSSF API's workflow verification ("scorecard job contains env
+# vars" / step not on allowlist), which is what broke meta's self-supply-chain.
 on:
   workflow_call:
     inputs:
@@ -28,14 +36,20 @@ on:
         type: boolean
         default: false
         description: "Publish results to the public OpenSSF Scorecard API. Only works for PUBLIC repos; defaults false so it stays safe for the org's mostly-private repos."
+    secrets:
+      scorecard_app_private_key:
+        required: false
+        description: "Private key of the nics-dp-scorecard GitHub App (paired with the SCORECARD_APP_CLIENT_ID org variable). Minted into a short-lived repo_token so Scorecard's API queries (incl. Branch-Protection, which needs Administration: Read) score on PRIVATE repos. Ignored on the publish path; omit for public repos."
 
 permissions:
   contents: read
 
 jobs:
-  scorecard:
-    # Pinned to ubuntu-latest: scorecard-action is a Linux/Docker-based action
-    # and no caller passes a custom runner.
+  # PUBLIC repos (publish: true, e.g. meta). Canonical Scorecard publish job:
+  # allowlisted steps only, no env, no token step -- required by the OpenSSF API.
+  publish:
+    if: ${{ inputs.publish }}
+    # Pinned to ubuntu-latest: scorecard-action is a Linux/Docker-based action.
     runs-on: ubuntu-latest
     permissions:
       # required by github/codeql-action/upload-sarif to write code-scanning results
@@ -55,26 +69,77 @@ jobs:
           persist-credentials: false
 
       - name: Run OpenSSF Scorecard
-        # non-blocking on the non-publish path: on a private repo scorecard's
-        # GraphQL queries fail (GITHUB_TOKEN -> "Resource not accessible by
-        # integration") and the action exits non-zero. That must not fail the
-        # caller's CI (mirrors the upload step below and security-sarif.yml).
-        # Gated to publish==false so the publish path (public meta) keeps its
-        # canonical behaviour, where scorecard succeeds and a real failure must
-        # surface.
-        continue-on-error: ${{ !inputs.publish }}
+        # No continue-on-error: on the publish path scorecard succeeds (public
+        # repo) and a real failure must surface.
         uses: ossf/scorecard-action@4eaacf0543bb3f2c246792bd56e8cdeffafb205a # v2.4.3
         with:
           results_format: sarif
           results_file: results.sarif
-          # Publishing to the public Scorecard API only works for public repos;
-          # default false keeps it safe for the org's mostly-private repos.
-          publish_results: ${{ inputs.publish }}
+          publish_results: true
 
       - name: Upload Scorecard SARIF
         if: always() && hashFiles('results.sarif') != ''
-        # non-blocking: a failed upload (API / permissions / SARIF format) must
-        # not fail the job and break the caller's CI (mirrors security-sarif.yml).
+        # non-blocking: a failed upload must not fail the job (mirrors security-sarif.yml).
+        continue-on-error: true
+        uses: github/codeql-action/upload-sarif@8aad20d150bbac5944a9f9d289da16a4b0d87c1e # v4.36.2
+        with:
+          sarif_file: results.sarif
+          category: scorecard
+
+  # PRIVATE repos (publish: false). Mints the nics-dp-scorecard App token for
+  # full scores; non-blocking throughout. Not subject to the publish allowlist.
+  private:
+    if: ${{ !inputs.publish }}
+    runs-on: ubuntu-latest
+    permissions:
+      # checkout uses GITHUB_TOKEN; SARIF upload writes code-scanning results.
+      contents: read
+      security-events: write
+      actions: read
+    env:
+      # secrets cannot be used in step-level if:, so bridge to env here. The App
+      # is identified by the SCORECARD_APP_CLIENT_ID org variable (client-id)
+      # plus the scorecard_app_private_key secret (mirrors mise-task.yml).
+      HAS_SCORECARD_APP: ${{ vars.SCORECARD_APP_CLIENT_ID != '' && secrets.scorecard_app_private_key != '' }}
+    steps:
+      # Mint a nics-dp-scorecard App token to use as repo_token. Scoped to the
+      # caller repo. Skipped when the App is not configured -- scorecard then
+      # falls back to GITHUB_TOKEN (queries fail on a private repo) and
+      # continue-on-error keeps CI green until the App is wired.
+      - name: Mint Scorecard repo-read token
+        id: sc-token
+        if: ${{ env.HAS_SCORECARD_APP == 'true' }}
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          client-id: ${{ vars.SCORECARD_APP_CLIENT_ID }}
+          private-key: ${{ secrets.scorecard_app_private_key }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
+
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Run OpenSSF Scorecard
+        # non-blocking: a scorecard run error (e.g. no App token on a private
+        # repo) must not fail the caller's CI (mirrors security-sarif.yml).
+        continue-on-error: true
+        uses: ossf/scorecard-action@4eaacf0543bb3f2c246792bd56e8cdeffafb205a # v2.4.3
+        with:
+          results_format: sarif
+          results_file: results.sarif
+          # repo_token drives all of scorecard's GitHub API queries. The App
+          # token carries the reads scorecard needs on a private repo (incl.
+          # Administration: Read for Branch-Protection); falls back to the
+          # default token when the App is not configured.
+          repo_token: ${{ steps.sc-token.outputs.token || github.token }}
+          publish_results: false
+
+      - name: Upload Scorecard SARIF
+        if: always() && hashFiles('results.sarif') != ''
+        # non-blocking: a failed upload must not fail the job (mirrors security-sarif.yml).
         continue-on-error: true
         uses: github/codeql-action/upload-sarif@8aad20d150bbac5944a9f9d289da16a4b0d87c1e # v4.36.2
         with:
