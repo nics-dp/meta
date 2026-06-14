@@ -55,7 +55,7 @@ jobs:
               const name = typeof art?.name === 'string' ? art.name.trim() : '';
               // Hide internal "prebuilt-*" binaries (image-release prebuilt-mode
               // plumbing, 1-day retention) from the user-facing artifacts comment;
-              // they duplicate the build-* release archives.
+              // they duplicate the binary-* release archives.
               return art?.id && name && name !== 'undefined' && !name.startsWith('prebuilt-');
             });
 
@@ -75,8 +75,8 @@ jobs:
               }
               if (name.startsWith('binary-')) {
                 const t = name.slice('binary-'.length);
-                return `**Standalone binary** (${t}) — \`unzip ${name}.zip\`, extract the inner \`.tar.gz\`, ` +
-                  `then run the executable directly (no container).`;
+                return `**Standalone binary** (${t}) — \`unzip ${name}.zip\`, extract the inner archive ` +
+                  `(\`.tar.gz\`, or \`.zip\` on Windows), then run the executable directly (no container).`;
               }
               if (name.endsWith('.dockerbuild')) {
                 return `**Build record** (debug) — import into Docker Desktop -> Builds ` +

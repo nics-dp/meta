@@ -96,8 +96,8 @@ on:
         default: false
         description: >
           Prebuilt mode: instead of compiling in-image, download the raw linux
-          binaries the go-release job uploaded (artifacts bin-linux-amd64 /
-          bin-linux-arm64) and feed them to the build as a `binctx` build context
+          binaries the go-release job uploaded (artifacts prebuilt-linux-amd64 /
+          prebuilt-linux-arm64) and feed them to the build as a `binctx` build context
           with BIN_STAGE=prebuilt. The caller's image-build job MUST set
           needs:[go-release] so the artifacts exist, and the Dockerfile MUST have
           the dual-mode prebuilt stage (COPY --from=binctx ${TARGETARCH}/<bin>).
@@ -693,14 +693,20 @@ jobs:
         env:
           BINROOT: ${{ runner.temp }}/binroot
           BINCTX: ${{ runner.temp }}/binctx
+          PLATFORMS: ${{ steps.platforms.outputs.list }}
         run: |
           # go-release uploads raw linux binaries as prebuilt-linux-<arch>
           # artifacts; download-artifact placed each under
           # <binroot>/prebuilt-linux-<arch>/. Re-key them by Docker TARGETARCH
-          # (amd64/arm64) so the Dockerfile's prebuilt stage
-          # (COPY --from=binctx ${TARGETARCH}/<bin>) resolves.
+          # so the Dockerfile's prebuilt stage (COPY --from=binctx
+          # ${TARGETARCH}/<bin>) resolves. Only require the linux arches actually
+          # being built (the resolved platform list), so a single-arch caller
+          # doesn't fail for a missing other-arch artifact.
           set -euo pipefail
-          for arch in amd64 arm64; do
+          IFS=',' read -ra PLATS <<< "$PLATFORMS"
+          for p in "${PLATS[@]}"; do
+            [[ "$p" == linux/* ]] || continue
+            arch="${p#linux/}"; arch="${arch%%/*}"   # drop any /variant -> TARGETARCH
             src="${BINROOT}/prebuilt-linux-${arch}"
             dest="${BINCTX}/${arch}"
             mkdir -p "$dest"
@@ -725,9 +731,13 @@ jobs:
           # of a bare commit SHA per push). On pull_request the source branch is
           # github.head_ref; on workflow_dispatch fall back to github.ref_name.
           raw="${HEAD_REF:-$REF_NAME}"
-          # Docker tags allow [A-Za-z0-9_.-] only: map every other char to '-'
-          # (so "feature/x" -> "feature-x") and cap at 128 chars.
-          san="$(printf '%s' "$raw" | tr -c 'A-Za-z0-9_.-' '-' | cut -c1-128)"
+          # Docker tags allow [A-Za-z0-9_.-] and the FIRST char must be
+          # [A-Za-z0-9_]. Map other chars to '-' (so "feature/x" -> "feature-x"),
+          # strip any leading '.'/'-', cap at 128, and fall back to "snapshot" if
+          # nothing valid remains.
+          san="$(printf '%s' "$raw" | tr -c 'A-Za-z0-9_.-' '-' | sed 's/^[.-]*//')"
+          san="${san:0:128}"
+          [ -z "$san" ] && san="snapshot"
           echo "tag=${san}" >> "$GITHUB_OUTPUT"
 
       - name: Extract metadata (tags, labels)
@@ -812,7 +822,7 @@ jobs:
           IFS=',' read -ra PLATS <<< "$PLATFORMS"
           for p in "${PLATS[@]}"; do
             [[ "$p" == linux/* ]] || continue
-            arch="${p#linux/}"
+            arch="${p#linux/}"; arch="${arch//\//-}"   # variant-safe filename (arm/v7 -> arm-v7)
             # Pull the arch-specific image from the manifest list by digest, then
             # re-tag to the branch tag so `docker load` restores a usable name.
             docker pull --quiet --platform "$p" "$REF"
