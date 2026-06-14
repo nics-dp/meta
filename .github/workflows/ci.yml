@@ -28,3 +28,31 @@ jobs:
     with:
       name: ${{ matrix.name }}
       task: ${{ matrix.task }}
+
+  # --- Secret scanning ---
+  # betterleaks PR gate. On a pull_request the task scopes the scan to the
+  # commits the PR introduces (base..HEAD via GITHUB_BASE_REF); on push there is
+  # no base ref, so it scans the full history instead. A finding exits non-zero
+  # -> mise-task.yml's Enforce step fails the check. fetch-depth: 0 is required
+  # for the full commit graph and to resolve the PR base ref.
+  secret-scan:
+    name: Secret Scan
+    uses: ./.github/workflows/mise-task.yml
+    with:
+      name: Secret Scan
+      task: "ci:betterleaks"
+      fetch-depth: 0
+
+  # trufflehog deep scan: only on release-promotion PRs (base = main or
+  # release/**). Full-history sweep reporting only verified (live) credentials;
+  # --fail gates the PR. Day-to-day dev PRs skip this and rely on betterleaks.
+  deep-secret-scan:
+    name: Deep Secret Scan
+    if: >-
+      github.event_name == 'pull_request' &&
+      (github.base_ref == 'main' || startsWith(github.base_ref, 'release/'))
+    uses: ./.github/workflows/mise-task.yml
+    with:
+      name: Deep Secret Scan
+      task: "ci:trufflehog"
+      fetch-depth: 0
