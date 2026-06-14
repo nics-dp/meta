@@ -4,9 +4,22 @@ name: Scorecard
 
 # Runs OpenSSF Scorecard against the caller's repository and uploads the
 # findings to GitHub code scanning (Security > Code scanning) under the
-# `scorecard` category. NON-BLOCKING upload by design: a SARIF upload failure
-# never fails the caller's CI (mirrors security-sarif.yml). Callers add a job
-# that `uses:` this workflow.
+# `scorecard` category. NON-BLOCKING on the default publish: false path: a SARIF
+# upload failure never fails the caller's CI, and a scorecard run error is
+# swallowed too (mirrors security-sarif.yml). On the publish: true path (public
+# meta) a scorecard run error is intentionally NOT swallowed, so a real publish
+# failure surfaces. Callers add a job that `uses:` this workflow.
+#
+# PRIVATE repos: scorecard's GraphQL queries (e.g. ListCommits) need repo read
+# that the default GITHUB_TOKEN lacks, so it exits with "Resource not accessible
+# by integration". The non-blocking guard below keeps that from failing the
+# caller's CI -- but ONLY on the default publish: false path; a private repo
+# that sets publish: true would still fail (and also cannot publish). NOTE:
+# this reusable cannot mint a repo_token here -- scorecard's
+# publish path (used by public meta, publish: true) only permits an allowlisted
+# set of steps and forbids job-level env, so an App-token step is not possible
+# in the shared workflow. Real scores on private repos would need a separate,
+# publish:false-only variant.
 on:
   workflow_call:
     inputs:
@@ -42,6 +55,14 @@ jobs:
           persist-credentials: false
 
       - name: Run OpenSSF Scorecard
+        # non-blocking on the non-publish path: on a private repo scorecard's
+        # GraphQL queries fail (GITHUB_TOKEN -> "Resource not accessible by
+        # integration") and the action exits non-zero. That must not fail the
+        # caller's CI (mirrors the upload step below and security-sarif.yml).
+        # Gated to publish==false so the publish path (public meta) keeps its
+        # canonical behaviour, where scorecard succeeds and a real failure must
+        # surface.
+        continue-on-error: ${{ !inputs.publish }}
         uses: ossf/scorecard-action@4eaacf0543bb3f2c246792bd56e8cdeffafb205a # v2.4.3
         with:
           results_format: sarif
