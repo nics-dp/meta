@@ -790,6 +790,50 @@ jobs:
           sbom: ${{ inputs.sbom }}
           provenance: ${{ inputs.provenance && 'mode=max' || 'false' }}
 
+      - name: Export downloadable image tarballs (snapshot)
+        # Snapshot only: publish per-arch `docker load`-able image tarballs as PR
+        # artifacts (shown in the artifacts comment) so a reviewer can pull a
+        # branch's image and run it locally without registry access. Re-pulls the
+        # just-pushed image per arch by digest and `docker save`s it — no rebuild.
+        # Release images are consumed from the registry, so skip there.
+        if: inputs.snapshot
+        shell: bash
+        env:
+          REF: ${{ env.REGISTRY_GHCR }}/${{ env.GHCR_NAMESPACE }}/${{ env.IMAGE_NAME }}@${{ steps.build-and-push.outputs.digest }}
+          NAMED: ${{ env.REGISTRY_GHCR }}/${{ env.GHCR_NAMESPACE }}/${{ env.IMAGE_NAME }}:${{ steps.snaptag.outputs.tag }}
+          PLATFORMS: ${{ steps.platforms.outputs.list }}
+          OUT: ${{ runner.temp }}/images
+        run: |
+          set -euo pipefail
+          mkdir -p "$OUT"
+          IFS=',' read -ra PLATS <<< "$PLATFORMS"
+          for p in "${PLATS[@]}"; do
+            [[ "$p" == linux/* ]] || continue
+            arch="${p#linux/}"
+            # Pull the arch-specific image from the manifest list by digest, then
+            # re-tag to the branch tag so `docker load` restores a usable name.
+            docker pull --quiet --platform "$p" "$REF"
+            docker tag "$REF" "$NAMED"
+            docker save "$NAMED" | gzip > "${OUT}/image-linux-${arch}.tar.gz"
+            docker rmi "$NAMED" >/dev/null 2>&1 || true
+          done
+
+      - name: Upload image tarball (amd64)
+        if: inputs.snapshot && contains(steps.platforms.outputs.list, 'linux/amd64')
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: image-linux-amd64
+          path: ${{ runner.temp }}/images/image-linux-amd64.tar.gz
+          retention-days: 7
+
+      - name: Upload image tarball (arm64)
+        if: inputs.snapshot && contains(steps.platforms.outputs.list, 'linux/arm64')
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: image-linux-arm64
+          path: ${{ runner.temp }}/images/image-linux-arm64.tar.gz
+          retention-days: 7
+
       - name: Generate artifact attestation (DockerHub)
         if: inputs.attest
         uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32 # v4
