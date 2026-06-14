@@ -206,7 +206,12 @@ jobs:
           case "$(printf '%s' "$SUBMODULES" | tr '[:upper:]' '[:lower:]')" in
             false | true | recursive) ;;
             *)
-              echo "::error::invalid submodules input '${SUBMODULES}'; expected one of: false, true, recursive"
+              # Sanitize before emitting: strip CR/LF (which would truncate or
+              # inject the ::error:: annotation) and percent-encode % per the
+              # runner's workflow-command encoding, so the annotation stays
+              # well-formed for any value.
+              safe=$(printf '%s' "$SUBMODULES" | tr -d '\r\n' | sed 's/%/%25/g')
+              echo "::error::invalid submodules input '${safe}'; expected one of: false, true, recursive"
               exit 1
               ;;
           esac
