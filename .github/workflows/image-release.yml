@@ -711,6 +711,13 @@ jobs:
             srcname="prebuilt-linux-${full//\//-}"   # artifact: prebuilt-linux-arm64 / prebuilt-linux-arm-v7
             src="${BINROOT}/${srcname}"
             dest="${BINCTX}/${arch}"                 # keyed by TARGETARCH for the Dockerfile's COPY
+            # binctx is keyed by TARGETARCH, which can't distinguish two variants
+            # of the same arch (e.g. arm/v6 + arm/v7). Fail loudly rather than
+            # silently overwrite one with the other.
+            if [[ -d "$dest" && -n "$(ls -A "$dest" 2>/dev/null)" ]]; then
+              echo "::error::prebuilt: platforms '${PLATFORMS}' map more than one variant onto TARGETARCH '${arch}'; binctx can't disambiguate. Build a single variant per arch."
+              exit 1
+            fi
             mkdir -p "$dest"
             if [[ ! -d "$src" ]] || [[ -z "$(ls -A "$src" 2>/dev/null)" ]]; then
               echo "::error::prebuilt: missing binaries for ${p} (expected go-release artifact ${srcname}; ensure image-build needs:[go-release] and go-release builds ${p})"
@@ -825,6 +832,10 @@ jobs:
           for p in "${PLATS[@]}"; do
             [[ "$p" == linux/* ]] || continue
             arch="${p#linux/}"; arch="${arch//\//-}"   # variant-safe filename (arm/v7 -> arm-v7)
+            # Downloadable image tarballs are published only for amd64/arm64 (the
+            # arches the fleet ships and the only ones with upload steps below).
+            # Skip anything else so we don't save a tarball that never uploads.
+            case "$arch" in amd64|arm64) ;; *) echo "skip image tarball for linux/${arch} (only amd64/arm64 are published)"; continue ;; esac
             # Pull the arch-specific image from the manifest list by digest, then
             # re-tag to the branch tag so `docker load` restores a usable name.
             docker pull --quiet --platform "$p" "$REF"
