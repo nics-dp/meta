@@ -32,7 +32,7 @@ if [ ! -d "node_modules/oxfmt" ] && ! grep -q '"oxfmt"' package.json 2>/dev/null
   echo ""
 fi
 
-bunx oxfmt --write .
+bunx --bun oxfmt --write .
 
 if ! git diff --exit-code -- . >/dev/null; then
   echo ""
