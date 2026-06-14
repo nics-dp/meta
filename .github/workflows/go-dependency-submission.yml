@@ -99,24 +99,25 @@ jobs:
       # Two variants so go-build-target is genuinely OMITTED when go_build_target
       # is empty -- the action then applies its own default ('all', every build
       # target including tests and tools) instead of us hardcoding it here.
-      # continue-on-error: actions/go-dependency-submission (latest v2.0.3) has an
-      # unfixed bug where two modules whose final path element is identical (e.g.
-      # cloud.google.com/go and github.com/cncf/xds/go both -> PURL name "go")
-      # trip an internal "expected no more than one package in cache with
-      # namespace+name" assertion and crash. A repo whose graph happens to
-      # contain such a pair (e.g. libdcf) must not have its supply-chain CI fail;
-      # submission resumes automatically once upstream fixes the collision.
+      #
+      # Pinned to an UNRELEASED main commit on purpose. The latest tag (v2.0.3,
+      # 2025-03) keys its package cache by PURL name only, so two modules whose
+      # final path element is identical (e.g. cloud.google.com/go and
+      # github.com/cncf/xds/go both -> name "go") trip an "expected no more than
+      # one package in cache with namespace+name" assertion and crash -- this hit
+      # libdcf. main fixes it (913bb85 "Fix shared namespace package bug", now
+      # matches on namespace+name). No tag carries the fix yet; revert to the
+      # next release tag once it is cut. This is why there is no continue-on-error
+      # here: the root cause is fixed, so a submission failure should now surface.
       - name: Submit Go dependency graph (all targets)
         if: inputs.go_build_target == ''
-        continue-on-error: true
-        uses: actions/go-dependency-submission@f35d5c9af13ce9cc32f7930b171e315e878f6921 # v2.0.3
+        uses: actions/go-dependency-submission@bc8bc528058f8783a71277e474972be5d8dc4f94 # main@2026-05-26 (unreleased namespace-collision fix 913bb85)
         with:
           go-mod-path: ${{ inputs.go_mod_path }}
 
       - name: Submit Go dependency graph (target)
         if: inputs.go_build_target != ''
-        continue-on-error: true
-        uses: actions/go-dependency-submission@f35d5c9af13ce9cc32f7930b171e315e878f6921 # v2.0.3
+        uses: actions/go-dependency-submission@bc8bc528058f8783a71277e474972be5d8dc4f94 # main@2026-05-26 (unreleased namespace-collision fix 913bb85)
         with:
           go-mod-path: ${{ inputs.go_mod_path }}
           go-build-target: ${{ inputs.go_build_target }}
