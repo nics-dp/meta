@@ -40,6 +40,11 @@ on:
         type: boolean
         default: true
         description: "Run the semgrep SAST scan"
+      runs_on:
+        description: 'Runner as JSON (e.g., ''"ubuntu-latest"'' or ''{"group":"releasers"}''). Defaults to the releasers 8-core group; the scanners (trivy/semgrep/gosec) are CPU-bound and benefit from it. Must stay Linux (Docker-based actions).'
+        required: false
+        type: string
+        default: '{"group":"releasers"}'
     secrets:
       ci_read_app_private_key:
         required: false
@@ -50,10 +55,11 @@ env:
 
 jobs:
   security-sarif:
-    # Pinned to ubuntu-latest: this workflow depends on Linux/Docker-based
+    # runs_on must stay a Linux runner: this workflow depends on Linux/Docker-based
     # actions (hadolint-action, trivy-action) and bash scan steps, so it is not
-    # portable to Windows/macOS runners. No caller passes a custom runner.
-    runs-on: ubuntu-latest
+    # portable to Windows/macOS. Defaults to the releasers 8-core group (the
+    # scanners are CPU-bound); callers may override with '"ubuntu-latest"'.
+    runs-on: ${{ fromJSON(inputs.runs_on) }}
     permissions:
       contents: read
       # required by github/codeql-action/upload-sarif to write code-scanning results

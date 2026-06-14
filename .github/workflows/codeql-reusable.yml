@@ -24,6 +24,11 @@ on:
         required: false
         type: string
         default: "false"
+      runs_on:
+        description: 'Runner as JSON (e.g., ''"ubuntu-latest"'' or ''{"group":"releasers"}''). Defaults to the releasers 8-core group; CodeQL Go analysis is CPU/RAM-bound and benefits from it.'
+        required: false
+        type: string
+        default: '{"group":"releasers"}'
     secrets:
       ci_read_app_private_key:
         required: false
@@ -32,7 +37,7 @@ on:
 jobs:
   analyze:
     name: Analyze (${{ matrix.language }})
-    runs-on: ubuntu-latest
+    runs-on: ${{ fromJSON(inputs.runs_on) }}
     permissions:
       security-events: write
       packages: read
