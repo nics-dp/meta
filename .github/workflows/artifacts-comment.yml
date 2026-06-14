@@ -71,7 +71,7 @@ jobs:
               if (name.startsWith('image-linux-')) {
                 const arch = name.slice('image-linux-'.length);
                 return `**Container image** (linux/${arch}) — load and run it locally, no registry needed: ` +
-                  `\`unzip ${name}.zip && docker load -i ${name}.tar.gz\`, then \`docker run\` the loaded tag.`;
+                  `\`unzip ${name}.zip && docker load -i ${name}.tar\`, then \`docker run\` the loaded tag.`;
               }
               if (name.startsWith('binary-')) {
                 const t = name.slice('binary-'.length);
