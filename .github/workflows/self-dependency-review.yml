@@ -10,8 +10,10 @@ on:
 
 permissions:
   contents: read
-  pull-requests: write
 
 jobs:
   review:
+    permissions:
+      contents: read
+      pull-requests: write
     uses: nics-dp/meta/.github/workflows/dependency-review.yml@main

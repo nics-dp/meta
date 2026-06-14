@@ -14,9 +14,11 @@ on:
         type: string
         default: "linux/amd64,linux/arm64"
         description: >
-          Target platforms for multi-arch build. NOTE: ignored when
-          snapshot=true — snapshot builds are forced to linux/amd64 only to
-          skip emulated arm64 (see the "Resolve build platforms" step).
+          Target platforms for multi-arch build. NOTE: in compiled mode it is
+          ignored when snapshot=true — snapshot builds are forced to linux/amd64
+          only to skip emulated arm64. In prebuilt=true mode it is always
+          honored (the RUN-free runtime needs no QEMU, so multi-arch is free even
+          on snapshot). See the "Resolve build platforms" step.
       runs_on:
         required: false
         type: string
@@ -72,7 +74,7 @@ on:
         required: false
         type: boolean
         default: false
-        description: "Snapshot mode: use SHA-based tags only (no semver, no latest)"
+        description: "Snapshot mode: tag images by source-branch name (no semver, no latest); pin a specific build by digest."
       ref:
         required: false
         type: string
@@ -88,6 +90,25 @@ on:
         type: string
         default: "stable"
         description: "Go version for vendor step (only used when go_vendor is true)"
+      prebuilt:
+        required: false
+        type: boolean
+        default: false
+        description: >
+          Prebuilt mode: instead of compiling in-image, download the raw linux
+          binaries the go-release job uploaded (artifacts prebuilt-linux-amd64 /
+          prebuilt-linux-arm64) and feed them to the build as a `binctx` build context
+          with BIN_STAGE=prebuilt. The caller's image-build job MUST set
+          needs:[go-release] so the artifacts exist, and the Dockerfile MUST have
+          the dual-mode prebuilt stage. binctx is keyed by
+          ${TARGETARCH}${TARGETVARIANT} (amd64, arm64, armv7, ...), so the
+          Dockerfile COPYs `--from=binctx ${TARGETARCH}${TARGETVARIANT}/<bin>`
+          (declare both ARGs in the stage). For amd64/arm64 the variant is empty,
+          so a plain `${TARGETARCH}/<bin>` still resolves; only same-arch variant
+          builds (e.g. arm/v6 + arm/v7) need the variant in the path. Eliminates
+          the in-image compile, so the RUN-free runtime stage builds every arch
+          with no QEMU (snapshot can then stay multi-arch). go_vendor is
+          unnecessary in this mode.
       submodules:
         required: false
         type: string
@@ -606,17 +627,22 @@ jobs:
         shell: bash
         env:
           SNAPSHOT: ${{ inputs.snapshot }}
+          PREBUILT: ${{ inputs.prebuilt }}
           PLATFORMS_IN: ${{ inputs.platforms }}
         run: |
-          # Snapshot builds are ephemeral, SHA-tagged dev images. Under the
-          # current deployment model only linux/amd64 is consumed from them
-          # (prod runs amd64; arm64 images are published only on real releases,
-          # for local dev on Apple Silicon). Building the linux/arm64 variant on
-          # snapshot means emulating arm64 under QEMU on the amd64 runners, which
-          # dominates snapshot build wall-clock. Force amd64-only on snapshot and
-          # ignore inputs.platforms; release builds (snapshot=false) honor
-          # inputs.platforms unchanged.
-          if [[ "$SNAPSHOT" == "true" ]]; then
+          # Prebuilt mode COPYs host-built binaries into a RUN-free runtime, so
+          # every arch assembles with no foreign-arch RUN and thus no QEMU.
+          # Honor the caller's full platform list even on snapshot (multi-arch is
+          # free), and never set up QEMU below.
+          #
+          # Compiled mode (no prebuilt): snapshot builds emulate arm64 under QEMU
+          # on the amd64 runners, which dominates wall-clock, and under the
+          # deployment model only linux/amd64 is consumed from snapshots. So
+          # force amd64-only on snapshot and ignore inputs.platforms; release
+          # builds honor inputs.platforms unchanged.
+          if [[ "$PREBUILT" == "true" ]]; then
+            PLATFORMS="$PLATFORMS_IN"
+          elif [[ "$SNAPSHOT" == "true" ]]; then
             PLATFORMS="linux/amd64"
           else
             PLATFORMS="$PLATFORMS_IN"
@@ -640,7 +666,11 @@ jobs:
           # from the actual runner arch (uname), not just the platform string, so
           # a non-x86_64 runner building linux/amd64 still gets QEMU. Any
           # cross-arch / multi-arch target also keeps it.
-          if [[ "$PLATFORMS" == "linux/amd64" && "$(uname -m)" == "x86_64" ]]; then
+          if [[ "$PREBUILT" == "true" ]]; then
+            # RUN-free runtime: no foreign-arch execution, so no emulation even
+            # for multi-arch.
+            echo "needs_qemu=false" >> "$GITHUB_OUTPUT"
+          elif [[ "$PLATFORMS" == "linux/amd64" && "$(uname -m)" == "x86_64" ]]; then
             echo "needs_qemu=false" >> "$GITHUB_OUTPUT"
           else
             echo "needs_qemu=true" >> "$GITHUB_OUTPUT"
@@ -655,6 +685,74 @@ jobs:
       - name: Set up Buildx
         uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # v4.1.0
 
+      - name: Download prebuilt binaries
+        if: inputs.prebuilt
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: prebuilt-linux-*
+          path: ${{ runner.temp }}/binroot
+
+      - name: Assemble binctx build context
+        if: inputs.prebuilt
+        shell: bash
+        env:
+          BINROOT: ${{ runner.temp }}/binroot
+          BINCTX: ${{ runner.temp }}/binctx
+          PLATFORMS: ${{ steps.platforms.outputs.list }}
+        run: |
+          # go-release uploads raw linux binaries as prebuilt-linux-<arch>
+          # artifacts; download-artifact placed each under
+          # <binroot>/prebuilt-linux-<arch>/. Re-key them by Docker TARGETARCH
+          # so the Dockerfile's prebuilt stage (COPY --from=binctx
+          # ${TARGETARCH}/<bin>) resolves. Only require the linux arches actually
+          # being built (the resolved platform list), so a single-arch caller
+          # doesn't fail for a missing other-arch artifact.
+          set -euo pipefail
+          IFS=',' read -ra PLATS <<< "$PLATFORMS"
+          for p in "${PLATS[@]}"; do
+            [[ "$p" == linux/* ]] || continue
+            full="${p#linux/}"                       # e.g. amd64 | arm64 | arm/v7
+            # Key the build-context dir by Docker's ${TARGETARCH}${TARGETVARIANT}
+            # (arm/v7 -> armv7, arm64 -> arm64, amd64 -> amd64) so two variants of
+            # the same arch don't collide and the Dockerfile can resolve any of
+            # them. (For amd64/arm64 this equals ${TARGETARCH}, so a Dockerfile
+            # that COPYs ${TARGETARCH}/<bin> still works; variant builds need it to
+            # COPY ${TARGETARCH}${TARGETVARIANT}/<bin>.)
+            key="${full//\//}"                       # armv7 | arm64 | amd64
+            srcname="prebuilt-linux-${full//\//-}"   # artifact: prebuilt-linux-arm-v7 | -arm64 | -amd64
+            src="${BINROOT}/${srcname}"
+            dest="${BINCTX}/${key}"
+            mkdir -p "$dest"
+            if [[ ! -d "$src" ]] || [[ -z "$(ls -A "$src" 2>/dev/null)" ]]; then
+              echo "::error::prebuilt: missing binaries for ${p} (expected go-release artifact ${srcname}; ensure image-build needs:[go-release] and go-release builds ${p})"
+              exit 1
+            fi
+            cp -a "${src}/." "${dest}/"
+            chmod +x "${dest}"/*
+          done
+
+      - name: Compute snapshot branch tag
+        id: snaptag
+        if: inputs.snapshot
+        shell: bash
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          # Snapshot images are dev builds; tag them by the source branch so
+          # they're human-readable and a branch's tag updates in place (instead
+          # of a bare commit SHA per push). On pull_request the source branch is
+          # github.head_ref; on workflow_dispatch fall back to github.ref_name.
+          raw="${HEAD_REF:-$REF_NAME}"
+          # Docker tags allow [A-Za-z0-9_.-] and the FIRST char must be
+          # [A-Za-z0-9_]. Map other chars to '-' (so "feature/x" -> "feature-x"),
+          # strip any leading '.'/'-', cap at 128, and fall back to "snapshot" if
+          # nothing valid remains.
+          san="$(printf '%s' "$raw" | tr -c 'A-Za-z0-9_.-' '-' | sed 's/^[.-]*//')"
+          san="${san:0:128}"
+          [ -z "$san" ] && san="snapshot"
+          echo "tag=${san}" >> "$GITHUB_OUTPUT"
+
       - name: Extract metadata (tags, labels)
         id: meta
         uses: docker/metadata-action@80c7e94dd9b9319bd5eb7a0e0fe9291e23a2a2e9 # v6.1.0
@@ -663,8 +761,7 @@ jobs:
             ${{ env.REGISTRY_DH }}/${{ env.DH_NAMESPACE }}/${{ env.IMAGE_NAME }}
             ${{ env.REGISTRY_GHCR }}/${{ env.GHCR_NAMESPACE }}/${{ env.IMAGE_NAME }}
           tags: |
-            type=sha,prefix=,format=short,enable=${{ inputs.snapshot }}
-            type=sha,prefix=,format=long,enable=${{ inputs.snapshot }}
+            type=raw,value=${{ steps.snaptag.outputs.tag }},enable=${{ inputs.snapshot }}
             type=semver,pattern=v{{version}},enable=${{ !inputs.snapshot }}
             type=semver,pattern=v{{major}}.{{minor}},enable=${{ !inputs.snapshot }}
             type=semver,pattern=v{{major}},enable=${{ !inputs.snapshot }}
@@ -694,6 +791,10 @@ jobs:
           # ship the hardened runtime stage instead of the trailing debug stage.
           target: ${{ inputs.target }}
           platforms: ${{ steps.platforms.outputs.list }}
+          # In prebuilt mode, expose the host-built binaries (laid out by arch
+          # under <runner.temp>/binctx) as the `binctx` named build context that
+          # the Dockerfile's prebuilt stage COPYs from. Empty otherwise.
+          build-contexts: ${{ inputs.prebuilt && format('binctx={0}/binctx', runner.temp) || '' }}
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
@@ -701,14 +802,62 @@ jobs:
             VERSION=${{ steps.version.outputs.version }}
             COMMIT=${{ steps.version.outputs.commit }}
             BUILD_DATE=${{ steps.version.outputs.build_date }}
+            ${{ inputs.prebuilt && 'BIN_STAGE=prebuilt' || '' }}
             ${{ inputs.build_args }}
             ${{ steps.env-args.outputs.build_args }}
           secrets: |
             github_token=${{ steps.priv-token.outputs.token || secrets.GITHUB_TOKEN }}
-          cache-from: type=registry,ref=${{ env.REGISTRY_GHCR }}/${{ env.GHCR_NAMESPACE }}/${{ env.IMAGE_NAME }}:buildcache
-          cache-to: type=registry,ref=${{ env.REGISTRY_GHCR }}/${{ env.GHCR_NAMESPACE }}/${{ env.IMAGE_NAME }}:buildcache,mode=max
+          # Push the BuildKit cache manifest to a SEPARATE package
+          # (<image>-buildcache), not a :buildcache tag on the image package —
+          # otherwise GitHub shows that non-runnable cache tag as the package's
+          # "Latest" because it's pushed last, hiding the real image tags.
+          cache-from: type=registry,ref=${{ env.REGISTRY_GHCR }}/${{ env.GHCR_NAMESPACE }}/${{ env.IMAGE_NAME }}-buildcache:cache
+          cache-to: type=registry,ref=${{ env.REGISTRY_GHCR }}/${{ env.GHCR_NAMESPACE }}/${{ env.IMAGE_NAME }}-buildcache:cache,mode=max
           sbom: ${{ inputs.sbom }}
           provenance: ${{ inputs.provenance && 'mode=max' || 'false' }}
+
+      - name: Export downloadable image tarballs (snapshot)
+        # Snapshot only: publish per-arch `docker load`-able image tarballs as PR
+        # artifacts (shown in the artifacts comment) so a reviewer can pull a
+        # branch's image and run it locally without registry access. Re-pulls the
+        # just-pushed image per arch by digest and `docker save`s it — no rebuild.
+        # Release images are consumed from the registry, so skip there.
+        if: inputs.snapshot
+        shell: bash
+        env:
+          REF: ${{ env.REGISTRY_GHCR }}/${{ env.GHCR_NAMESPACE }}/${{ env.IMAGE_NAME }}@${{ steps.build-and-push.outputs.digest }}
+          NAMED: ${{ env.REGISTRY_GHCR }}/${{ env.GHCR_NAMESPACE }}/${{ env.IMAGE_NAME }}:${{ steps.snaptag.outputs.tag }}
+          PLATFORMS: ${{ steps.platforms.outputs.list }}
+          OUT: ${{ runner.temp }}/images
+        run: |
+          set -euo pipefail
+          mkdir -p "$OUT"
+          IFS=',' read -ra PLATS <<< "$PLATFORMS"
+          for p in "${PLATS[@]}"; do
+            [[ "$p" == linux/* ]] || continue
+            arch="${p#linux/}"; arch="${arch//\//-}"   # filename-safe (arm/v7 -> arm-v7)
+            # Pull the arch-specific image from the manifest list by digest, then
+            # re-tag to the branch tag so `docker load` restores a usable name.
+            docker pull --quiet --platform "$p" "$REF"
+            docker tag "$REF" "$NAMED"
+            # Save a plain tar (no gzip): upload-artifact always wraps the file in
+            # a .zip, so gzipping first would be redundant double-compression.
+            docker save "$NAMED" > "${OUT}/image-linux-${arch}.tar"
+            docker rmi "$NAMED" >/dev/null 2>&1 || true
+          done
+
+      - name: Upload image tarballs
+        # One artifact holding every built arch's docker-loadable tar
+        # (image-linux-<arch>.tar inside). A single dir upload works for any
+        # platform set — amd64/arm64, other arches, or arm variants — without a
+        # per-arch step. GitHub wraps it in a .zip on download.
+        if: inputs.snapshot
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: images
+          path: ${{ runner.temp }}/images/
+          retention-days: 7
+          if-no-files-found: ignore
 
       - name: Generate artifact attestation (DockerHub)
         if: inputs.attest
