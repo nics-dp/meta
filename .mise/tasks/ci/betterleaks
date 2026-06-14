@@ -10,10 +10,12 @@ set -euo pipefail
 # mise-task.yml "Enforce" step fail CI. --redact keeps secret values out of the
 # CI logs; --no-banner trims noise from the job summary.
 #
-# On a pull_request we scan ONLY the commits the PR introduces (base..HEAD) so a
-# pre-existing historical leak does not block every unrelated PR. On push /
-# workflow_dispatch we scan the full history. Both require the caller to checkout
-# with fetch-depth: 0 (so the base ref and full graph are present).
+# On a pull_request we preferentially scan only the commits the PR introduces
+# (base..HEAD) so a pre-existing historical leak does not block every unrelated
+# PR; if the base ref can't be fetched we fall back to a full-history scan (see
+# the fetch guard below). On push / workflow_dispatch we scan the full history.
+# Both require the caller to checkout with fetch-depth: 0 (so the base ref and
+# full graph are present).
 common=(git . --redact --no-banner)
 
 if [ "${GITHUB_EVENT_NAME:-}" = "pull_request" ] && [ -n "${GITHUB_BASE_REF:-}" ]; then
