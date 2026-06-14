@@ -14,8 +14,9 @@ set -euo pipefail
 # (base..HEAD) so a pre-existing historical leak does not block every unrelated
 # PR; if the base ref can't be fetched we fall back to a full-history scan (see
 # the fetch guard below). On push / workflow_dispatch we scan the full history.
-# Both require the caller to checkout with fetch-depth: 0 (so the base ref and
-# full graph are present).
+# Both require the caller to checkout with fetch-depth: 0 for the full commit
+# history; the PR base ref itself is pulled in by the git fetch below (checkout
+# alone fetches only the checked-out ref, even at fetch-depth: 0).
 common=(git . --redact --no-banner)
 
 if [ "${GITHUB_EVENT_NAME:-}" = "pull_request" ] && [ -n "${GITHUB_BASE_REF:-}" ]; then
