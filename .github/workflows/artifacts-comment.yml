@@ -53,7 +53,10 @@ jobs:
               {owner, repo, run_id: context.runId, per_page: 100}
             )).filter(art => {
               const name = typeof art?.name === 'string' ? art.name.trim() : '';
-              return art?.id && name && name !== 'undefined';
+              // Hide internal "prebuilt-*" binaries (image-release prebuilt-mode
+              // plumbing, 1-day retention) from the user-facing artifacts comment;
+              // they duplicate the binary-* release archives.
+              return art?.id && name && name !== 'undefined' && !name.startsWith('prebuilt-');
             });
 
             if (!artifacts.length) {
@@ -61,14 +64,43 @@ jobs:
               return;
             }
 
+            // Per-artifact "what is this / how to use it" note, keyed off the
+            // artifact name convention. GitHub wraps every artifact in a .zip on
+            // download, so the inner file is named without that wrapper.
+            const describe = (name) => {
+              if (name === 'images') {
+                return `**Container images** (one \`.tar\` per built arch) — load and run locally, no registry ` +
+                  `needed: \`unzip images.zip\`, then \`docker load -i image-linux-<arch>.tar\` for your arch and ` +
+                  `\`docker run\` the loaded tag.`;
+              }
+              if (name.startsWith('binary-')) {
+                const t = name.slice('binary-'.length);
+                return `**Standalone binary** (${t}) — \`unzip ${name}.zip\`, extract the inner archive ` +
+                  `(\`.tar.gz\`, or \`.zip\` on Windows), then run the executable directly (no container).`;
+              }
+              if (name.endsWith('.dockerbuild')) {
+                return `**Build record** (debug) — import into Docker Desktop -> Builds ` +
+                  `(or \`docker buildx history import\`) to inspect this build's steps and timings.`;
+              }
+              return `Build artifact — download and \`unzip\`.`;
+            };
+
             // Build comment body
+            const fmt = (iso) => iso ? `${iso.slice(0, 16).replace('T', ' ')} UTC` : 'unknown';
             const marker = '<!-- bot: artifacts -->';
             const runUrl = `${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}`;
             let body = `${marker}\n## Build Artifacts\n\n`;
             for (const art of artifacts) {
-              body += `* [\`${art.name}.zip\`](https://nightly.link/${owner}/${repo}/actions/artifacts/${art.id}.zip)\n`;
+              // Use the same trimmed name the filter used, so the link label and
+              // describe() can't disagree if a name carries stray whitespace.
+              const name = (typeof art.name === 'string' ? art.name.trim() : '');
+              const url = `https://nightly.link/${owner}/${repo}/actions/artifacts/${art.id}.zip`;
+              // Retention differs per artifact type, so show each one's expiry.
+              body += `* [\`${name}.zip\`](${url})\n  ${describe(name)}\n  _expires ${fmt(art.expires_at)}_\n`;
             }
-            body += `\n*From [workflow run #${context.runNumber}](${runUrl})*`;
+            // API order isn't guaranteed, so take the earliest created_at as the batch built time.
+            const built = fmt(artifacts.map(a => a.created_at).filter(Boolean).sort()[0]);
+            body += `\n*From [workflow run #${context.runNumber}](${runUrl}) - built ${built}*`;
 
             // Upsert comment
             const comments = await github.paginate(

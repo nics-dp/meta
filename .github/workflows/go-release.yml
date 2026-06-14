@@ -348,12 +348,29 @@ jobs:
             echo "file=${ARCHIVE_DIR}.tar.gz" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Upload build artifact
+      - name: Upload binary archive
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: build-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.goarm && format('-v{0}', matrix.goarm) || '' }}
+          name: binary-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.goarm && format('-v{0}', matrix.goarm) || '' }}
           path: ${{ steps.archive.outputs.file }}
           retention-days: ${{ inputs.snapshot && 7 || 30 }}
+
+      # Raw (unarchived) linux binaries so image-release's prebuilt mode can
+      # COPY them straight into the container without unpacking an archive. Linux
+      # only — container images are linux; darwin/windows binaries ship as
+      # release archives, not images. Short retention: consumed within the same
+      # run by the image-build job.
+      - name: Upload raw binary for image prebuilt
+        if: matrix.goos == 'linux'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          # "prebuilt-" prefix marks this as internal plumbing for image-release's
+          # prebuilt mode (not a user-facing release download); artifacts-comment
+          # filters this prefix out of the PR comment. Include the GOARM suffix
+          # (same as binary-*) so multiple 32-bit arm variants don't collide.
+          name: prebuilt-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.goarm && format('-v{0}', matrix.goarm) || '' }}
+          path: output/
+          retention-days: 1
 
       - name: Revoke private git repository access
         if: ${{ always() && env.HAS_CI_APP == 'true' }}
@@ -387,7 +404,7 @@ jobs:
       - name: Download all build artifacts
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          pattern: build-*
+          pattern: binary-*
           path: dist
           merge-multiple: true
 
