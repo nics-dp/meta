@@ -17,6 +17,16 @@
 # node_modules, so the version is controlled by each repo's package.json devDeps
 # (renovate-bumped, knip-ignored) — avoids @latest drift across repos.
 
+# Warn if the package is missing (bunx would otherwise fetch @latest on the fly,
+# making the type-check non-reproducible and defeating the version strategy).
+if [ ! -d "node_modules/@typescript/native-preview" ] && ! grep -q '"@typescript/native-preview"' package.json 2>/dev/null; then
+  echo ""
+  echo "⚠ @typescript/native-preview not found in package.json — bunx will fall back to @latest."
+  echo "  Pin it so the version is reproducible and renovate-managed:"
+  echo "      bun add -D @typescript/native-preview"
+  echo ""
+fi
+
 if [ -f package.json ] && grep -q '"vue-tsc"' package.json; then
   bunx --bun -p @typescript/native-preview tsgo -b --noEmit
 else
