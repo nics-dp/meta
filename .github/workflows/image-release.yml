@@ -13,7 +13,10 @@ on:
         required: false
         type: string
         default: "linux/amd64,linux/arm64"
-        description: "Target platforms for multi-arch build"
+        description: >
+          Target platforms for multi-arch build. NOTE: ignored when
+          snapshot=true — snapshot builds are forced to linux/amd64 only to
+          skip emulated arm64 (see the "Resolve build platforms" step).
       runs_on:
         required: false
         type: string
@@ -553,7 +556,58 @@ jobs:
         run: |
           git config --global --remove-section "url.https://x-access-token:${GH_PAT}@github.com/nics-dp" 2>/dev/null || true
 
+      - name: Resolve build platforms
+        id: platforms
+        # runs_on is a caller-supplied JSON input that can resolve to a Windows
+        # runner (default shell pwsh); pin bash since this uses bash-only [[ ]]
+        # syntax. Mirrors the "Compute version metadata" step above.
+        shell: bash
+        env:
+          SNAPSHOT: ${{ inputs.snapshot }}
+          PLATFORMS_IN: ${{ inputs.platforms }}
+        run: |
+          # Snapshot builds are ephemeral, SHA-tagged dev images. Under the
+          # current deployment model only linux/amd64 is consumed from them
+          # (prod runs amd64; arm64 images are published only on real releases,
+          # for local dev on Apple Silicon). Building the linux/arm64 variant on
+          # snapshot means emulating arm64 under QEMU on the amd64 runners, which
+          # dominates snapshot build wall-clock. Force amd64-only on snapshot and
+          # ignore inputs.platforms; release builds (snapshot=false) honor
+          # inputs.platforms unchanged.
+          if [[ "$SNAPSHOT" == "true" ]]; then
+            PLATFORMS="linux/amd64"
+          else
+            PLATFORMS="$PLATFORMS_IN"
+          fi
+          # PLATFORMS is interpolated into $GITHUB_OUTPUT below and consumed by
+          # build-push. inputs.platforms is a caller-supplied string; reject any
+          # character outside the platform-list charset (os/arch[/variant],
+          # comma-separated) so a stray newline/CR can't break the output-file
+          # format or inject an extra output key. Mirrors the whitespace/quote
+          # guard in "Compute version metadata"; don't echo the offending value
+          # (it would land in CI logs and could itself carry workflow commands).
+          if [[ "$PLATFORMS" =~ [^A-Za-z0-9/,._-] ]]; then
+            echo "::error::resolved platforms contains characters outside [A-Za-z0-9/,._-]"
+            exit 1
+          fi
+          echo "list=${PLATFORMS}" >> "$GITHUB_OUTPUT"
+          # QEMU (binfmt) is only needed to emulate a NON-native architecture.
+          # When the resolved platform list is exactly the runner's native arch
+          # there is nothing to emulate, so skip the otherwise-unconditional QEMU
+          # setup to save its fixed cost on amd64-only snapshot builds. Decide
+          # from the actual runner arch (uname), not just the platform string, so
+          # a non-x86_64 runner building linux/amd64 still gets QEMU. Any
+          # cross-arch / multi-arch target also keeps it.
+          if [[ "$PLATFORMS" == "linux/amd64" && "$(uname -m)" == "x86_64" ]]; then
+            echo "needs_qemu=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "needs_qemu=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Set up QEMU
+        # Skip emulation setup for native amd64-only builds (see the resolve
+        # step); required for every cross-arch / multi-arch build.
+        if: steps.platforms.outputs.needs_qemu == 'true'
         uses: docker/setup-qemu-action@06116385d9baf250c9f4dcb4858b16962ea869c3 # v4.1.0
 
       - name: Set up Buildx
@@ -597,7 +651,7 @@ jobs:
           # stage (current behaviour). Service callers pass target: runtime to
           # ship the hardened runtime stage instead of the trailing debug stage.
           target: ${{ inputs.target }}
-          platforms: ${{ inputs.platforms }}
+          platforms: ${{ steps.platforms.outputs.list }}
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
