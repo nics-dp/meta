@@ -4,9 +4,11 @@ name: Scorecard
 
 # Runs OpenSSF Scorecard against the caller's repository and uploads the
 # findings to GitHub code scanning (Security > Code scanning) under the
-# `scorecard` category. NON-BLOCKING by design: neither a scorecard run error
-# nor a SARIF upload failure ever fails the caller's CI (mirrors
-# security-sarif.yml). Callers add a job that `uses:` this workflow.
+# `scorecard` category. NON-BLOCKING on the default publish: false path: a SARIF
+# upload failure never fails the caller's CI, and a scorecard run error is
+# swallowed too (mirrors security-sarif.yml). On the publish: true path (public
+# meta) a scorecard run error is intentionally NOT swallowed, so a real publish
+# failure surfaces. Callers add a job that `uses:` this workflow.
 #
 # PRIVATE repos: scorecard's GraphQL queries (e.g. ListCommits) need repo read
 # that the default GITHUB_TOKEN lacks, so it exits with "Resource not accessible
