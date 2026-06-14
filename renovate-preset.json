@@ -73,6 +73,13 @@
       ]
     },
     {
+      "description": "Pin Dockerfile base image digests (OpenSSF Scorecard Pinned-Dependencies). Scoped to the dockerfile manager only: docker-compose stays tag-based for dev convenience, and github-actions is intentionally left unpinned so the org's mutable nics-dp/meta reusables can keep using @main.",
+      "matchManagers": [
+        "dockerfile"
+      ],
+      "pinDigests": true
+    },
+    {
       "description": "Group npm and bun updates (dashboard-only, no PR until approved)",
       "matchManagers": [
         "npm",
