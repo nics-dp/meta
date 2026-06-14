@@ -4,17 +4,22 @@ name: Scorecard
 
 # Runs OpenSSF Scorecard against the caller's repository and uploads the
 # findings to GitHub code scanning (Security > Code scanning) under the
-# `scorecard` category. NON-BLOCKING by design: neither a scorecard run error
-# nor a SARIF upload failure ever fails the caller's CI (mirrors
-# security-sarif.yml). Callers add a job that `uses:` this workflow.
+# `scorecard` category. NON-BLOCKING on the default publish: false path: a SARIF
+# upload failure never fails the caller's CI, and a scorecard run error is
+# swallowed too (mirrors security-sarif.yml). On the publish: true path (public
+# meta) a scorecard run error is intentionally NOT swallowed, so a real publish
+# failure surfaces. Callers add a job that `uses:` this workflow.
 #
 # PRIVATE repos: scorecard's GraphQL queries (e.g. ListCommits) need repo read
-# that the default GITHUB_TOKEN lacks -- it errors with "Resource not accessible
-# by integration" and, without the non-blocking guard below, fails the job. To
-# get real scores on a private repo the caller passes ci_read_app_private_key
-# (+ the CI_READ_APP_CLIENT_ID org variable); the minted App token is handed to
-# scorecard as repo_token. Public repos (e.g. meta itself) need nothing -- the
-# default GITHUB_TOKEN suffices.
+# that the default GITHUB_TOKEN lacks, so it exits with "Resource not accessible
+# by integration". The non-blocking guard below keeps that from failing the
+# caller's CI -- but ONLY on the default publish: false path; a private repo
+# that sets publish: true would still fail (and also cannot publish). NOTE:
+# this reusable cannot mint a repo_token here -- scorecard's
+# publish path (used by public meta, publish: true) only permits an allowlisted
+# set of steps and forbids job-level env, so an App-token step is not possible
+# in the shared workflow. Real scores on private repos would need a separate,
+# publish:false-only variant.
 on:
   workflow_call:
     inputs:
@@ -23,10 +28,6 @@ on:
         type: boolean
         default: false
         description: "Publish results to the public OpenSSF Scorecard API. Only works for PUBLIC repos; defaults false so it stays safe for the org's mostly-private repos."
-    secrets:
-      ci_read_app_private_key:
-        required: false
-        description: "Private key of the nics-dp-ci-read GitHub App (paired with the CI_READ_APP_CLIENT_ID org variable). Minted into a short-lived token passed to scorecard as repo_token so its GraphQL queries work on PRIVATE repos. Omit for public repos -- the default GITHUB_TOKEN is sufficient."
 
 permissions:
   contents: read
@@ -44,26 +45,7 @@ jobs:
       contents: read
       # scorecard reads branch-protection / workflow settings via the API
       actions: read
-    env:
-      # secrets cannot be used in step-level if:, so bridge to env here. Mirrors
-      # security-sarif.yml: the ci-read App is identified by the
-      # CI_READ_APP_CLIENT_ID org variable (client-id) plus the
-      # ci_read_app_private_key secret.
-      HAS_CI_APP: ${{ vars.CI_READ_APP_CLIENT_ID != '' && secrets.ci_read_app_private_key != '' }}
     steps:
-      # Mint a nics-dp-ci-read App token for scorecard's repo_token, but only
-      # when the App is configured. On private repos this lets scorecard's
-      # GraphQL queries (ListCommits etc.) succeed; public repos skip it and
-      # fall back to GITHUB_TOKEN below (mirrors security-sarif.yml).
-      - name: Mint scorecard repo-read token
-        id: scorecard-token
-        if: ${{ env.HAS_CI_APP == 'true' }}
-        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
-        with:
-          client-id: ${{ vars.CI_READ_APP_CLIENT_ID }}
-          private-key: ${{ secrets.ci_read_app_private_key }}
-          owner: ${{ github.repository_owner }}
-
       - name: Checkout
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
@@ -73,19 +55,18 @@ jobs:
           persist-credentials: false
 
       - name: Run OpenSSF Scorecard
-        # non-blocking: on a private repo without a ci-read App token, scorecard
-        # cannot complete its GraphQL queries (GITHUB_TOKEN -> "Resource not
-        # accessible by integration") and exits non-zero. That must not fail the
+        # non-blocking on the non-publish path: on a private repo scorecard's
+        # GraphQL queries fail (GITHUB_TOKEN -> "Resource not accessible by
+        # integration") and the action exits non-zero. That must not fail the
         # caller's CI (mirrors the upload step below and security-sarif.yml).
-        continue-on-error: true
+        # Gated to publish==false so the publish path (public meta) keeps its
+        # canonical behaviour, where scorecard succeeds and a real failure must
+        # surface.
+        continue-on-error: ${{ !inputs.publish }}
         uses: ossf/scorecard-action@4eaacf0543bb3f2c246792bd56e8cdeffafb205a # v2.4.3
         with:
           results_format: sarif
           results_file: results.sarif
-          # repo_token: scorecard needs repo read via the GraphQL API that the
-          # default GITHUB_TOKEN lacks on PRIVATE repos. Use the ci-read App
-          # token when configured; fall back to GITHUB_TOKEN for public repos.
-          repo_token: ${{ steps.scorecard-token.outputs.token || github.token }}
           # Publishing to the public Scorecard API only works for public repos;
           # default false keeps it safe for the org's mostly-private repos.
           publish_results: ${{ inputs.publish }}
