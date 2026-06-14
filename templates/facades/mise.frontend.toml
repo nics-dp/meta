@@ -64,12 +64,18 @@ depends = ["node:update", "meta:bump"]
 
 [tasks.ci]
 description = "Run all CI checks"
+# Native-binary toolchain (oxc/opengrep/tsgo): oxfmt replaces prettier; oxlint &
+# typecheck-tsgo run as fast shadows ALONGSIDE eslint/vue-tsc (which stay
+# authoritative for .vue templates / SFC internals). node:sast (njsscan) dropped
+# — it targets Express backends, N/A to a Vue SPA; ci:semgrep (engine now
+# OpenGrep) already covers frontend xss/eval.
 depends = [
   "node:lint-fix",
-  "node:format-fix",
+  "node:oxlint",
+  "node:oxfmt-fix",
   "node:typecheck",
+  "node:typecheck-tsgo",
   "node:knip",
-  "node:sast",
   "node:audit",
   # "node:deptree",
   "node:bundle-size",
