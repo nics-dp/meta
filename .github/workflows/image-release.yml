@@ -706,12 +706,14 @@ jobs:
           IFS=',' read -ra PLATS <<< "$PLATFORMS"
           for p in "${PLATS[@]}"; do
             [[ "$p" == linux/* ]] || continue
-            arch="${p#linux/}"; arch="${arch%%/*}"   # drop any /variant -> TARGETARCH
-            src="${BINROOT}/prebuilt-linux-${arch}"
-            dest="${BINCTX}/${arch}"
+            full="${p#linux/}"                       # e.g. arm64  or  arm/v7
+            arch="${full%%/*}"                       # TARGETARCH: arm64 / arm
+            srcname="prebuilt-linux-${full//\//-}"   # artifact: prebuilt-linux-arm64 / prebuilt-linux-arm-v7
+            src="${BINROOT}/${srcname}"
+            dest="${BINCTX}/${arch}"                 # keyed by TARGETARCH for the Dockerfile's COPY
             mkdir -p "$dest"
             if [[ ! -d "$src" ]] || [[ -z "$(ls -A "$src" 2>/dev/null)" ]]; then
-              echo "::error::prebuilt: missing binaries for linux/${arch} (expected go-release artifact prebuilt-linux-${arch}; ensure image-build needs:[go-release] and go-release builds linux/${arch})"
+              echo "::error::prebuilt: missing binaries for ${p} (expected go-release artifact ${srcname}; ensure image-build needs:[go-release] and go-release builds ${p})"
               exit 1
             fi
             cp -a "${src}/." "${dest}/"

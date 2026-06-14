@@ -366,8 +366,9 @@ jobs:
         with:
           # "prebuilt-" prefix marks this as internal plumbing for image-release's
           # prebuilt mode (not a user-facing release download); artifacts-comment
-          # filters this prefix out of the PR comment.
-          name: prebuilt-${{ matrix.goos }}-${{ matrix.goarch }}
+          # filters this prefix out of the PR comment. Include the GOARM suffix
+          # (same as binary-*) so multiple 32-bit arm variants don't collide.
+          name: prebuilt-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.goarm && format('-v{0}', matrix.goarm) || '' }}
           path: output/
           retention-days: 1
 
