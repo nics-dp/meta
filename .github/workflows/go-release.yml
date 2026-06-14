@@ -364,7 +364,10 @@ jobs:
         if: matrix.goos == 'linux'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: bin-${{ matrix.goos }}-${{ matrix.goarch }}
+          # "prebuilt-" prefix marks this as internal plumbing for image-release's
+          # prebuilt mode (not a user-facing release download); artifacts-comment
+          # filters this prefix out of the PR comment.
+          name: prebuilt-${{ matrix.goos }}-${{ matrix.goarch }}
           path: output/
           retention-days: 1
 

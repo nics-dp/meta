@@ -53,7 +53,10 @@ jobs:
               {owner, repo, run_id: context.runId, per_page: 100}
             )).filter(art => {
               const name = typeof art?.name === 'string' ? art.name.trim() : '';
-              return art?.id && name && name !== 'undefined';
+              // Hide internal "prebuilt-*" binaries (image-release prebuilt-mode
+              // plumbing, 1-day retention) from the user-facing artifacts comment;
+              // they duplicate the build-* release archives.
+              return art?.id && name && name !== 'undefined' && !name.startsWith('prebuilt-');
             });
 
             if (!artifacts.length) {
