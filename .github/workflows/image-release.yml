@@ -739,7 +739,6 @@ jobs:
             ${{ env.REGISTRY_GHCR }}/${{ env.GHCR_NAMESPACE }}/${{ env.IMAGE_NAME }}
           tags: |
             type=raw,value=${{ steps.snaptag.outputs.tag }},enable=${{ inputs.snapshot }}
-            type=sha,prefix=,format=short,enable=${{ inputs.snapshot }}
             type=semver,pattern=v{{version}},enable=${{ !inputs.snapshot }}
             type=semver,pattern=v{{major}}.{{minor}},enable=${{ !inputs.snapshot }}
             type=semver,pattern=v{{major}},enable=${{ !inputs.snapshot }}
