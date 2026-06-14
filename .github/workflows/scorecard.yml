@@ -11,7 +11,9 @@ name: Scorecard
 # PRIVATE repos: scorecard's GraphQL queries (e.g. ListCommits) need repo read
 # that the default GITHUB_TOKEN lacks, so it exits with "Resource not accessible
 # by integration". The non-blocking guard below keeps that from failing the
-# caller's CI. NOTE: this reusable cannot mint a repo_token here -- scorecard's
+# caller's CI -- but ONLY on the default publish: false path; a private repo
+# that sets publish: true would still fail (and also cannot publish). NOTE:
+# this reusable cannot mint a repo_token here -- scorecard's
 # publish path (used by public meta, publish: true) only permits an allowlisted
 # set of steps and forbids job-level env, so an App-token step is not possible
 # in the shared workflow. Real scores on private repos would need a separate,
