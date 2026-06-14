@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+#MISE description="Shadow lint JS/TS via oxlint (Rust native); .ts + .vue script — ESLint stays authoritative"
+#MISE hide=true
+#MISE raw=true
+#MISE tools={bun="latest"}
+#MISE depends=["node:install"]
+
+# oxlint (OXC) — Rust single-binary linter, run through bun (no Node runtime).
+# Parallel/shadow lint that runs ALONGSIDE the meta ESLint (node:lint-*), not
+# instead of it: oxlint lints .ts + the .vue <script> block fast, but does NOT
+# parse .vue <template>, so ESLint + eslint-plugin-vue stays authoritative.
+# --vue-plugin (enabled when "vue" is a dependency) turns on the script-only Vue
+# rules. Warnings are non-blocking (oxlint exits non-zero only on errors).
+# No pinned version: bunx resolves oxlint from the consumer's node_modules, so
+# the version is controlled by each repo's package.json devDeps (renovate-bumped,
+# knip-ignored) — avoids @latest drift across repos.
+
+# Warn if oxlint is missing (bunx would otherwise fetch @latest, risking drift).
+if [ ! -d "node_modules/oxlint" ] && ! grep -q '"oxlint"' package.json 2>/dev/null; then
+  echo ""
+  echo "⚠ oxlint not found in package.json — bunx will fall back to @latest."
+  echo "  Pin it so the version is reproducible and renovate-managed:"
+  echo "      bun add -D oxlint"
+  echo ""
+fi
+
+VUE_FLAG=""
+grep -q '"vue"' package.json 2>/dev/null && VUE_FLAG="--vue-plugin"
+
+bunx --bun oxlint $VUE_FLAG .

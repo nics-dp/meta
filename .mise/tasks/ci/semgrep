@@ -1,11 +1,17 @@
 #!/usr/bin/env bash
-#MISE description="Run semgrep static analysis (p/ci baseline + lang packs)"
+#MISE description="Static analysis via OpenGrep (semgrep-compatible; p/ci baseline + lang packs)"
 #MISE hide=true
 #MISE raw=true
-#MISE tools={"pipx:semgrep"="latest","uv"="latest"}
+#MISE tools={"aqua:opengrep/opengrep"="latest"}
 #USAGE arg "[packs]" var=#true var_min=0 help="Language packs (golang, python, typescript, javascript, ...). Stacked on top of p/ci baseline."
 #USAGE flag "--audit" help="Add p/default + p/security-audit + p/owasp-top-ten (deep scan, more FPs; nightly/manual use)"
 #USAGE flag "--rules <path>" help="Custom rules file (e.g., .semgrep/rules.yml). Stacked on top of packs." default=""
+
+# Engine: OpenGrep (github.com/opengrep/opengrep) — a native single-binary
+# semgrep fork (OCaml, no Python/pyo3/pydantic toolchain). Drop-in compatible
+# with the semgrep CLI flags and registry packs used below; verified parity on
+# consumer repos (same p/ci + lang packs -> identical rule set / 0 findings).
+# Task name and #USAGE signature kept stable so consumers need no change.
 
 # shellcheck disable=SC2154
 
@@ -24,4 +30,4 @@ if [ -n "${usage_rules:-}" ]; then
   configs+=(--config "$usage_rules")
 fi
 
-semgrep scan --error --enable-nosem "${configs[@]}" .
+opengrep scan --error --enable-nosem "${configs[@]}" .

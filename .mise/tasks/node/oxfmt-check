@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+#MISE description="Check JS/TS formatting (oxfmt; native binary, no Node)"
+#MISE hide=true
+#MISE raw=true
+#MISE tools={bun="latest"}
+#MISE depends=["node:install"]
+
+# oxfmt (OXC) — native single-binary formatter, run through bun so no Node
+# runtime is needed. Parallel/opt-in replacement for the prettier-based
+# node:format-check (prettier atom stays). Config fetched from meta configs/;
+# its built-in sortTailwindcss subsumes prettier-plugin-tailwindcss.
+# No pinned version: bunx resolves oxfmt from the consumer's node_modules, so
+# the version is controlled by each repo's package.json devDeps (renovate-bumped,
+# knip-ignored) — avoids @latest drift across repos on beta oxfmt.
+
+META_CONFIG_BASE="${META_CONFIG_BASE:-https://raw.githubusercontent.com/nics-dp/meta/main/configs}"
+cleanup() {
+  rc=$?
+  rm -f .oxfmtrc.json
+  exit "$rc"
+}
+trap cleanup EXIT
+curl -fsSL "$META_CONFIG_BASE/.oxfmtrc.json" -o .oxfmtrc.json
+
+# Warn if oxfmt is missing (bunx would otherwise fetch @latest, risking drift).
+if [ ! -d "node_modules/oxfmt" ] && ! grep -q '"oxfmt"' package.json 2>/dev/null; then
+  echo ""
+  echo "⚠ oxfmt not found in package.json — bunx will fall back to @latest."
+  echo "  Pin it so the version is reproducible and renovate-managed:"
+  echo "      bun add -D oxfmt"
+  echo ""
+fi
+
+bunx --bun oxfmt --check .

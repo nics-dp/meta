@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+#MISE description="Scan for leaked secrets (betterleaks; PR gate)"
+#MISE hide=true
+#MISE raw=true
+#MISE tools={"github:betterleaks/betterleaks"="latest"}
+set -euo pipefail
+
+# betterleaks: fast, configurable secret scanner from the Gitleaks authors. Used
+# as the PR gate -- its default `--exit-code 1` on findings makes the caller's
+# mise-task.yml "Enforce" step fail CI. --redact keeps secret values out of the
+# CI logs; --no-banner trims noise from the job summary.
+#
+# On a pull_request we preferentially scan only the commits the PR introduces
+# (base..HEAD) so a pre-existing historical leak does not block every unrelated
+# PR; if the base ref can't be fetched we fall back to a full-history scan (see
+# the fetch guard below). On push / workflow_dispatch we scan the full history.
+# Both require the caller to checkout with fetch-depth: 0 for the full commit
+# history; the PR base ref itself is pulled in by the git fetch below (checkout
+# alone fetches only the checked-out ref, even at fetch-depth: 0).
+common=(git . --redact --no-banner)
+
+if [ "${GITHUB_EVENT_NAME:-}" = "pull_request" ] && [ -n "${GITHUB_BASE_REF:-}" ]; then
+  # Bring the PR's base branch into the local graph so base..HEAD resolves
+  # (actions/checkout fetches only the checked-out ref, even at fetch-depth: 0).
+  # On fetch failure (missing ref / permissions) fall back to a full-history
+  # scan: running a range scan against an absent base ref would fail for a
+  # reason unrelated to any leak. Merge commits are intentionally NOT excluded
+  # so secrets introduced while resolving a conflict are still caught.
+  if git fetch --no-tags --quiet origin \
+      "+refs/heads/${GITHUB_BASE_REF}:refs/remotes/origin/${GITHUB_BASE_REF}"; then
+    betterleaks "${common[@]}" --log-opts="origin/${GITHUB_BASE_REF}..HEAD"
+  else
+    echo "::warning::could not fetch base ref '${GITHUB_BASE_REF}'; scanning full history instead"
+    betterleaks "${common[@]}"
+  fi
+else
+  betterleaks "${common[@]}"
+fi
