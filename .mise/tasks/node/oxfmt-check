@@ -31,4 +31,4 @@ if [ ! -d "node_modules/oxfmt" ] && ! grep -q '"oxfmt"' package.json 2>/dev/null
   echo ""
 fi
 
-bunx oxfmt --check .
+bunx --bun oxfmt --check .

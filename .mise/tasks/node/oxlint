@@ -27,4 +27,4 @@ fi
 VUE_FLAG=""
 grep -q '"vue"' package.json 2>/dev/null && VUE_FLAG="--vue-plugin"
 
-bunx oxlint $VUE_FLAG .
+bunx --bun oxlint $VUE_FLAG .
