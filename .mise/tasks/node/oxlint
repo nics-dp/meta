@@ -2,7 +2,7 @@
 #MISE description="Shadow lint JS/TS via oxlint (Rust native); .ts + .vue script — ESLint stays authoritative"
 #MISE hide=true
 #MISE raw=true
-#MISE tools={bun="latest"}
+#MISE tools={bun="1.3.14"}
 #MISE depends=["node:install"]
 
 # oxlint (OXC) — Rust single-binary linter, run through bun (no Node runtime).

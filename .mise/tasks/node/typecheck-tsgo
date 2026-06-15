@@ -2,7 +2,7 @@
 #MISE description="Shadow type-check via tsgo (TS7 native); .ts only — vue-tsc stays authoritative"
 #MISE hide=true
 #MISE raw=true
-#MISE tools={bun="latest"}
+#MISE tools={bun="1.3.14"}
 #MISE depends=["node:install"]
 
 # tsgo (@typescript/native-preview, TypeScript 7 native, Go single binary), run

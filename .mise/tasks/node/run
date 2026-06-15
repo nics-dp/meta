@@ -2,7 +2,7 @@
 #MISE description="Run a bun script with optional args. Mirrors 'bun run <script> [args...]'"
 #MISE hide=true
 #MISE raw=true
-#MISE tools={bun="latest"}
+#MISE tools={bun="1.3.14"}
 #MISE depends=["node:install"]
 #USAGE arg "[args]" var=#true var_min=0 help="bun run args (default: 'dev'). e.g., 'start' or 'dev --port 3001'"
 
