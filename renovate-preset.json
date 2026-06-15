@@ -22,6 +22,32 @@
       ],
       "depNameTemplate": "air-verse/air",
       "datasourceTemplate": "github-releases"
+    },
+    {
+      "customType": "regex",
+      "description": "Update aqua:/github:-prefixed tool versions pinned in mise task headers (#MISE tools={...}). Only matches digit-leading versions so `=\"latest\"` scanners are left alone.",
+      "managerFilePatterns": [
+        "/(^|/)\\.mise/tasks/.+$/"
+      ],
+      "matchStringsStrategy": "any",
+      "matchStrings": [
+        "\"aqua:(?<packageName>[^\"]+)\"=\"(?<currentValue>\\d[^\"]*)\"",
+        "\"github:(?<packageName>[^\"]+)\"=\"(?<currentValue>\\d[^\"]*)\""
+      ],
+      "depNameTemplate": "{{{packageName}}}",
+      "datasourceTemplate": "github-releases"
+    },
+    {
+      "customType": "regex",
+      "description": "Update bun version pinned in mise task headers (core:bun maps to oven-sh/bun, whose tags are bun-v<ver>)",
+      "managerFilePatterns": [
+        "/(^|/)\\.mise/tasks/.+$/"
+      ],
+      "matchStrings": [
+        "bun=\"(?<currentValue>\\d[^\"]*)\""
+      ],
+      "depNameTemplate": "oven-sh/bun",
+      "datasourceTemplate": "github-releases"
     }
   ],
   "packageRules": [
@@ -133,6 +159,56 @@
       ]
     },
     {
+      "description": "mise task-header tools (custom regex): strip leading v from release tags",
+      "matchDepNames": [
+        "golangci/golangci-lint",
+        "hadolint/hadolint",
+        "rhysd/actionlint",
+        "anchore/syft",
+        "charmbracelet/gum",
+        "snyk/parlay"
+      ],
+      "extractVersion": "^v(?<version>.+)$"
+    },
+    {
+      "description": "mise task-header tools (custom regex): strip jq- prefix from jq tags",
+      "matchDepNames": [
+        "jqlang/jq"
+      ],
+      "extractVersion": "^jq-(?<version>.+)$"
+    },
+    {
+      "description": "mise task-header tools (custom regex): strip bun-v prefix from bun tags",
+      "matchDepNames": [
+        "oven-sh/bun"
+      ],
+      "extractVersion": "^bun-v(?<version>.+)$"
+    },
+    {
+      "description": "Group mise task-header tool pins (.mise/tasks/* #MISE tools={...}); scanners stay latest and are not pinned",
+      "matchDepNames": [
+        "golangci/golangci-lint",
+        "hadolint/hadolint",
+        "rhysd/actionlint",
+        "anchore/syft",
+        "charmbracelet/gum",
+        "jqlang/jq",
+        "astral-sh/uv",
+        "snyk/parlay",
+        "oven-sh/bun"
+      ],
+      "groupName": "mise task tools",
+      "commitMessagePrefix": "chore(mise.tasks):",
+      "labels": [
+        "dependencies",
+        "mise"
+      ],
+      "automerge": false,
+      "assignees": [
+        "charliie-dev"
+      ]
+    },
+    {
       "description": "Group Helm chart updates",
       "matchManagers": [
         "helmv3",
@@ -193,6 +269,16 @@
       ],
       "automerge": true,
       "automergeType": "pr"
+    },
+    {
+      "description": "Do not let Renovate bump internal nics-dp Go modules (libdcf, ZenQuery, etc.). They are pinned via the go:lib-remote @dev mechanism during feature work, and Renovate cannot reliably compute their pseudo-versions in its runner (it writes a bare commit SHA, producing an invalid go.mod).",
+      "matchManagers": [
+        "gomod"
+      ],
+      "matchDepNames": [
+        "github.com/nics-dp/**"
+      ],
+      "enabled": false
     }
   ]
 }

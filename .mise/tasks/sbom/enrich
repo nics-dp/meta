@@ -3,6 +3,6 @@
 #MISE hide=true
 #MISE depends=["sbom:source"]
 #MISE silent="stdout"
-#MISE tools={"github:snyk/parlay"="latest"}
+#MISE tools={"github:snyk/parlay"="0.11.0"}
 
 parlay ecosystems enrich sbom-source.cdx.json > enriched-source.cdx.json
