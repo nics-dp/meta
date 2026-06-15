@@ -75,6 +75,21 @@ on:
         type: boolean
         default: false
         description: "Snapshot mode: tag images by source-branch name (no semver, no latest); pin a specific build by digest."
+      compression:
+        required: false
+        type: string
+        default: ""
+        description: >
+          Pushed-image layer compression: "" (auto) | gzip | zstd | estargz |
+          uncompressed. Auto (default, empty) resolves to zstd for snapshot
+          builds and gzip for release builds — see the "Resolve compression"
+          step. Rationale: snapshot images are pulled internally (reviewers on
+          docker 23+/podman, GHCR), where zstd's faster multi-threaded
+          compression shrinks push/export wall-clock; release images are consumed
+          in production and pushed to Docker Hub, whose zstd support is
+          incomplete, so they stay gzip for maximum compatibility. Pass an
+          explicit value to override the auto policy. Plain zstd only (never
+          zstd:chunked).
       ref:
         required: false
         type: string
@@ -676,6 +691,50 @@ jobs:
             echo "needs_qemu=true" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Resolve compression
+        id: compression
+        shell: bash
+        env:
+          COMPRESSION_IN: ${{ inputs.compression }}
+          SNAPSHOT: ${{ inputs.snapshot }}
+        run: |
+          set -euo pipefail
+          # Auto policy (empty input): zstd for snapshot (internal/GHCR, faster
+          # push), gzip for release (Docker Hub / production podman). An explicit
+          # input value overrides the policy.
+          if [[ -n "$COMPRESSION_IN" ]]; then
+            COMPRESSION="$COMPRESSION_IN"
+          elif [[ "$SNAPSHOT" == "true" ]]; then
+            COMPRESSION="zstd"
+          else
+            COMPRESSION="gzip"
+          fi
+          # Emit the build-push-action push/outputs pair for the resolved value:
+          #   gzip         -> plain `push: true`, empty outputs (prior behavior).
+          #   uncompressed -> explicit exporter, NO compression-level (the level
+          #                   is meaningless for uncompressed and a future stricter
+          #                   buildx could reject it).
+          #   zstd|estargz -> explicit exporter WITH compression-level (oci-
+          #                   mediatypes is required for zstd to actually apply).
+          EXPORTER_BASE="type=image,push=true,oci-mediatypes=true,compression=${COMPRESSION}"
+          case "$COMPRESSION" in
+            gzip)
+              echo "push=true" >> "$GITHUB_OUTPUT"
+              echo "exporter=" >> "$GITHUB_OUTPUT" ;;
+            uncompressed)
+              echo "push=false" >> "$GITHUB_OUTPUT"
+              echo "exporter=${EXPORTER_BASE}" >> "$GITHUB_OUTPUT" ;;
+            zstd|estargz)
+              echo "push=false" >> "$GITHUB_OUTPUT"
+              echo "exporter=${EXPORTER_BASE},compression-level=3" >> "$GITHUB_OUTPUT" ;;
+            *)
+              # Do NOT interpolate the raw (caller-controlled) value into the
+              # ::error:: workflow command — a CR/LF or % could inject/truncate
+              # the annotation. The accepted set is fixed and listed here.
+              echo "::error::invalid compression input (expected one of: gzip, zstd, estargz, uncompressed)"; exit 1 ;;
+          esac
+          echo "Resolved layer compression: ${COMPRESSION}"
+
       - name: Set up QEMU
         # Skip emulation setup for native amd64-only builds (see the resolve
         # step); required for every cross-arch / multi-arch build.
@@ -795,7 +854,13 @@ jobs:
           # under <runner.temp>/binctx) as the `binctx` named build context that
           # the Dockerfile's prebuilt stage COPYs from. Empty otherwise.
           build-contexts: ${{ inputs.prebuilt && format('binctx={0}/binctx', runner.temp) || '' }}
-          push: true
+          # push/outputs come from the "Resolve compression" step: gzip keeps the
+          # plain push path (empty outputs, byte-identical to prior behavior);
+          # other algorithms push via an explicit image exporter so the layer
+          # compression actually applies (zstd needs oci-mediatypes). No
+          # force-compression, so only newly built layers are re-encoded.
+          push: ${{ steps.compression.outputs.push }}
+          outputs: ${{ steps.compression.outputs.exporter }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |

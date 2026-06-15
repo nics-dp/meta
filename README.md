@@ -197,7 +197,7 @@ App 認證（nics-dp-ci-read，用於 `private-modules=true`）：client-id 由 
 | Workflow             | 用途                                                                                                                       |
 | -------------------- | -------------------------------------------------------------------------------------------------------------------------- |
 | `go-release.yml`     | Go binary 跨平台建置 + cosign 簽章 + 多平台 SBOM；3 jobs：`prepare` → `build` (matrix) → `release`                          |
-| `image-release.yml`  | Docker image dual registry (DockerHub + GHCR) + BuildKit SBOM + SLSA provenance + Sigstore attestation + cosign 簽章       |
+| `image-release.yml`  | Docker image dual registry (DockerHub + GHCR) + BuildKit SBOM + SLSA provenance + Sigstore attestation + cosign 簽章；layer 壓縮 auto：snapshot→zstd、release→gzip（`compression` input 可覆寫） |
 | `sbom-source.yml`    | Source 端 CycloneDX SBOM (anchore/sbom-action) + parlay 增強 + Trivy/Grype 漏洞掃描 → release-mode 上傳至 GitHub Release / snapshot-mode 留 workflow artifact |
 | `sbom-image.yml`     | Container image CycloneDX 1.6 SBOM + parlay 增強 + Trivy/Grype 漏洞掃描 → GitHub Release + Security tab                    |
 
