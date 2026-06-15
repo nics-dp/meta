@@ -75,6 +75,21 @@ on:
         type: boolean
         default: false
         description: "Snapshot mode: tag images by source-branch name (no semver, no latest); pin a specific build by digest."
+      compression:
+        required: false
+        type: string
+        default: ""
+        description: >
+          Pushed-image layer compression: "" (auto) | gzip | zstd | estargz |
+          uncompressed. Auto (default, empty) resolves to zstd for snapshot
+          builds and gzip for release builds — see the "Resolve compression"
+          step. Rationale: snapshot images are pulled internally (reviewers on
+          docker 23+/podman, GHCR), where zstd's faster multi-threaded
+          compression shrinks push/export wall-clock; release images are consumed
+          in production and pushed to Docker Hub, whose zstd support is
+          incomplete, so they stay gzip for maximum compatibility. Pass an
+          explicit value to override the auto policy. Plain zstd only (never
+          zstd:chunked).
       ref:
         required: false
         type: string
@@ -676,6 +691,30 @@ jobs:
             echo "needs_qemu=true" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Resolve compression
+        id: compression
+        shell: bash
+        env:
+          COMPRESSION_IN: ${{ inputs.compression }}
+          SNAPSHOT: ${{ inputs.snapshot }}
+        run: |
+          set -euo pipefail
+          # Auto policy (empty input): zstd for snapshot (internal/GHCR, faster
+          # push), gzip for release (Docker Hub / production podman). An explicit
+          # input value overrides the policy.
+          if [[ -n "$COMPRESSION_IN" ]]; then
+            COMPRESSION="$COMPRESSION_IN"
+          elif [[ "$SNAPSHOT" == "true" ]]; then
+            COMPRESSION="zstd"
+          else
+            COMPRESSION="gzip"
+          fi
+          case "$COMPRESSION" in
+            gzip|zstd|estargz|uncompressed) ;;
+            *) echo "::error::invalid compression '${COMPRESSION}' (expected gzip|zstd|estargz|uncompressed)"; exit 1 ;;
+          esac
+          echo "value=${COMPRESSION}" >> "$GITHUB_OUTPUT"
+
       - name: Set up QEMU
         # Skip emulation setup for native amd64-only builds (see the resolve
         # step); required for every cross-arch / multi-arch build.
@@ -795,7 +834,16 @@ jobs:
           # under <runner.temp>/binctx) as the `binctx` named build context that
           # the Dockerfile's prebuilt stage COPYs from. Empty otherwise.
           build-contexts: ${{ inputs.prebuilt && format('binctx={0}/binctx', runner.temp) || '' }}
-          push: true
+          # gzip (resolved): keep the plain `push: true` path — byte-identical to
+          # prior behavior. Non-gzip: route the push through an explicit image
+          # exporter so the chosen layer compression actually applies (zstd needs
+          # oci-mediatypes=true; without this the algorithm is silently ignored).
+          # No force-compression: only newly built layers are re-compressed, so
+          # base/cache layers aren't needlessly re-encoded each build. The
+          # effective value comes from the "Resolve compression" step (auto:
+          # zstd for snapshot, gzip for release).
+          push: ${{ steps.compression.outputs.value == 'gzip' }}
+          outputs: ${{ steps.compression.outputs.value == 'gzip' && '' || format('type=image,push=true,oci-mediatypes=true,compression={0},compression-level=3', steps.compression.outputs.value) }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
