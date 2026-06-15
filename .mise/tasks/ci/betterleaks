@@ -17,7 +17,35 @@ set -euo pipefail
 # Both require the caller to checkout with fetch-depth: 0 for the full commit
 # history; the PR base ref itself is pulled in by the git fetch below (checkout
 # alone fetches only the checked-out ref, even at fetch-depth: 0).
-common=(git . --redact --no-banner)
+#
+# Org-wide allowlist: extend the default rule set and only *subtract* well
+# understood false positives -- vendored third-party code, Go test/mock fixtures,
+# and the GHAS-dismissed dev-only placeholder token in dcf-platform-cli. The
+# config is written to a temp file and passed via --config; it cannot live as a
+# sibling .toml under .mise/tasks/ because mise would mis-parse it as a task
+# definition. Keep the path/value entries narrow -- never allowlist a path that
+# holds real application secrets.
+config="$(mktemp)"
+trap 'rm -f "$config"' EXIT
+cat > "$config" <<'BLCFG'
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Vendored deps and Go test/mock fixtures"
+paths = [
+  '''(^|/)vendor/''',
+  '''_test\.go$''',
+  '''(^|/)mocks?/''',
+  '''(^|/)testdata/''',
+]
+
+[[allowlists]]
+description = "dcf-platform-cli dev-only defaultAccessToken (GHAS-dismissed)"
+regexTarget = "match"
+regexes = [ '''ds-RVNFZVlGT2hhZlNtT2JOVg''' ]
+BLCFG
+common=(git . --redact --no-banner --config "$config")
 
 if [ "${GITHUB_EVENT_NAME:-}" = "pull_request" ] && [ -n "${GITHUB_BASE_REF:-}" ]; then
   # Bring the PR's base branch into the local graph so base..HEAD resolves
