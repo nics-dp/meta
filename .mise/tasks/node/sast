@@ -4,8 +4,9 @@
 #MISE raw=true
 #MISE tools={"aqua:astral-sh/uv"="0.11.21"}
 # FIX: njsscan depends on semgrep -> pydantic 2.8.2 -> pydantic-core 2.20.1 whose
-# bundled PyO3 0.22 caps at Python 3.13. Pin uv to 3.13 so the wheel build
-# (triggered when no prebuilt wheel matches) doesn't hit the 3.14 cap.
+# bundled PyO3 0.22 caps at Python 3.13. UV_PYTHON below pins the Python that uv
+# uses to 3.13 so the wheel build (triggered when no prebuilt wheel matches)
+# doesn't hit the 3.14 cap. (The uv tool itself is pinned in the tools header.)
 #MISE env={UV_PYTHON="3.13"}
 #USAGE flag "--json" help="Emit JSON output to njsscan-report.json"
 

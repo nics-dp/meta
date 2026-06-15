@@ -47,8 +47,7 @@
         "bun=\"(?<currentValue>\\d[^\"]*)\""
       ],
       "depNameTemplate": "oven-sh/bun",
-      "datasourceTemplate": "github-releases",
-      "extractVersion": "^bun-v(?<version>.+)$"
+      "datasourceTemplate": "github-releases"
     }
   ],
   "packageRules": [
@@ -174,6 +173,13 @@
         "jqlang/jq"
       ],
       "extractVersion": "^jq-(?<version>.+)$"
+    },
+    {
+      "description": "mise task-header tools (custom regex): strip bun-v prefix from bun tags",
+      "matchDepNames": [
+        "oven-sh/bun"
+      ],
+      "extractVersion": "^bun-v(?<version>.+)$"
     },
     {
       "description": "Group mise task-header tool pins (.mise/tasks/* #MISE tools={...}); scanners stay latest and are not pinned",
