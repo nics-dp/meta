@@ -108,7 +108,10 @@ jobs:
           # pseudo-version then runs `git fetch --unshallow`, which races on the
           # restored shallow state ("shallow file has changed since we read it").
           # Drop the VCS cache so private modules are re-cloned cleanly each run.
-          rm -rf "$(go env GOMODCACHE)/cache/vcs" 2>/dev/null || true
+          gomodcache="$(go env GOMODCACHE)"
+          if [ -n "$gomodcache" ]; then
+            rm -rf "${gomodcache}/cache/vcs" 2>/dev/null || true
+          fi
 
       - name: Manual Go build for CodeQL
         if: matrix.language == 'go'
