@@ -246,7 +246,10 @@ jobs:
           # --unshallow`, which races on the restored shallow state ("shallow file
           # has changed since we read it"). Drop the VCS cache (keeps the download
           # zip cache) so private modules are re-cloned cleanly before vendoring.
-          rm -rf "$(go env GOMODCACHE)/cache/vcs" 2>/dev/null || true
+          gomodcache="$(go env GOMODCACHE)"
+          if [ -n "$gomodcache" ]; then
+            rm -rf "${gomodcache}/cache/vcs" 2>/dev/null || true
+          fi
 
       - name: Vendor Go modules
         if: contains(inputs.extra_build_flags, '-mod=vendor')
