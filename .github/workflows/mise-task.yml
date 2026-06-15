@@ -70,7 +70,7 @@ jobs:
     # tool installs such as semgrep. Setting the age to 0 disables that
     # injection. "0" requires mise >= 2026.6.3 (older mise rejects it as an
     # invalid duration), and the self-hosted pool reuses cached mise binaries
-    # of mixed versions, so the action below pins mise to 2026.6.3.
+    # of mixed versions, so the action below pins mise to 2026.6.9 (>= 2026.6.3).
     #
     # The mise-versions.jdx.dev host (CDN cache of version listings) is kept
     # ENABLED (mise default). It occasionally 403s, but mise falls back to
