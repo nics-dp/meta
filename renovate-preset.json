@@ -193,6 +193,16 @@
       ],
       "automerge": true,
       "automergeType": "pr"
+    },
+    {
+      "description": "Do not let Renovate bump internal nics-dp Go modules (libdcf, ZenQuery, etc.). They are pinned via the go:lib-remote @dev mechanism during feature work, and Renovate cannot reliably compute their pseudo-versions in its runner (it writes a bare commit SHA, producing an invalid go.mod).",
+      "matchManagers": [
+        "gomod"
+      ],
+      "matchDepNames": [
+        "github.com/nics-dp/**"
+      ],
+      "enabled": false
     }
   ]
 }
