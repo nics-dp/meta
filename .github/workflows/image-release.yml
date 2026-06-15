@@ -728,7 +728,10 @@ jobs:
               echo "push=false" >> "$GITHUB_OUTPUT"
               echo "exporter=${EXPORTER_BASE},compression-level=3" >> "$GITHUB_OUTPUT" ;;
             *)
-              echo "::error::invalid compression '${COMPRESSION}' (expected gzip|zstd|estargz|uncompressed)"; exit 1 ;;
+              # Do NOT interpolate the raw (caller-controlled) value into the
+              # ::error:: workflow command — a CR/LF or % could inject/truncate
+              # the annotation. The accepted set is fixed and listed here.
+              echo "::error::invalid compression input (expected one of: gzip, zstd, estargz, uncompressed)"; exit 1 ;;
           esac
           echo "Resolved layer compression: ${COMPRESSION}"
 
