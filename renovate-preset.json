@@ -37,7 +37,10 @@
         "go"
       ],
       "automerge": false,
-      "dependencyDashboardApproval": true
+      "dependencyDashboardApproval": true,
+      "postUpdateOptions": [
+        "gomodTidy"
+      ]
     },
     {
       "description": "Group GitHub Actions updates",

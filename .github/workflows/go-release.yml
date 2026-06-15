@@ -238,6 +238,19 @@ jobs:
           restore-keys: |
             go-vendor-${{ runner.os }}-${{ runner.arch }}-
 
+      - name: Clear stale shallow Go module VCS cache
+        if: contains(inputs.extra_build_flags, '-mod=vendor')
+        run: |
+          # setup-go's module cache can restore a shallow git clone of private
+          # modules; validating a new pseudo-version then runs `git fetch
+          # --unshallow`, which races on the restored shallow state ("shallow file
+          # has changed since we read it"). Drop the VCS cache (keeps the download
+          # zip cache) so private modules are re-cloned cleanly before vendoring.
+          gomodcache="$(go env GOMODCACHE)"
+          if [ -n "$gomodcache" ]; then
+            rm -rf "${gomodcache}/cache/vcs" 2>/dev/null || true
+          fi
+
       - name: Vendor Go modules
         if: contains(inputs.extra_build_flags, '-mod=vendor')
         run: go mod vendor
