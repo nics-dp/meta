@@ -72,15 +72,16 @@ jobs:
     # invalid duration), and the self-hosted pool reuses cached mise binaries
     # of mixed versions, so the action below pins mise to 2026.6.3.
     #
-    # MISE_USE_VERSIONS_HOST=false: mise-versions.jdx.dev (the CDN that caches
-    # version listings) frequently 403s, spamming "outcome=failed status=403
-    # fallback=true" warnings even though the source-direct fallback already
-    # succeeds. Disabling the host makes mise resolve versions straight from
-    # each backend's source, so `latest` keeps working without the noise.
-    # Trade-off: a few more direct GitHub/aqua calls on version lookup.
+    # The mise-versions.jdx.dev host (CDN cache of version listings) is kept
+    # ENABLED (mise default). It occasionally 403s, but mise falls back to
+    # source-direct on a miss, so `latest` still resolves — that 403 line is
+    # cosmetic noise, not a failure. We previously set MISE_USE_VERSIONS_HOST=false
+    # to silence the noise, but that removed the cache/fallback layer: `latest`
+    # version lookups then hit GitHub/aqua APIs directly with no fallback, and a
+    # transient GitHub 504 hard-failed tool installs (e.g. trivy). Keeping the
+    # host on absorbs those transient errors via the cached listing.
     env:
       MISE_MINIMUM_RELEASE_AGE: "0"
-      MISE_USE_VERSIONS_HOST: "false"
       # secrets cannot be used in step-level if:, so bridge to env here.
       HAS_CI_APP: ${{ vars.CI_READ_APP_CLIENT_ID != '' && secrets.ci_read_app_private_key != '' }}
     steps:
