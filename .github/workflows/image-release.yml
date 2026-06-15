@@ -843,7 +843,10 @@ jobs:
           # effective value comes from the "Resolve compression" step (auto:
           # zstd for snapshot, gzip for release).
           push: ${{ steps.compression.outputs.value == 'gzip' }}
-          outputs: ${{ steps.compression.outputs.value == 'gzip' && '' || format('type=image,push=true,oci-mediatypes=true,compression={0},compression-level=3', steps.compression.outputs.value) }}
+          # NB: GitHub Actions expressions treat '' as falsy, so the usual
+          # `cond && '' || B` idiom would ALWAYS yield B. Put the non-empty
+          # branch on the truthy side: non-gzip -> exporter string, gzip -> ''.
+          outputs: ${{ steps.compression.outputs.value != 'gzip' && format('type=image,push=true,oci-mediatypes=true,compression={0},compression-level=3', steps.compression.outputs.value) || '' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
