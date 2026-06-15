@@ -101,6 +101,18 @@ jobs:
           git config --global url."https://x-access-token:${GH_PAT}@github.com/nics-dp".insteadOf "https://github.com/nics-dp"
           git config --global url."https://x-access-token:${GH_PAT}@github.com/nics-dp/".insteadOf "git@github.com:nics-dp/"
 
+      - name: Clear stale shallow Go module VCS cache
+        if: matrix.language == 'go'
+        run: |
+          # dependency-caching restores a shallow git module cache; validating a new
+          # pseudo-version then runs `git fetch --unshallow`, which races on the
+          # restored shallow state ("shallow file has changed since we read it").
+          # Drop the VCS cache so private modules are re-cloned cleanly each run.
+          gomodcache="$(go env GOMODCACHE)"
+          if [ -n "$gomodcache" ]; then
+            rm -rf "${gomodcache}/cache/vcs" 2>/dev/null || true
+          fi
+
       - name: Manual Go build for CodeQL
         if: matrix.language == 'go'
         env:
