@@ -3,7 +3,7 @@
 #MISE hide=true
 #MISE raw=true
 #MISE silent="stdout"
-#MISE tools={bun="latest"}
+#MISE tools={bun="1.3.14"}
 #MISE depends=["node:install"]
 
 # oxfmt (OXC) — native single-binary formatter, run through bun so no Node

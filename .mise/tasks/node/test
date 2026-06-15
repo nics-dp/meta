@@ -2,7 +2,7 @@
 #MISE description="Run JS/TS tests via vitest"
 #MISE hide=true
 #MISE raw=true
-#MISE tools={bun="latest"}
+#MISE tools={bun="1.3.14"}
 #MISE depends=["node:install"]
 
 # vitest config is repo-specific (setup files, environment tweaks, per-repo

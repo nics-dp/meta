@@ -2,6 +2,6 @@
 #MISE description="Compile ruler to AGENTS.md and CLAUDE.md"
 #MISE hide=true
 #MISE silent="stdout"
-#MISE tools={bun="latest"}
+#MISE tools={bun="1.3.14"}
 
 bunx @intellectronica/ruler apply

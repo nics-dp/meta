@@ -22,6 +22,32 @@
       ],
       "depNameTemplate": "air-verse/air",
       "datasourceTemplate": "github-releases"
+    },
+    {
+      "customType": "regex",
+      "description": "Update aqua:/github:-prefixed tool versions pinned in mise task headers (#MISE tools={...}). Only matches digit-leading versions so `=\"latest\"` scanners are left alone.",
+      "managerFilePatterns": [
+        "/(^|/)\\.mise/tasks/.+$/"
+      ],
+      "matchStringsStrategy": "any",
+      "matchStrings": [
+        "\"aqua:(?<packageName>[^\"]+)\"=\"(?<currentValue>\\d[^\"]*)\"",
+        "\"github:(?<packageName>[^\"]+)\"=\"(?<currentValue>\\d[^\"]*)\""
+      ],
+      "depNameTemplate": "{{{packageName}}}",
+      "datasourceTemplate": "github-releases"
+    },
+    {
+      "customType": "regex",
+      "description": "Update bun version pinned in mise task headers (core:bun maps to oven-sh/bun, whose tags are bun-v<ver>)",
+      "managerFilePatterns": [
+        "/(^|/)\\.mise/tasks/.+$/"
+      ],
+      "matchStrings": [
+        "bun=\"(?<currentValue>\\d[^\"]*)\""
+      ],
+      "depNameTemplate": "oven-sh/bun",
+      "datasourceTemplate": "github-releases"
     }
   ],
   "packageRules": [
@@ -123,6 +149,56 @@
       ],
       "groupName": "mise dev tools",
       "commitMessagePrefix": "chore(mise.tools):",
+      "labels": [
+        "dependencies",
+        "mise"
+      ],
+      "automerge": false,
+      "assignees": [
+        "charliie-dev"
+      ]
+    },
+    {
+      "description": "mise task-header tools (custom regex): strip leading v from release tags",
+      "matchDepNames": [
+        "golangci/golangci-lint",
+        "hadolint/hadolint",
+        "rhysd/actionlint",
+        "anchore/syft",
+        "charmbracelet/gum",
+        "snyk/parlay"
+      ],
+      "extractVersion": "^v(?<version>.+)$"
+    },
+    {
+      "description": "mise task-header tools (custom regex): strip jq- prefix from jq tags",
+      "matchDepNames": [
+        "jqlang/jq"
+      ],
+      "extractVersion": "^jq-(?<version>.+)$"
+    },
+    {
+      "description": "mise task-header tools (custom regex): strip bun-v prefix from bun tags",
+      "matchDepNames": [
+        "oven-sh/bun"
+      ],
+      "extractVersion": "^bun-v(?<version>.+)$"
+    },
+    {
+      "description": "Group mise task-header tool pins (.mise/tasks/* #MISE tools={...}); scanners stay latest and are not pinned",
+      "matchDepNames": [
+        "golangci/golangci-lint",
+        "hadolint/hadolint",
+        "rhysd/actionlint",
+        "anchore/syft",
+        "charmbracelet/gum",
+        "jqlang/jq",
+        "astral-sh/uv",
+        "snyk/parlay",
+        "oven-sh/bun"
+      ],
+      "groupName": "mise task tools",
+      "commitMessagePrefix": "chore(mise.tasks):",
       "labels": [
         "dependencies",
         "mise"
