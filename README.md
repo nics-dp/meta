@@ -7,7 +7,7 @@ nics-dp 組織共用 mise tasks + reusable GitHub Actions workflows + 共用設�
 | 目錄/檔案              | 說明                                                                                                                                                                                       |
 | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `.github/workflows/`   | Reusable GitHub Actions workflows (`mise-task.yml` 為核心；release / sbom-image / codeql / utility 等)                                                                                       |
-| `.mise/tasks/`         | 共用 mise atomic tasks (`ci/`, `iac/`, `go/`, `node/`, `py/`, `sbom/`, `gs/`, `meta/`, `lib/`)，consumer 透過 `git::` remote includes 引用                                                   |
+| `.mise/tasks/`         | 共用 mise atomic tasks (`ci/`, `iac/`, `go/`, `node/`, `py/`, `sbom/`, `gs/`, `dc/`, `meta/`, `lib/`)，consumer 透過 `git::` remote includes 引用                                             |
 | `templates/facades/`   | 5 個 mise.toml facade templates (`mise.go-service.toml`, `mise.go-lib.toml`, `mise.frontend.toml`, `mise.python.toml`, `mise.image.toml`) — copy 後依需求加 repo-specific 即可使用 |
 | `configs/`             | 共用設定檔 (`eslint.config.js`, `.prettierrc.json`, `.prettierignore`, `.oxfmtrc.json`, `lighthouserc.json`, `playwright.config.ts`)。`vitest.config.ts` / `knip.json` 改為 repo-local（各 consumer commit 自家 root 檔，工具自動發現）；`.golangci.yml` 亦非共享（見下方例外） |
 | `renovate-preset.json` | Org-level Renovate preset (`extends` from consumer `renovate.json`)                                                                                                                        |
@@ -31,14 +31,14 @@ Facade templates 於 `templates/facades/`，包含 `[settings]` / `[tools]` / `[
 | --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `ci:*`    | semgrep, trivy-license, betterleaks, trufflehog                                                                                                                                                | 通用 CI 檢查（語言中立）。`ci:semgrep` 引擎已改為 OpenGrep（原生 single-binary semgrep fork，無 Python；CLI/registry packs drop-in 相容，task 名與簽名不變）。`ci:betterleaks`＝快速 secret 掃描 PR gate（Gitleaks fork，PR 上優先掃 base..HEAD，base ref fetch 失敗則 fallback 全歷史）；`ci:trufflehog`＝deep/release scan，只報經驗證的 live secrets                                                                                                                                            |
 | `iac:*`   | trivy, img:hadolint, actionlint                                                                                                                                                                | IaC misconfig + Dockerfile lint + workflow YAML lint                                                                                                                                                                                                                                                                                                                                                |
-| `go:*`    | api-fix, audit, build, bench-compare, clean, dead-code, deptree, generate, install, lib-local, lib-remote, lint-check, lint-fix, report, run, sast, test, update                               | Go 建置/測試/Lint/安全/模組。`go:test` 預設只跑 unit；flags：`--race`、`--coverage`、`--bench [--pattern X]`、`--full`；`go:report` 從 coverage.out 產 HTML+MD（自動讀 `go.mod` module path 解析 component）；`go:bench-compare` 跑 benchstat；`go:dead-code` 用 `cmd/deadcode` whole-program；`go:deptree` 用 `go mod graph`；路徑/tags/coverpkg 由 `lib/go-env` auto-detect            |
+| `go:*`    | api-fix, audit, build, bench-compare, clean, dead-code, deptree, dev, generate, install, lib-local, lib-remote, lint-check, lint-fix, report, run, sast, test, update                               | Go 建置/測試/Lint/安全/模組。`go:test` 預設只跑 unit；flags：`--race`、`--coverage`、`--bench [--pattern X]`、`--full`；`go:report` 從 coverage.out 產 HTML+MD（自動讀 `go.mod` module path 解析 component）；`go:bench-compare` 跑 benchstat；`go:dead-code` 用 `cmd/deadcode` whole-program；`go:deptree` 用 `go mod graph`；路徑/tags/coverpkg 由 `lib/go-env` auto-detect            |
 | `node:*`  | install, build, bench-compare, bundle-size, clean, deptree, run, test, e2e, e2e-install, lint-check, lint-fix, oxlint, format-check, format-fix, oxfmt-check, oxfmt-fix, typecheck, typecheck-tsgo, sast, audit, update, knip, lighthouse      | JS/TS via bun。`lint`/`format`/`lighthouse` 拉 `configs/` shared；`test`/`knip` 用 repo-local config（各 repo 自家 root 檔，工具自動發現，缺檔即報錯）；e2e 用 Playwright；`node:clean [--deep]` 清 transient；`node:bench-compare` 跑 vitest bench × `--count` 後 merge JSON，無 flag 列對比 (mean ± rme + Welch t-test 完整 p-value)；`node:bundle-size` 偵 `.size-limit` config 用 size-limit，否則 fallback du+gzip。原生 binary 平行替代（opt-in，與既有 atom 並存）：`oxfmt-check`/`oxfmt-fix` ↔ prettier、`oxlint` ↔ eslint（script-only，不解析 .vue template）、`typecheck-tsgo` ↔ vue-tsc（.ts only，需 repo 自備 `*.vue` shim）；三者皆 bunx 無版本、版本由 consumer package.json devDep 控制 |
 | `py:*`    | install, build, audit, bench-compare, clean, complexity, dead-code, deptree, format-check, format-fix, license-custom, lint-check, lint-fix, profile, report, run, safety-db, sast, sbom-custom, test, typecheck, update | Python via uv + ruff + pytest + bandit + pip-audit + ty。`py:sast` (bandit)；`py:typecheck` (ty Beta / `--pyrefly`)；`py:dead-code` (vulture)；`py:complexity` (radon/xenon)；`py:deptree` (uv tree)；`py:safety-db` (safety<3)；`py:license-custom` (pip-licenses)；`py:sbom-custom` (cyclonedx-py)；`py:profile` 預設 cProfile，flags：`--instrument`/`--spy`/`--mem`/`--scalene`；env override 由 `lib/py-env` |
 | `sbom:*`  | source, enrich, trivy, grype                                                                                                                                                                   | Source SBOM 產生與漏洞掃描                                                                                                                                                                                                                                                                                                                                                                          |
 | `gs:*`    | clone, update                                                                                                                                                                                  | Git submodules                                                                                                                                                                                                                                                                                                                                                                                      |
+| `dc:*`    | up, down, pull, rec, clean                                                                                                                                                                      | Docker Compose 生命週期（本機 dev stack 起／停／拉取／重建／清除）                                                                                                                                                                                                                                                                                                                                  |
 | `meta:*`  | bump                                                                                                                                                                                           | 清 mise tasks cache 強制重抓 atom includes                                                                                                                                                                                                                                                                                                                                                          |
-| `lib/*`   | logs, go-env, py-env                                                                                                                                                                           | 內部 sourced helper library                                                                                                                                                                                                                                                                                                                                                                         |
-| `ruler`   | —                                                                                                                                                                                              | 編譯 ruler 至 AGENTS.md / CLAUDE.md                                                                                                                                                                                                                                                                                                                                                                 |
+| `lib/*`   | logs, go-env, go-version, py-env                                                                                                                                                                           | 內部 sourced helper library                                                                                                                                                                                                                                                                                                                                                                         |
 
 `mise tasks ls --hidden` 列出全部 atoms。
 
@@ -130,7 +130,7 @@ sbom-source.cdx.json
 
 Atoms 之 trap cleanup 結束時清 curl 下來的 shared config (`eslint.config.js`、`.prettierrc.json`、`playwright.config.ts`、`lighthouserc.json`)，但 atom 中斷時可能殘留 — 若 repo 不另放可一併 ignore。（`vitest.config.ts` / `knip.json` 已改 repo-local，不再 curl，故不在此清單。）
 
-> **`.golangci.yml` 例外**：由 consumer repo **自家 commit**（非 curl），須含 `gofumpt.module-path: <repo-module>` 設定（v2.12.2 自動推導對無 `.` 模組名會誤判 stdlib，致 gci↔gofumpt import 互相 false positive）。範本見 `templates/facades/.golangci.yml.template`（如有）或直接 ref 既有 Go repo 範本。
+> **`.golangci.yml` 例外**：由 consumer repo **自家 commit**（非 curl），須含 `gofumpt.module-path: <repo-module>` 設定（v2.12.2 自動推導對無 `.` 模組名會誤判 stdlib，致 gci↔gofumpt import 互相 false positive）。範本直接 ref 既有 Go repo 之 `.golangci.yml`。
 
 > **`go:lib-local` / `go:lib-remote` 注意事項：**
 > 兩 atom 由 env 驅動：
@@ -214,6 +214,23 @@ App 認證（nics-dp-ci-read，用於 `private-modules=true`）：client-id 由 
 
 ---
 
+### Security & Supply Chain
+
+Go 與 Node 的 dependency-submission 拆成兩支：`go.mod` GitHub 原生解析，`bun.lock` 則否。
+
+| Workflow                          | 用途                                                                                                                                                  |
+| --------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `security-sarif.yml`              | Gate-only scanners（gosec、govulncheck、semgrep、trivy config、hadolint），各自上傳獨立 code-scanning SARIF category；**non-blocking**（只填 Security tab，不擋 CI） |
+| `dependency-review.yml`           | PR-time `dependency-review-action` 掃 GitHub dependency graph；引入帶已知漏洞（≥ `fail_on_severity`，default `high`）或禁用授權的相依時 **擋 PR**；須由 `pull_request` 觸發的 workflow 呼叫 |
+| `scorecard.yml`                   | OpenSSF Scorecard（PRIVATE 變體），上傳 SARIF 至 code scanning（`category: scorecard`，non-blocking）；用 nics-dp-scorecard App 對私有 repo 評分；`publish_results: false` |
+| `scorecard-publish.yml`           | Scorecard 的 PUBLIC 變體：另發佈結果至 OpenSSF 公開 API（badge），僅適用公開 repo（如 meta 自身）                                                       |
+| `go-dependency-submission.yml`    | 送 Go 相依圖至 Dependency Submission API；用 ci-read App token 做 org-scoped 私模 git rewrite                                                          |
+| `node-dependency-submission.yml`  | 送 bun 專案完整 transitive npm 圖（GitHub 不解析 `bun.lock`，故 `bun install` 後用 Syft catalog `node_modules`）；全公開 npm，免 token                  |
+
+詳見各 workflow 內 `workflow_call` 之 `inputs` / `secrets` 宣告。
+
+---
+
 ### Utility
 
 | Workflow                    | 用途                                                          |
@@ -222,9 +239,11 @@ App 認證（nics-dp-ci-read，用於 `private-modules=true`）：client-id 由 
 
 ---
 
-### Meta CI
+### Meta CI（meta 自我消費自家 reusables）
 
-`ci.yml` — meta repo 自家 CI，透過 `mise-task.yml` matrix 跑 `iac:actionlint` (workflow YAML lint)。
+- `ci.yml` — meta repo 自家 CI，透過 `mise-task.yml` matrix 跑 `iac:actionlint`（workflow YAML lint）＋ `ci:betterleaks` / `ci:trufflehog` secret-scan jobs。
+- `self-supply-chain.yml` — meta 消費自家 `scorecard-publish.yml`（`publish: true`，meta 為公開 repo）；無 dependency-submission job（meta 無編譯語言 manifest，純配置）。
+- `self-dependency-review.yml` — meta 的 PR-time dependency review，透過 `dependency-review.yml` reusable。
 
 ---
 
@@ -236,6 +255,7 @@ Atoms 跑時用 `curl` 抓 raw GitHub 設定，跑完 trap cleanup 清除暫存�
 | --------------------------- | ------------------------------------------ | ----------------------------------------- |
 | `eslint.config.js`          | ESLint flat config + security plugin       | `node:lint-check`, `node:lint-fix`        |
 | `.prettierrc.json` + `.prettierignore` | Prettier shared                  | `node:format-check`, `node:format-fix`    |
+| `.oxfmtrc.json`             | Oxfmt (Oxc formatter) shared               | `node:oxfmt-check`, `node:oxfmt-fix`      |
 | `lighthouserc.json`         | Lighthouse CI shared                       | `node:lighthouse`                         |
 | `playwright.config.ts`      | Playwright base (env-driven `PW_*`)        | `node:e2e`, `node:e2e-install`            |
 
@@ -257,11 +277,12 @@ Consumer repo 之 `renovate.json` 引用 org preset：
 }
 ```
 
-Meta repo 自家 `renovate.json` 額外 customManagers 處理：
-- `actions/checkout`, `jdx/mise-action` 等 GitHub Actions 由 native github-actions manager 自動 bump
-- `anchore/quill` (go-release.yml) — regex manager
-- `snyk/parlay` (sbom-image.yml) — regex manager
-- mise [tools] (`actionlint`, `bun`, etc.) — native mise manager
+`renovate-preset.json` 以 native managers（`github-actions`、`gomod`、`dockerfile`、`mise` 等）為主，另加三個 regex customManagers 處理 native manager 辨識不到的釘版（清單以 `renovate-preset.json` 為準）：
+- `air-verse/air` — dev compose（`compose.ya?ml` / `deploy/compose.*.ya?ml` 內 `go install github.com/air-verse/air@vX`）
+- `.mise/tasks/*` 任務 header 內 `"aqua:<pkg>"="<ver>"` / `"github:<pkg>"="<ver>"` 釘版（generic，只配對數字開頭版本，`="latest"` 掃描器不動）
+- `.mise/tasks/*` 任務 header 內 `bun="<ver>"`（映射 oven-sh/bun）
+
+> workflow（`.github/workflows/**`）內以 `go install …@vX` 釘版的工具（quill、parlay、gosec、govulncheck）與 `mise-task.yml` 的 `jdx/mise-action` `version:` pin **不在「org preset」customManager 覆蓋範圍**（preset 只含上列三個，供 consumer extend），而是由 meta repo 自家 `renovate.json` 的 self customManagers 追蹤自動 bump（consumer repo 無此類 workflow 工具釘版，故 preset 不需涵蓋）。
 
 ---
 
