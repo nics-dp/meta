@@ -2,7 +2,7 @@
 #MISE description="Node.js SAST via njsscan (NowSecure; OWASP Top 10 + npm/Express patterns)"
 #MISE hide=true
 #MISE raw=true
-#MISE tools={"aqua:astral-sh/uv"="0.11.21"}
+#MISE tools={"aqua:astral-sh/uv"="0.11.23"}
 # FIX: njsscan depends on semgrep -> pydantic 2.8.2 -> pydantic-core 2.20.1 whose
 # bundled PyO3 0.22 caps at Python 3.13. UV_PYTHON below pins the Python that uv
 # uses to 3.13 so the wheel build (triggered when no prebuilt wheel matches)
