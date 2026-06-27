@@ -187,10 +187,13 @@ jobs:
               echo "GOPRIVATE=github.com/nics-dp"
               echo "GONOSUMDB=github.com/nics-dp"
             } >> "$GITHUB_ENV"
-          elif [ "${UNTRUSTED_TRIGGER}" = "true" ]; then
-            # Token deliberately withheld: the caller ran this under an untrusted
-            # trigger (pull_request_target / workflow_run -- see the job env), so
-            # the privileged token is never minted for attacker-controllable code.
+          elif [ "${HAS_CI_APP}" = "true" ] && [ "${UNTRUSTED_TRIGGER}" = "true" ]; then
+            # Token deliberately withheld: the App IS configured but the caller ran
+            # this under an untrusted trigger (pull_request_target / workflow_run --
+            # see the job env), so the privileged token is never minted for
+            # attacker-controllable code. Guard on HAS_CI_APP so an unconfigured App
+            # still falls through to the generic "unavailable" warning below rather
+            # than misreporting a deliberate withholding.
             # gosec/govulncheck lose private-module access by design; non-blocking.
             echo "::warning::ci-read App token withheld on ${GITHUB_EVENT_NAME} (untrusted trigger; defense-in-depth); gosec/govulncheck cannot fetch private github.com/nics-dp modules and may fail to build -- expected and non-blocking."
           else
