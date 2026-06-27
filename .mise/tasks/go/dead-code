@@ -16,9 +16,9 @@ entry="${usage_entry:-./...}"
 cmd=(deadcode)
 [ -n "${usage_filter:-}" ] && cmd+=(-filter "$usage_filter")
 # 預設只做 production 分析（deadcode root 為所有 main package，常見於 cmd/*）。--whole-program 才把
-# 測試一併納入:-tags "$GO_TEST_TAGS" 編入 //go:build test scaffolding，-test 把
-# 測試當 root。兩者必須綁定 —— 只編入 test 檔卻不 root 測試，會讓每個 test-only
-# mock/helper 都被誤報為從 main 不可達。
+# 測試一併納入:-tags "$GO_TEST_TAGS"（預設 test）編入符合該 build tag 的 scaffolding，
+# -test 把測試當 root。兩者必須綁定 —— 只編入 test scaffolding 卻不 root 測試，會讓每個
+# test-only mock/helper 都被誤報為從 main 不可達。
 if [ "${usage_whole_program:-false}" = "true" ]; then
   [ -n "$GO_TEST_TAGS" ] && cmd+=(-tags "$GO_TEST_TAGS")
   cmd+=(-test)
