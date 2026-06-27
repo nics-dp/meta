@@ -220,7 +220,7 @@ jobs:
         if: inputs.run_go
         continue-on-error: true
         run: |
-          go install golang.org/x/vuln/cmd/govulncheck@v1.3.0
+          go install golang.org/x/vuln/cmd/govulncheck@v1.5.0
           # -format sarif makes govulncheck exit 0 regardless of findings; the
           # || true is a guard in case the build itself errors out.
           govulncheck -format sarif ./... > govulncheck.sarif || true
