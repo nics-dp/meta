@@ -5,7 +5,7 @@
 #MISE tools={"go:golang.org/x/tools/cmd/deadcode"="latest"}
 #USAGE arg "[entry]" help="Entry package(s) (default: ./... — analyzes every cmd/* main)"
 #USAGE flag "--filter <regex>" help="Only report functions matching regex"
-#USAGE flag "--whole-program" help="Also analyze test code (compiles -tags test files and roots tests via -test)"
+#USAGE flag "--whole-program" help="Also analyze test code (compiles files tagged with GO_TEST_TAGS [default: test] and roots tests via -test)"
 
 # shellcheck disable=SC2154
 set -euo pipefail
