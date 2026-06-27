@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-#MISE description="Find unreachable functions via whole-program analysis (golang.org/x/tools/cmd/deadcode)"
+#MISE description="Find unreachable functions in production code; --whole-program also analyzes tests (golang.org/x/tools/cmd/deadcode)"
 #MISE hide=true
 #MISE raw=true
 #MISE tools={"go:golang.org/x/tools/cmd/deadcode"="latest"}
-#USAGE arg "[entry]" help="Entry package(s) (default: ./... — analyzes every cmd/* main)"
+#USAGE arg "[entry]" help="Entry package(s) (default: ./... — roots at every main package, commonly cmd/*)"
 #USAGE flag "--filter <regex>" help="Only report functions matching regex"
-#USAGE flag "--whole-program" help="Run analysis even on test code"
+#USAGE flag "--whole-program" help="Also analyze test code (compiles files tagged with GO_TEST_TAGS [default: test] and roots tests via -test)"
 
 # shellcheck disable=SC2154
 set -euo pipefail
@@ -15,8 +15,14 @@ source "$(dirname "$0")/../lib/go-env"
 entry="${usage_entry:-./...}"
 cmd=(deadcode)
 [ -n "${usage_filter:-}" ] && cmd+=(-filter "$usage_filter")
-[ "${usage_whole_program:-false}" = "true" ] && cmd+=(-test)
-[ -n "$GO_TEST_TAGS" ] && cmd+=(-tags "$GO_TEST_TAGS")
+# 預設只做 production 分析（deadcode root 為所有 main package，常見於 cmd/*）。--whole-program 才把
+# 測試一併納入:-tags "$GO_TEST_TAGS"（預設 test）編入符合該 build tag 的 scaffolding，
+# -test 把測試當 root。兩者必須綁定 —— 只編入 test scaffolding 卻不 root 測試，會讓每個
+# test-only mock/helper 都被誤報為從 main 不可達。
+if [ "${usage_whole_program:-false}" = "true" ]; then
+  [ -n "$GO_TEST_TAGS" ] && cmd+=(-tags "$GO_TEST_TAGS")
+  cmd+=(-test)
+fi
 cmd+=("$entry")
 
 "${cmd[@]}"
