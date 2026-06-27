@@ -114,7 +114,7 @@ jobs:
       version: ${{ steps.version.outputs.version }}
       version_tag: ${{ steps.version.outputs.version_tag }}
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           ref: ${{ inputs.ref }}
           fetch-depth: 0
@@ -194,7 +194,7 @@ jobs:
           private-key: ${{ secrets.ci_read_app_private_key }}
           owner: ${{ github.repository_owner }}
 
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           ref: ${{ inputs.ref }}
           # The ref is a workflow_call input and may be attacker-influenced;
@@ -231,7 +231,7 @@ jobs:
 
       - name: Cache vendor directory
         if: contains(inputs.extra_build_flags, '-mod=vendor')
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: vendor
           key: go-vendor-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('go.sum') }}
@@ -406,7 +406,7 @@ jobs:
       attestations: write
       id-token: write
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           ref: ${{ inputs.ref }}
           # The ref is a workflow_call input and may be attacker-influenced;
