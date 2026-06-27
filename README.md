@@ -69,7 +69,7 @@ Consumer 在自家 `mise.toml` 定義同名 task 即覆寫（mise 偏好近檔�
 
 | Env var          | Default                                                     | 用途                               |
 | ---------------- | ----------------------------------------------------------- | ---------------------------------- |
-| `GO_TEST_TAGS`   | `test`                                                      | `go:test`/`bench-compare` 的 `-tags=` build tags；`go:dead-code` 僅 `--whole-program` 時帶入 |
+| `GO_TEST_TAGS`   | `test`                                                      | `go:test`/`go:bench-compare` 的 `-tags=` build tags；`go:dead-code` 僅 `--whole-program` 時帶入 |
 | `GO_TEST_PATHS`  | `./test/...`（如 `test/` 存在）/ `./...`                    | 測試目標 paths                     |
 | `GO_TEST_MOD`    | `vendor`（如 `vendor/` 存在）/ `mod`                        | `-mod=` 模式                       |
 | `GO_COVERPKG`    | `<go.mod module>/internal/...`（如 `internal/` 存在）/ empty | `-coverpkg=` 範圍                  |
