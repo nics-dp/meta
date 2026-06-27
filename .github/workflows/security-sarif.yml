@@ -70,6 +70,15 @@ jobs:
       # mise-task.yml: the ci-read App is identified by the CI_READ_APP_CLIENT_ID
       # org variable (client-id) plus the ci_read_app_private_key secret.
       HAS_CI_APP: ${{ vars.CI_READ_APP_CLIENT_ID != '' && secrets.ci_read_app_private_key != '' }}
+      # Defense-in-depth against CodeQL actions/untrusted-checkout: in a reusable
+      # workflow github.event_name is the CALLER's triggering event. Every current
+      # caller runs this on `pull_request` (PR code is fork-isolated / authored by
+      # trusted org members on INTERNAL repos), but pull_request_target and
+      # workflow_run would run attacker-controllable code WITH secrets in scope.
+      # Flag those triggers so the privileged ci-read App token is never minted
+      # for them -- the Go scanners then degrade to public-module-only and stay
+      # non-blocking, rather than exposing a private-repo-read token to PR code.
+      UNTRUSTED_TRIGGER: ${{ github.event_name == 'pull_request_target' || github.event_name == 'workflow_run' }}
     steps:
       # Mint a nics-dp-ci-read App token for private Go module access, but only
       # when the Go scanners run and the App is configured. The PAT model was
@@ -77,7 +86,7 @@ jobs:
       # token is minted here (mirrors mise-task.yml).
       - name: Mint private-module token
         id: priv-token
-        if: ${{ env.HAS_CI_APP == 'true' && inputs.run_go }}
+        if: ${{ env.HAS_CI_APP == 'true' && inputs.run_go && env.UNTRUSTED_TRIGGER != 'true' }}
         uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
         with:
           client-id: ${{ vars.CI_READ_APP_CLIENT_ID }}
@@ -178,6 +187,12 @@ jobs:
               echo "GOPRIVATE=github.com/nics-dp"
               echo "GONOSUMDB=github.com/nics-dp"
             } >> "$GITHUB_ENV"
+          elif [ "${UNTRUSTED_TRIGGER}" = "true" ]; then
+            # Token deliberately withheld: the caller ran this under an untrusted
+            # trigger (pull_request_target / workflow_run -- see the job env), so
+            # the privileged token is never minted for attacker-controllable code.
+            # gosec/govulncheck lose private-module access by design; non-blocking.
+            echo "::warning::ci-read App token withheld on ${GITHUB_EVENT_NAME} (untrusted trigger; defense-in-depth); gosec/govulncheck cannot fetch private github.com/nics-dp modules and may fail to build -- expected and non-blocking."
           else
             # No token: the ci-read App is not configured/inherited. Warn loudly
             # rather than skip silently -- gosec/govulncheck would otherwise fail
