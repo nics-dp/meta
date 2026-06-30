@@ -1,0 +1,308 @@
+# yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
+# Reusable workflow: one-shot release driver (no PR, no approval).
+#
+# Validates dev, snapshots it, merges to main, tags, and creates the GitHub
+# Release — which triggers the repo's release.yml to build/publish. main writes
+# use a release App that must be in the main/dev ruleset bypass_actors.
+#
+# LANGUAGE-AGNOSTIC: there is no actions/setup-go here. The toolchain (go,
+# python, node, uv, …) comes entirely from the repo's mise.toml [tools] via
+# jdx/mise-action, and the build/test/scan is just `mise run all`. The same
+# driver therefore serves go-service / go-lib / go-cli / frontend / python /
+# image repos unchanged — each repo's mise.toml decides what `all` does.
+#
+# dry_run=true: validate only against ci/release/<version>; skip merge/tag/release.
+# use_github_token=true: use the built-in GITHUB_TOKEN (not the release App) for the
+#   main push/tag/release — for test repos without the App configured or where main
+#   is unprotected. NOTE: a Release created by GITHUB_TOKEN does NOT trigger other
+#   workflows, so downstream release.yml won't fire in that mode.
+#
+# Usage in downstream `.github/workflows/auto-release.yml`:
+#   name: Auto-Release
+#   on:
+#     workflow_dispatch:
+#       inputs:
+#         version:    { description: "Release version (e.g. v0.3.0)", required: true, type: string }
+#         dry_run:    { description: "Validate only", required: false, type: boolean, default: false }
+#   permissions:
+#     contents: write
+#     pull-requests: read
+#   jobs:
+#     auto-release:
+#       uses: nics-dp/meta/.github/workflows/auto-release.yml@main
+#       with:
+#         version: ${{ inputs.version }}
+#         dry_run: ${{ inputs.dry_run }}
+#       secrets:
+#         ci_read_app_private_key:     ${{ secrets.CI_READ_APP_PRIVATE_KEY }}
+#         pre_release_app_private_key: ${{ secrets.PRE_RELEASE_APP_PRIVATE_KEY }}
+#       # (`secrets: inherit` also works.) client-ids are read from the
+#       # CI_READ_APP_CLIENT_ID / PRE_RELEASE_APP_CLIENT_ID org variables, which are
+#       # auto-available in reusable workflows — no passing needed.
+
+name: auto-release
+
+on:
+  workflow_call:
+    inputs:
+      version:
+        description: "Release version (e.g. v0.3.0); v<major>.<minor>.<patch>[.<hotfix>]"
+        required: true
+        type: string
+      dry_run:
+        description: "Validate only — skip merge/tag/release; use ci/release/<version> snapshot"
+        required: false
+        default: false
+        type: boolean
+      use_github_token:
+        description: "Use built-in GITHUB_TOKEN for main push/tag/release instead of the release App (test repos)"
+        required: false
+        default: false
+        type: boolean
+      runs_on:
+        description: 'Runner as JSON (e.g. ''"ubuntu-latest"'' or ''{"group":"releasers"}'')'
+        required: false
+        default: '"ubuntu-latest"'
+        type: string
+      fetch_depth:
+        description: "Git fetch depth for the snapshot checkout (0 = full history; needed by ci:trufflehog/betterleaks)"
+        required: false
+        default: 0
+        type: number
+      mise_version:
+        description: "Pinned mise version (kept in lockstep with mise-task.yml)"
+        required: false
+        default: "2026.6.14"
+        type: string
+    secrets:
+      ci_read_app_private_key:
+        required: false
+        description: "Private key of the nics-dp-ci-read App (paired with the CI_READ_APP_CLIENT_ID org variable). Used for private module/submodule fetch during `mise run all`."
+      pre_release_app_private_key:
+        required: false
+        description: "Private key of the release App (paired with the PRE_RELEASE_APP_CLIENT_ID org variable). Must be a main/dev ruleset bypass_actor. Only needed for real (non-dry-run) releases."
+
+# No concurrent releases: workflow-wide group, never cancel an in-flight
+# merge/tag/release. Same-version re-release is blocked by the duplicate-tag guard.
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write # GITHUB_TOKEN creates the release/<version> or ci/release/<version> snapshot (unprotected)
+  pull-requests: read
+
+jobs:
+  release:
+    name: auto-release ${{ inputs.version }}${{ inputs.dry_run && ' (dry-run)' || '' }}
+    runs-on: ${{ fromJSON(inputs.runs_on) }}
+    env:
+      VERSION: ${{ inputs.version }}
+      DRY_RUN: ${{ inputs.dry_run }}
+      # mise's minimum_release_age supply-chain control is forwarded to the pipx
+      # backend as a pip-only flag that the uv-backed pipx installer rejects,
+      # breaking tool installs (e.g. semgrep). "0" disables that injection and
+      # requires mise >= 2026.6.3 (see mise_version input / mise-task.yml).
+      MISE_MINIMUM_RELEASE_AGE: "0"
+      # Harmless on non-Go repos; needed for private go-module fetch during build.
+      GOPRIVATE: github.com/nics-dp
+      GONOSUMDB: github.com/nics-dp
+      GONOPROXY: github.com/nics-dp
+      # secrets cannot be referenced in step-level if:, so bridge to env here.
+      HAS_CI_APP: ${{ vars.CI_READ_APP_CLIENT_ID != '' && secrets.ci_read_app_private_key != '' }}
+    steps:
+      - name: Validate version format
+        shell: bash
+        run: |
+          if [[ ! "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(\.[0-9]+)?$ ]]; then
+            echo "::error::Invalid version format: '$VERSION'. Expected: v<major>.<minor>.<patch>[.<hotfix>]"
+            exit 1
+          fi
+
+      - name: Duplicate-tag guard
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Use the API (not git ls-remote): this step runs before any checkout, so
+          # there is no local repo / "origin" remote to query.
+          if gh api "repos/${{ github.repository }}/git/ref/tags/${VERSION}" >/dev/null 2>&1; then
+            echo "::error::Tag ${VERSION} already exists — refusing to re-release."
+            exit 1
+          fi
+          echo "No existing tag ${VERSION}."
+
+      - name: Resolve target branch
+        run: |
+          if [ "${DRY_RUN}" = "true" ]; then
+            echo "TARGET_BRANCH=ci/release/${VERSION}" >> "$GITHUB_ENV"
+          else
+            echo "TARGET_BRANCH=release/${VERSION}" >> "$GITHUB_ENV"
+          fi
+
+      # Read token for private module/submodule fetch during validation.
+      - name: Mint CI-read app token
+        id: ci-read
+        if: ${{ env.HAS_CI_APP == 'true' }}
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          client-id: ${{ vars.CI_READ_APP_CLIENT_ID }}
+          private-key: ${{ secrets.ci_read_app_private_key }}
+          owner: ${{ github.repository_owner }}
+
+      # Write token for main push + tag + release. Member of the main/dev ruleset
+      # bypass_actors. Skipped on dry-run and when use_github_token=true.
+      - name: Mint release app token
+        id: release-app
+        if: ${{ !inputs.dry_run && !inputs.use_github_token }}
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          client-id: ${{ vars.PRE_RELEASE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.pre_release_app_private_key }}
+          owner: ${{ github.repository_owner }}
+
+      # Snapshot the exact dev commit being released into TARGET_BRANCH (unprotected
+      # namespace; release/* and ci/release/* are not in the main/dev ruleset).
+      # GITHUB_TOKEN (contents: write) suffices. Idempotent.
+      # NOTE on partial-failure recovery: a real run that fails AFTER "Merge to main"
+      # but before the release is created leaves main advanced without a release.
+      # Recovery is manual (create the release for the merged commit, or revert).
+      - name: Create snapshot branch from dev
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          sha="$(gh api "repos/${{ github.repository }}/git/refs/heads/dev" --jq .object.sha)"
+          if gh api "repos/${{ github.repository }}/git/refs/heads/${TARGET_BRANCH}" >/dev/null 2>&1; then
+            gh api -X PATCH "repos/${{ github.repository }}/git/refs/heads/${TARGET_BRANCH}" \
+              -f "sha=${sha}" -F force=true
+            echo "Reset ${TARGET_BRANCH} to dev@${sha}."
+          else
+            gh api "repos/${{ github.repository }}/git/refs" \
+              -f "ref=refs/heads/${TARGET_BRANCH}" -f "sha=${sha}"
+            echo "Created ${TARGET_BRANCH} from dev@${sha}."
+          fi
+
+      - name: Checkout snapshot branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TARGET_BRANCH }}
+          fetch-depth: ${{ inputs.fetch_depth }}
+          token: ${{ github.token }}
+          # No submodules here: github.token can't read private sibling repos.
+          # mise run all's gs:clone (if any) fetches them via the insteadOf rewrite below.
+
+      - name: Configure git (private module auth)
+        if: ${{ steps.ci-read.outputs.token != '' }}
+        env:
+          APP_TOKEN: ${{ steps.ci-read.outputs.token }}
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          # insteadOf is multi-valued — the second line MUST use --add or it overwrites
+          # the first, breaking https go-module fetch (could not read Username).
+          git config --global url."https://x-access-token:${APP_TOKEN}@github.com/nics-dp/".insteadOf "https://github.com/nics-dp/"
+          git config --global --add url."https://x-access-token:${APP_TOKEN}@github.com/nics-dp/".insteadOf "git@github.com:nics-dp/"
+
+      # Toolchain comes from the repo's mise.toml [tools] — no per-language setup step.
+      - name: Set up mise
+        uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
+        with:
+          version: ${{ inputs.mise_version }}
+          cache: true
+          experimental: true
+
+      # Full release validation: init (deps/submodules/vendor) -> generate -> api-fix
+      # -> build -> test -> ci, exactly as the repo defines `all`. Does NOT bump deps;
+      # trusts dev's lockfile/go.mod.
+      - name: Run mise run all
+        run: mise run all
+
+      # The build must not change committed code (generate/api-fix/lint-fix produce
+      # no diff), so the published artifact faithfully reflects dev.
+      - name: Verify no working-tree drift
+        run: |
+          if ! git diff --quiet; then
+            echo "::error::mise run all modified tracked files — branch is not canonical."
+            git --no-pager diff --stat
+            exit 1
+          fi
+          echo "No drift — committed code is canonical."
+
+      - name: License scan
+        run: mise run ci:trivy-license
+
+      - name: Secret scan
+        run: mise run ci:betterleaks
+
+      - name: Deep secret scan
+        run: mise run ci:trufflehog
+
+      # TOCTOU mitigation: the duplicate-tag guard ran before the (long) validation,
+      # so a same-name tag/release could have appeared meanwhile. Re-check right
+      # before mutating main — shrinks the race window to this tiny gap.
+      - name: Re-check tag before merge
+        if: ${{ !inputs.dry_run }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh api "repos/${{ github.repository }}/git/ref/tags/${VERSION}" >/dev/null 2>&1; then
+            echo "::error::Tag ${VERSION} appeared during validation — aborting before touching main."
+            exit 1
+          fi
+          echo "Tag ${VERSION} still absent — proceeding to merge."
+
+      # Real runs only. Merge the validated snapshot into main via the REST Merges API
+      # (server-side merge), NOT a local `git push`:
+      #   1. Verified signatures: API-created commits are signed by GitHub (we omit
+      #      author/committer), satisfying the required_signatures rule genuinely.
+      #   2. Sidesteps the actions/checkout persisted GITHUB_TOKEN extraheader that
+      #      would otherwise hijack a local push to authenticate as github-actions[bot].
+      # The actor is the release App (in main/dev ruleset bypass_actors), so PR/CodeQL/
+      # signature rules are bypassed. use_github_token=true falls back to GITHUB_TOKEN.
+      - name: Merge to main
+        if: ${{ !inputs.dry_run }}
+        env:
+          GH_TOKEN: ${{ inputs.use_github_token && github.token || steps.release-app.outputs.token }}
+        run: |
+          # Don't read this call's body: 201 (merge created) and 204 (main already up to
+          # date) are both 2xx -> exit 0, while 409/403 are non-2xx -> gh exits non-zero
+          # -> step hard-fails under `bash -e`. Avoid --jq here (204 empty body would error).
+          gh api "repos/${{ github.repository }}/merges" \
+            -f base=main \
+            -f head="${TARGET_BRANCH}" \
+            -f commit_message="release: merge ${TARGET_BRANCH} into main for ${VERSION}" >/dev/null
+          MAIN_SHA="$(gh api "repos/${{ github.repository }}/git/refs/heads/main" --jq '.object.sha')"
+          echo "MAIN_SHA=${MAIN_SHA}" >> "$GITHUB_ENV"
+
+      # Real runs only. gh release create makes the tag AND the Release in one step;
+      # created by the release App (non-GITHUB_TOKEN) so release.yml's
+      # `release: created` trigger fires -> build/publish.
+      - name: Tag and create GitHub Release
+        if: ${{ !inputs.dry_run }}
+        env:
+          GH_TOKEN: ${{ inputs.use_github_token && github.token || steps.release-app.outputs.token }}
+        run: |
+          if [ -z "${MAIN_SHA}" ]; then
+            echo "::error::MAIN_SHA is empty — the Merge to main step did not complete."
+            exit 1
+          fi
+          gh release create "${VERSION}" \
+            --target "${MAIN_SHA}" \
+            --title "${VERSION}" \
+            --notes "Automated release ${VERSION} (merged ${TARGET_BRANCH} → main). Build/publish runs via release.yml."
+          echo "Created tag + release ${VERSION} at ${MAIN_SHA}."
+
+      - name: Summary
+        if: success()
+        run: |
+          {
+            echo "## auto-release — ${VERSION}"
+            echo
+            echo "✅ Validation passed for \`${TARGET_BRANCH}\`."
+            echo
+            if [ "${DRY_RUN}" = "true" ]; then
+              echo "> Dry-run: no merge, no tag, no release. main untouched, release.yml not triggered."
+            else
+              echo "Merged \`${TARGET_BRANCH}\` → \`main\`, tagged \`${VERSION}\`, created the Release."
+              echo "Build/publish is running via \`release.yml\` (triggered by the release)."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
