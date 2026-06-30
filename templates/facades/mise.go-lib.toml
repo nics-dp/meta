@@ -36,6 +36,7 @@ includes = ["git::https://github.com/nics-dp/meta.git//.mise/tasks?ref=main"]
 silent = "stdout"
 description = "Tidy and vendor Go modules"
 depends = ["go:install"]
+depends_post = ["meta:bump"]
 
 [tasks.clean]
 silent = "stdout"
@@ -50,9 +51,11 @@ depends_post = ["go:report"]
 [tasks.update]
 silent = "stdout"
 description = "Bump deps, update submodules, and refresh shared atoms"
-depends = ["go:update", "gs:update"]
-depends_post = ["meta:bump"]
-
+# meta:bump runs first in its OWN invocation (run array steps are separate
+# `mise run` processes): it refreshes the shared atom cache, then the deps
+# step re-resolves and runs against the latest upstream atoms. Separate
+# invocations also avoid the cache-clear race that depends/depends_post had.
+run = ["mise run meta:bump", "mise run go:update gs:update"]
 [tasks.ci]
 description = "Run all CI checks"
 depends = [
@@ -65,8 +68,8 @@ depends = [
 ]
 
 [tasks.all]
-description = "init -> generate -> api-fix -> test -> ci"
-depends = ["init", "go:generate", "go:api-fix", "test", "ci"]
+description = "init -> generate -> api-fix sequentially, then test/ci in parallel"
+run = ["mise run init", "mise run go:generate", "mise run go:api-fix", "mise run test ci"]
 
 [tasks.sbom]
 description = "Generate enriched SBOM and scan"

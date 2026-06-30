@@ -2,6 +2,7 @@
 #MISE description="Lint Go (read-only)"
 #MISE hide=true
 #MISE raw=true
+#MISE depends=["go:install"]
 #MISE tools={"aqua:golangci/golangci-lint"="2.12.2"}
 
 golangci-lint run ./...
