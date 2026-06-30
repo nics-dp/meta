@@ -223,6 +223,13 @@ jobs:
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          # Self-healing: drop any stale token-bearing url.*@github.com/nics-dp insteadOf
+          # rewrites left by a prior run on a self-hosted runner (global git config can
+          # persist across jobs) so we never pick up an expired token. Paired with the
+          # always() teardown step at the end. Mirrors go-release.yml.
+          while read -r s; do
+            if [ -n "$s" ]; then git config --global --remove-section "$s" 2>/dev/null || true; fi
+          done < <(git config --global --name-only --get-regexp '^url\..*@github\.com/nics-dp' 2>/dev/null | sed -E 's/\.insteadof$//' | sort -u || true)
           # insteadOf is multi-valued — the second line MUST use --add or it overwrites
           # the first, breaking https go-module fetch (could not read Username).
           git config --global url."https://x-access-token:${APP_TOKEN}@github.com/nics-dp/".insteadOf "https://github.com/nics-dp/"
@@ -332,3 +339,13 @@ jobs:
               echo "Build/publish is running via \`release.yml\` (triggered by the release)."
             fi
           } >> "$GITHUB_STEP_SUMMARY"
+
+      # Teardown: remove the token-bearing insteadOf rewrite so it can't persist in a
+      # self-hosted runner's global git config across jobs. always() = runs even if a
+      # step above failed. Paired with the self-healing cleanup in "Configure git".
+      - name: Revoke private module git config
+        if: ${{ always() && steps.ci-read.outputs.token != '' }}
+        env:
+          APP_TOKEN: ${{ steps.ci-read.outputs.token }}
+        run: |
+          git config --global --remove-section "url.https://x-access-token:${APP_TOKEN}@github.com/nics-dp/" 2>/dev/null || true
