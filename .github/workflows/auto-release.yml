@@ -304,8 +304,12 @@ jobs:
           if [ -n "${merge_resp}" ]; then
             MAIN_SHA="$(printf '%s' "${merge_resp}" | jq -r '.sha')" # the new merge commit
           else
-            # 204: main already contains the validated snapshot; tag its current tip.
-            MAIN_SHA="$(gh api "repos/${GH_REPO}/git/ref/heads/main" --jq '.object.sha')"
+            # 204: main already contains the validated snapshot. Tag the snapshot commit
+            # itself (TARGET_BRANCH) rather than main's tip — main may have advanced past
+            # the snapshot (e.g. a hotfix merged straight to main), and the release must
+            # point at the commit this run actually validated. It is reachable from main
+            # (the 204 guarantees main contains it), so the tag is valid.
+            MAIN_SHA="$(gh api "repos/${GH_REPO}/git/ref/heads/${TARGET_BRANCH}" --jq '.object.sha')"
           fi
           echo "MAIN_SHA=${MAIN_SHA}" >> "$GITHUB_ENV"
 
