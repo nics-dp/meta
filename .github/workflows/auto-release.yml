@@ -111,8 +111,8 @@ jobs:
       # secrets cannot be referenced in step-level if:, so bridge to env here.
       HAS_CI_APP: ${{ vars.CI_READ_APP_CLIENT_ID != '' && secrets.ci_read_app_private_key != '' }}
       # Pass github.repository via env (not ${{ }} inline in run:) — keeps it out of
-      # the shell script body so CodeQL's actions-injection rule stays clean. gh also
-      # reads GH_REPO natively, but we reference $REPO explicitly in API paths.
+      # the shell script body so CodeQL's actions-injection rule stays clean. We
+      # reference $GH_REPO in the gh API paths; gh also reads GH_REPO natively.
       GH_REPO: ${{ github.repository }}
     steps:
       # Fail fast if the runner lacks the GitHub CLI: every API/release step below
