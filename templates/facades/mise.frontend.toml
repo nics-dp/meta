@@ -95,4 +95,4 @@ depends = ["sbom:trivy", "sbom:grype"]
 
 [tasks.all]
 description = "init first, then build/test/ci in parallel"
-run = ["mise run init", "mise run build test ci"]
+run = ["mise run init", "mise run build ::: test ::: ci"]
