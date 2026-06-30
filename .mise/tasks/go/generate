@@ -2,6 +2,7 @@
 #MISE description="Run go generate (code generation)"
 #MISE hide=true
 #MISE raw=true
+#MISE depends=["go:install"]
 #MISE silent="stdout"
 
 set -euo pipefail
