@@ -18,10 +18,12 @@ on:
         default: false
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   self-release:
+    permissions:
+      contents: write # auto-release.yml's GITHUB_TOKEN creates the release snapshot branch + tag/release
     uses: nics-dp/meta/.github/workflows/auto-release.yml@main
     with:
       version: ${{ inputs.version }}
