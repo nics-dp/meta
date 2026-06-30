@@ -91,4 +91,4 @@ depends = ["sbom:trivy", "sbom:grype"]
 
 [tasks.all]
 description = "init -> build -> test -> ci"
-run = ["mise run init", "mise run build test ci"]
+run = ["mise run init", "mise run build", "mise run test", "mise run ci"]
