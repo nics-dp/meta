@@ -136,6 +136,9 @@ jobs:
         run: |
           # Use the API (not git ls-remote): this step runs before any checkout, so
           # there is no local repo / "origin" remote to query.
+          # NOTE: git/ref/<ref> (singular) is the "get a single reference" endpoint —
+          # 200 if the exact tag exists, 404 if not — which is exactly what an existence
+          # check needs. It is NOT a typo for the plural git/refs/ (list) endpoint.
           if gh api "repos/${GH_REPO}/git/ref/tags/${VERSION}" >/dev/null 2>&1; then
             echo "::error::Tag ${VERSION} already exists — refusing to re-release."
             exit 1
