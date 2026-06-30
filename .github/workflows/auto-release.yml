@@ -40,7 +40,7 @@
 #       # CI_READ_APP_CLIENT_ID / PRE_RELEASE_APP_CLIENT_ID org variables, which are
 #       # auto-available in reusable workflows — no passing needed.
 
-name: auto-release
+name: Auto-Release
 
 on:
   workflow_call:
