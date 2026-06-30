@@ -115,6 +115,18 @@ jobs:
       # reads GH_REPO natively, but we reference $REPO explicitly in API paths.
       GH_REPO: ${{ github.repository }}
     steps:
+      # Fail fast if the runner lacks the GitHub CLI: every API/release step below
+      # shells out to `gh`. ubuntu-latest ships it, but a self-hosted runs_on group
+      # might not — without this the workflow would die mid-release with an obscure
+      # "gh: command not found" instead of a clear preflight error.
+      - name: Preflight — require gh
+        shell: bash
+        run: |
+          command -v gh >/dev/null 2>&1 || {
+            echo "::error::GitHub CLI (gh) is not installed on this runner — auto-release requires it."
+            exit 1
+          }
+
       - name: Validate version format
         shell: bash
         run: |
