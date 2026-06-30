@@ -189,7 +189,7 @@ jobs:
               -f "sha=${sha}" -F force=true
             echo "Reset ${TARGET_BRANCH} to dev@${sha}."
           else
-            gh api "repos/${GH_REPO}/git/refs" \
+            gh api -X POST "repos/${GH_REPO}/git/refs" \
               -f "ref=refs/heads/${TARGET_BRANCH}" -f "sha=${sha}"
             echo "Created ${TARGET_BRANCH} from dev@${sha}."
           fi
@@ -290,7 +290,7 @@ jobs:
           # Don't read this call's body: 201 (merge created) and 204 (main already up to
           # date) are both 2xx -> exit 0, while 409/403 are non-2xx -> gh exits non-zero
           # -> step hard-fails under `bash -e`. Avoid --jq here (204 empty body would error).
-          gh api "repos/${GH_REPO}/merges" \
+          gh api -X POST "repos/${GH_REPO}/merges" \
             -f base=main \
             -f head="${TARGET_BRANCH}" \
             -f commit_message="release: merge ${TARGET_BRANCH} into main for ${VERSION}" >/dev/null
