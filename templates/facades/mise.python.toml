@@ -42,6 +42,7 @@ includes = ["git::https://github.com/nics-dp/meta.git//.mise/tasks?ref=main"]
 silent = "stdout"
 description = "Install Python deps"
 depends = ["py:install"]
+depends_post = ["meta:bump"]
 
 [tasks.clean]
 silent = "stdout"
@@ -70,8 +71,11 @@ depends = ["py:test --bench"]
 [tasks.update]
 silent = "stdout"
 description = "Bump deps and refresh shared atoms"
-depends = ["py:update", "meta:bump"]
-
+# meta:bump runs first in its OWN invocation (run array steps are separate
+# `mise run` processes): it refreshes the shared atom cache, then the deps
+# step re-resolves and runs against the latest upstream atoms. Separate
+# invocations also avoid the cache-clear race that depends/depends_post had.
+run = ["mise run meta:bump", "mise run py:update"]
 [tasks.ci]
 description = "Run all CI checks"
 depends = [
@@ -96,5 +100,5 @@ depends = [
 ]
 
 [tasks.all]
-description = "init -> build -> test -> ci"
-depends = ["init", "build", "test", "ci"]
+description = "init first, then build/test/ci in parallel"
+run = ["mise run init", "mise run build test ci"]

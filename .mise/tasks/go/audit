@@ -2,6 +2,7 @@
 #MISE description="Run govulncheck vulnerability check"
 #MISE hide=true
 #MISE raw=true
+#MISE depends=["go:install"]
 #MISE tools={"go:golang.org/x/vuln/cmd/govulncheck"="latest"}
 
 govulncheck ./...

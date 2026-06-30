@@ -2,6 +2,7 @@
 #MISE description="Run Go tests. Modes: default=unit, --race, --coverage, --bench, --full=race+coverage+bench"
 #MISE hide=true
 #MISE raw=true
+#MISE depends=["go:install"]
 #USAGE flag "--race" help="Enable race detector"
 #USAGE flag "--coverage" help="Enable coverage (writes coverage.out)"
 #USAGE flag "--bench" help="Run benchmarks instead of tests"

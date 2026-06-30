@@ -23,9 +23,18 @@ includes = [
 description = "Run all CI checks"
 depends = [
   "iac:trivy",
-  "ci:trivy-license",
   "ci:semgrep",
 ]
+
+# Full validation gate. Entry point for the auto-release driver (`mise run all`)
+# so meta can dogfood its own reusable release workflow. Config repo has no
+# build/test — validation is actionlint (workflow YAML) + the ci scans. All
+# steps are read-only (no working-tree drift), so they run in parallel.
+# Secret/license scans (betterleaks/trufflehog/trivy-license) are run separately
+# by the driver itself, so they are not duplicated here.
+[tasks.all]
+description = "Validation gate: actionlint + ci scans (auto-release driver entry point)"
+depends = ["iac:actionlint", "ci"]
 
 # ==============================================================================
 #  SBOM Tasks

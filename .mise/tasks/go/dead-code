@@ -2,6 +2,7 @@
 #MISE description="Find unreachable functions in production code; --whole-program also analyzes tests (golang.org/x/tools/cmd/deadcode)"
 #MISE hide=true
 #MISE raw=true
+#MISE depends=["go:install"]
 #MISE tools={"go:golang.org/x/tools/cmd/deadcode"="latest"}
 #USAGE arg "[entry]" help="Entry package(s) (default: ./... — roots at every main package, commonly cmd/*)"
 #USAGE flag "--filter <regex>" help="Only report functions matching regex"
