@@ -12,10 +12,6 @@
 # image repos unchanged — each repo's mise.toml decides what `all` does.
 #
 # dry_run=true: validate only against ci/release/<version>; skip merge/tag/release.
-# use_github_token=true: use the built-in GITHUB_TOKEN (not the release App) for the
-#   main push/tag/release — for test repos without the App configured or where main
-#   is unprotected. NOTE: a Release created by GITHUB_TOKEN does NOT trigger other
-#   workflows, so downstream release.yml won't fire in that mode.
 #
 # Usage in downstream `.github/workflows/auto-release.yml`:
 #   name: Auto-Release
@@ -51,11 +47,6 @@ on:
         type: string
       dry_run:
         description: "Validate only — skip merge/tag/release; use ci/release/<version> snapshot"
-        required: false
-        default: false
-        type: boolean
-      use_github_token:
-        description: "Use built-in GITHUB_TOKEN for main push/tag/release instead of the release App (test repos)"
         required: false
         default: false
         type: boolean
@@ -172,10 +163,10 @@ jobs:
           owner: ${{ github.repository_owner }}
 
       # Write token for main push + tag + release. Member of the main/dev ruleset
-      # bypass_actors. Skipped on dry-run and when use_github_token=true.
+      # bypass_actors. Skipped on dry-run.
       - name: Mint release app token
         id: release-app
-        if: ${{ !inputs.dry_run && !inputs.use_github_token }}
+        if: ${{ !inputs.dry_run }}
         uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
         with:
           client-id: ${{ vars.PRE_RELEASE_APP_CLIENT_ID }}
@@ -290,11 +281,11 @@ jobs:
       #   2. Sidesteps the actions/checkout persisted GITHUB_TOKEN extraheader that
       #      would otherwise hijack a local push to authenticate as github-actions[bot].
       # The actor is the release App (in main/dev ruleset bypass_actors), so PR/CodeQL/
-      # signature rules are bypassed. use_github_token=true falls back to GITHUB_TOKEN.
+      # signature rules are bypassed.
       - name: Merge to main
         if: ${{ !inputs.dry_run }}
         env:
-          GH_TOKEN: ${{ inputs.use_github_token && github.token || steps.release-app.outputs.token }}
+          GH_TOKEN: ${{ steps.release-app.outputs.token }}
         run: |
           # Don't read this call's body: 201 (merge created) and 204 (main already up to
           # date) are both 2xx -> exit 0, while 409/403 are non-2xx -> gh exits non-zero
@@ -312,7 +303,7 @@ jobs:
       - name: Tag and create GitHub Release
         if: ${{ !inputs.dry_run }}
         env:
-          GH_TOKEN: ${{ inputs.use_github_token && github.token || steps.release-app.outputs.token }}
+          GH_TOKEN: ${{ steps.release-app.outputs.token }}
         run: |
           if [ -z "${MAIN_SHA}" ]; then
             echo "::error::MAIN_SHA is empty — the Merge to main step did not complete."
