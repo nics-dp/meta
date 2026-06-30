@@ -66,7 +66,7 @@ depends = [
 
 [tasks.all]
 description = "init -> generate -> api-fix -> test -> ci"
-depends = ["init", "go:generate", "go:api-fix", "test", "ci"]
+run = ["mise run init", "mise run go:generate", "mise run go:api-fix", "mise run test ci"]
 
 [tasks.sbom]
 description = "Generate enriched SBOM and scan"
