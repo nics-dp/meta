@@ -114,13 +114,15 @@ jobs:
       # shells out to `gh`. ubuntu-latest ships it, but a self-hosted runs_on group
       # might not — without this the workflow would die mid-release with an obscure
       # "gh: command not found" instead of a clear preflight error.
-      - name: Preflight — require gh
+      - name: Preflight — require gh and jq
         shell: bash
         run: |
-          command -v gh >/dev/null 2>&1 || {
-            echo "::error::GitHub CLI (gh) is not installed on this runner — auto-release requires it."
-            exit 1
-          }
+          for tool in gh jq; do
+            command -v "$tool" >/dev/null 2>&1 || {
+              echo "::error::'$tool' is not installed on this runner — auto-release requires it."
+              exit 1
+            }
+          done
 
       - name: Validate version format
         shell: bash
@@ -289,14 +291,22 @@ jobs:
         env:
           GH_TOKEN: ${{ steps.release-app.outputs.token }}
         run: |
-          # Don't read this call's body: 201 (merge created) and 204 (main already up to
-          # date) are both 2xx -> exit 0, while 409/403 are non-2xx -> gh exits non-zero
-          # -> step hard-fails under `bash -e`. Avoid --jq here (204 empty body would error).
-          gh api -X POST "repos/${GH_REPO}/merges" \
+          # Capture the response so the tag points at the EXACT merge commit rather than a
+          # re-read of main (which could in principle race a concurrent advance — though the
+          # workflow concurrency group plus the main ruleset, where only this App can push
+          # main, already close that window). A plain assignment propagates gh's exit under
+          # `set -e`, so a 409 conflict / 403 rule violation still hard-fails here. 201
+          # returns the merge commit JSON; 204 (main already contains TARGET_BRANCH) is empty.
+          merge_resp="$(gh api -X POST "repos/${GH_REPO}/merges" \
             -f base=main \
             -f head="${TARGET_BRANCH}" \
-            -f commit_message="release: merge ${TARGET_BRANCH} into main for ${VERSION}" >/dev/null
-          MAIN_SHA="$(gh api "repos/${GH_REPO}/git/refs/heads/main" --jq '.object.sha')"
+            -f commit_message="release: merge ${TARGET_BRANCH} into main for ${VERSION}")"
+          if [ -n "${merge_resp}" ]; then
+            MAIN_SHA="$(printf '%s' "${merge_resp}" | jq -r '.sha')" # the new merge commit
+          else
+            # 204: main already contains the validated snapshot; tag its current tip.
+            MAIN_SHA="$(gh api "repos/${GH_REPO}/git/ref/heads/main" --jq '.object.sha')"
+          fi
           echo "MAIN_SHA=${MAIN_SHA}" >> "$GITHUB_ENV"
 
       # Real runs only. gh release create makes the tag AND the Release in one step;
