@@ -65,8 +65,15 @@ depends = [
 ]
 
 [tasks.all]
-description = "init -> generate -> api-fix -> test -> ci"
-depends = ["init", "go:generate", "go:api-fix", "test", "ci"]
+description = "init -> {generate, api-fix, test, ci}"
+# See mise.go-service.toml: init (go mod tidy + vendor) must finish before any Go
+# task runs, since Go auto-selects -mod=vendor once vendor/ exists. A parallel
+# `depends` sibling raced consumers against a half-written vendor/ ->
+# "inconsistent vendoring". Run init first, then fan the rest out in parallel.
+run = [
+  "mise run init",
+  "mise run go:generate go:api-fix test ci",
+]
 
 [tasks.sbom]
 description = "Generate enriched SBOM and scan"
