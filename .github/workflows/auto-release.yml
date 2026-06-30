@@ -213,8 +213,9 @@ jobs:
         env:
           APP_TOKEN: ${{ steps.ci-read.outputs.token }}
         run: |
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          # No git user.name/email here: this workflow never makes a local commit (the
+          # merge is server-side via the REST API), and writing them with --global would
+          # clobber a self-hosted runner's identity across jobs. Matches go-release.yml.
           # Self-healing: drop any stale token-bearing url.*@github.com/nics-dp insteadOf
           # rewrites left by a prior run on a self-hosted runner (global git config can
           # persist across jobs) so we never pick up an expired token. Paired with the
