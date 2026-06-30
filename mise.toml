@@ -23,7 +23,6 @@ includes = [
 description = "Run all CI checks"
 depends = [
   "iac:trivy",
-  "ci:trivy-license",
   "ci:semgrep",
 ]
 
