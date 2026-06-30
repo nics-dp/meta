@@ -345,7 +345,11 @@ jobs:
       # step above failed. Paired with the self-healing cleanup in "Configure git".
       - name: Revoke private module git config
         if: ${{ always() && steps.ci-read.outputs.token != '' }}
-        env:
-          APP_TOKEN: ${{ steps.ci-read.outputs.token }}
         run: |
-          git config --global --remove-section "url.https://x-access-token:${APP_TOKEN}@github.com/nics-dp/" 2>/dev/null || true
+          # Remove every url.*@github.com/nics-dp insteadOf section (both the trailing-
+          # slash and no-slash variants, regardless of token) so nothing token-bearing
+          # persists in a self-hosted runner's global git config. Same matcher as the
+          # setup self-heal — more thorough than removing only the section we wrote.
+          while read -r s; do
+            if [ -n "$s" ]; then git config --global --remove-section "$s" 2>/dev/null || true; fi
+          done < <(git config --global --name-only --get-regexp '^url\..*@github\.com/nics-dp' 2>/dev/null | sed -E 's/\.insteadof$//' | sort -u || true)
