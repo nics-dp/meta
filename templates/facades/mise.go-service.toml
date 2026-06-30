@@ -103,5 +103,5 @@ description = "Generate enriched SBOM and scan"
 depends = ["sbom:trivy", "sbom:grype"]
 
 [tasks.all]
-description = "init -> generate -> api-fix -> build -> test -> ci"
-run = ["mise run init", "mise run go:generate", "mise run go:api-fix", "mise run build", "mise run test", "mise run ci"]
+description = "init -> generate -> api-fix sequentially, then build/test/ci in parallel"
+run = ["mise run init", "mise run go:generate", "mise run go:api-fix", "mise run build test ci"]
