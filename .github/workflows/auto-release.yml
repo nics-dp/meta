@@ -96,6 +96,12 @@ jobs:
   release:
     name: auto-release ${{ inputs.version }}${{ inputs.dry_run && ' (dry-run)' || '' }}
     runs-on: ${{ fromJSON(inputs.runs_on) }}
+    # This driver targets Linux runners (ubuntu-latest, or a Linux self-hosted group
+    # via runs_on); every run: step uses POSIX/bash. Pin bash so a runner whose default
+    # shell differs still works. Full cross-OS (Windows) is not a goal.
+    defaults:
+      run:
+        shell: bash
     env:
       VERSION: ${{ inputs.version }}
       DRY_RUN: ${{ inputs.dry_run }}
@@ -203,6 +209,10 @@ jobs:
           ref: ${{ env.TARGET_BRANCH }}
           fetch-depth: ${{ inputs.fetch-depth }}
           token: ${{ github.token }}
+          # Don't leave the token in .git/config — `mise run all` runs repo code after
+          # this, and private fetches use the ci-read insteadOf rewrite below, not the
+          # checkout credential. Matches the repo convention (go-release/image-release/…).
+          persist-credentials: false
           # No submodules here: github.token can't read private sibling repos.
           # mise run all's gs:clone (if any) fetches them via the insteadOf rewrite below.
 
