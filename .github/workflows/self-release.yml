@@ -1,0 +1,33 @@
+# yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
+# meta dogfoods its own reusable auto-release driver. This self-caller lets meta
+# cut its own patch release (snapshot dev -> `mise run all` validate -> merge to
+# main -> tag -> GitHub Release) the same way consumer repos do.
+name: Self-Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version (e.g. v0.2.5.5)"
+        required: true
+        type: string
+      dry_run:
+        description: "Validate only (skip merge/tag/release)"
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  self-release:
+    permissions:
+      contents: write # auto-release.yml's GITHUB_TOKEN creates the release snapshot branch + tag/release
+    uses: nics-dp/meta/.github/workflows/auto-release.yml@main
+    with:
+      version: ${{ inputs.version }}
+      dry_run: ${{ inputs.dry_run }}
+    secrets:
+      ci_read_app_private_key:     ${{ secrets.CI_READ_APP_PRIVATE_KEY }}
+      pre_release_app_private_key: ${{ secrets.PRE_RELEASE_APP_PRIVATE_KEY }}
