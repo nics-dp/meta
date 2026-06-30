@@ -141,11 +141,18 @@ jobs:
           # NOTE: git/ref/<ref> (singular) is the "get a single reference" endpoint —
           # 200 if the exact tag exists, 404 if not — which is exactly what an existence
           # check needs. It is NOT a typo for the plural git/refs/ (list) endpoint.
-          if gh api "repos/${GH_REPO}/git/ref/tags/${VERSION}" >/dev/null 2>&1; then
+          # Distinguish 200 (exists → abort) from 404 (absent → proceed) from any other
+          # error (403/5xx/network/rate-limit). A bare `if gh api …; then` would treat
+          # every non-2xx as "absent" and let the release proceed to mutate main on a
+          # transient failure. Capture stderr; only a clean "(HTTP 404)" is safe to pass.
+          if err="$(gh api "repos/${GH_REPO}/git/ref/tags/${VERSION}" 2>&1 >/dev/null)"; then
             echo "::error::Tag ${VERSION} already exists — refusing to re-release."
             exit 1
           fi
-          echo "No existing tag ${VERSION}."
+          case "$err" in
+            *"HTTP 404"*) echo "No existing tag ${VERSION}." ;;
+            *) echo "::error::tag existence check failed (not a 404, refusing to proceed): ${err}"; exit 1 ;;
+          esac
 
       - name: Resolve target branch
         run: |
@@ -278,11 +285,17 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if gh api "repos/${GH_REPO}/git/ref/tags/${VERSION}" >/dev/null 2>&1; then
+          # Same 200/404/other tri-state as the duplicate-tag guard: a transient API
+          # error must NOT be read as "tag absent" here — that would forfeit this
+          # TOCTOU re-check's whole purpose right before main is mutated.
+          if err="$(gh api "repos/${GH_REPO}/git/ref/tags/${VERSION}" 2>&1 >/dev/null)"; then
             echo "::error::Tag ${VERSION} appeared during validation — aborting before touching main."
             exit 1
           fi
-          echo "Tag ${VERSION} still absent — proceeding to merge."
+          case "$err" in
+            *"HTTP 404"*) echo "Tag ${VERSION} still absent — proceeding to merge." ;;
+            *) echo "::error::tag re-check failed (not a 404, refusing to touch main): ${err}"; exit 1 ;;
+          esac
 
       # Real runs only. Merge the validated snapshot into main via the REST Merges API
       # (server-side merge), NOT a local `git push`:
