@@ -22,7 +22,6 @@
 #         dry_run:    { description: "Validate only", required: false, type: boolean, default: false }
 #   permissions:
 #     contents: write
-#     pull-requests: read
 #   jobs:
 #     auto-release:
 #       uses: nics-dp/meta/.github/workflows/auto-release.yml@main
@@ -81,7 +80,6 @@ concurrency:
 
 permissions:
   contents: write # GITHUB_TOKEN creates the release/<version> or ci/release/<version> snapshot (unprotected)
-  pull-requests: read
 
 jobs:
   release:
@@ -335,7 +333,11 @@ jobs:
       # self-hosted runner's global git config across jobs. always() = runs even if a
       # step above failed. Paired with the self-healing cleanup in "Configure git".
       - name: Revoke private module git config
-        if: ${{ always() && steps.ci-read.outputs.token != '' }}
+        # Unconditional (always, not gated on this run minting a token): on a self-hosted
+        # runner a prior interrupted run may have left a token-bearing section behind, and
+        # a run that mints no token would otherwise never clean it. The regex removal needs
+        # no token, so sweeping every time is safe (a no-op on ephemeral runners).
+        if: ${{ always() }}
         run: |
           # Remove every url.*@github.com/nics-dp insteadOf section (both the trailing-
           # slash and no-slash variants, regardless of token) so nothing token-bearing
