@@ -186,8 +186,11 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          sha="$(gh api "repos/${GH_REPO}/git/refs/heads/dev" --jq .object.sha)"
-          if gh api "repos/${GH_REPO}/git/refs/heads/${TARGET_BRANCH}" >/dev/null 2>&1; then
+          # Use singular git/ref/<ref> (exact "get a single reference", 404 if absent),
+          # not plural git/refs/<ref> which prefix-matches and would return an array
+          # for a longer sibling (e.g. heads/release/v0.3.0 matching release/v0.3.0.1).
+          sha="$(gh api "repos/${GH_REPO}/git/ref/heads/dev" --jq .object.sha)"
+          if gh api "repos/${GH_REPO}/git/ref/heads/${TARGET_BRANCH}" >/dev/null 2>&1; then
             gh api -X PATCH "repos/${GH_REPO}/git/refs/heads/${TARGET_BRANCH}" \
               -f "sha=${sha}" -F force=true
             echo "Reset ${TARGET_BRANCH} to dev@${sha}."
@@ -248,9 +251,12 @@ jobs:
       # no diff), so the published artifact faithfully reflects dev.
       - name: Verify no working-tree drift
         run: |
-          if ! git diff --quiet; then
-            echo "::error::mise run all modified tracked files — branch is not canonical."
-            git --no-pager diff --stat
+          # git status --porcelain (not git diff --quiet): the latter only sees tracked
+          # modifications, missing NEW untracked files a generate step may emit — which
+          # would mean the published artifact carries a file absent from the commit.
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "::error::mise run all changed the working tree (modified or new files) — branch is not canonical."
+            git status --porcelain
             exit 1
           fi
           echo "No drift — committed code is canonical."
