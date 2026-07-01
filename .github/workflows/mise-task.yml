@@ -118,9 +118,15 @@ jobs:
 
       - id: check
         name: Run ${{ inputs.task }}
+        # Pass inputs.task via env, not inline ${{ }}, so it can't inject into the
+        # shell (semgrep run-shell-injection). Unquoted $TASK preserves task+arg
+        # word-split (e.g. "ci:semgrep golang" → task + arg); env expansion does
+        # NOT re-parse shell metacharacters (;, |, &&), neutralizing injection.
+        env:
+          TASK: ${{ inputs.task }}
         run: |
           set +e
-          mise run ${{ inputs.task }} 2>&1 | tee /tmp/output.log
+          mise run $TASK 2>&1 | tee /tmp/output.log
           exit "${PIPESTATUS[0]}"
         continue-on-error: true
 
