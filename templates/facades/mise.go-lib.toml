@@ -55,7 +55,7 @@ description = "Bump deps, update submodules, and refresh shared atoms"
 # `mise run` processes): it refreshes the shared atom cache, then the deps
 # step re-resolves and runs against the latest upstream atoms. Separate
 # invocations also avoid the cache-clear race that depends/depends_post had.
-run = ["mise run meta:bump", "mise run go:update gs:update"]
+run = ["mise run meta:bump", "mise run go:update ::: gs:update"]
 [tasks.ci]
 description = "Run all CI checks"
 depends = [
@@ -67,9 +67,20 @@ depends = [
   "ci:semgrep golang",
 ]
 
+
+[tasks.release-check]
+description = "Read-only validation for all/release driver (ci minus file-mutating *-fix atoms)"
+depends = [
+  "go:lint-check",
+  "go:sast",
+  "go:audit",
+  "go:dead-code",
+  "ci:semgrep golang",
+]
+
 [tasks.all]
-description = "init -> generate -> api-fix sequentially, then test/ci in parallel"
-run = ["mise run init", "mise run go:generate", "mise run go:api-fix", "mise run test ci"]
+description = "init -> generate -> api-fix sequentially, then test/release-check in parallel"
+run = ["mise run init", "mise run go:generate", "mise run go:api-fix", "mise run test ::: release-check"]
 
 [tasks.sbom]
 description = "Generate enriched SBOM and scan"

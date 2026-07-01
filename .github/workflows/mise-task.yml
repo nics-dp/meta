@@ -118,9 +118,21 @@ jobs:
 
       - id: check
         name: Run ${{ inputs.task }}
+        # Pass inputs.task via env, not inline ${{ }}, so it can't inject into the
+        # shell (semgrep run-shell-injection). env expansion does NOT re-parse
+        # shell metacharacters (;, |, &&), neutralizing injection.
+        env:
+          TASK: ${{ inputs.task }}
+        # Force bash: the run block uses bash-only syntax (read -ra, ${PIPESTATUS[0]})
+        # and runs_on may be a non-Ubuntu runner whose default shell isn't bash.
+        shell: bash
         run: |
           set +e
-          mise run ${{ inputs.task }} 2>&1 | tee /tmp/output.log
+          # Split TASK into an argv array so task+args are preserved
+          # (e.g. "ci:semgrep golang" → task + arg) WITHOUT triggering pathname
+          # globbing on * / ? / [ that an unquoted $TASK would.
+          read -ra task_args <<< "$TASK"
+          mise run "${task_args[@]}" 2>&1 | tee /tmp/output.log
           exit "${PIPESTATUS[0]}"
         continue-on-error: true
 

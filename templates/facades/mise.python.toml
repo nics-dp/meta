@@ -93,6 +93,23 @@ depends = [
   "ci:semgrep python",
 ]
 
+
+[tasks.release-check]
+description = "Read-only validation for all/release driver (ci minus file-mutating *-fix atoms)"
+depends = [
+  "py:lint-check",
+  "py:format-check",
+  "py:typecheck",
+  "py:typecheck --pyrefly",
+  "py:sast",
+  "py:audit",
+  "py:safety-db",
+  "py:complexity",
+  "py:dead-code",
+  "py:license-custom",
+  "ci:semgrep python",
+]
+
 [tasks.sbom]
 description = "Generate enriched SBOM, scan vulnerabilities, audit licenses"
 depends = [
@@ -100,5 +117,5 @@ depends = [
 ]
 
 [tasks.all]
-description = "init first, then build/test/ci in parallel"
-run = ["mise run init", "mise run build test ci"]
+description = "init first, then build/test/release-check in parallel"
+run = ["mise run init", "mise run build ::: test ::: release-check"]
