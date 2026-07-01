@@ -117,5 +117,5 @@ depends = [
 ]
 
 [tasks.all]
-description = "init first, then build/test/ci in parallel"
+description = "init first, then build/test/release-check in parallel"
 run = ["mise run init", "mise run build ::: test ::: release-check"]
