@@ -123,6 +123,9 @@ jobs:
         # shell metacharacters (;, |, &&), neutralizing injection.
         env:
           TASK: ${{ inputs.task }}
+        # Force bash: the run block uses bash-only syntax (read -ra, ${PIPESTATUS[0]})
+        # and runs_on may be a non-Ubuntu runner whose default shell isn't bash.
+        shell: bash
         run: |
           set +e
           # Split TASK into an argv array so task+args are preserved
