@@ -126,6 +126,8 @@ jobs:
           TASK: ${{ inputs.task }}
         run: |
           set +e
+          # $TASK intentionally unquoted: split task+args (e.g. "ci:semgrep golang")
+          # shellcheck disable=SC2086
           mise run $TASK 2>&1 | tee /tmp/output.log
           exit "${PIPESTATUS[0]}"
         continue-on-error: true
