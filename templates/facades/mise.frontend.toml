@@ -89,10 +89,28 @@ depends = [
   "iac:trivy",
 ]
 
+
+[tasks.release-check]
+description = "Read-only validation for all/release driver (ci minus file-mutating *-fix atoms)"
+depends = [
+  "node:lint-check",
+  "node:oxlint",
+  "node:oxfmt-check",
+  "node:typecheck",
+  "node:typecheck-tsgo",
+  "node:knip",
+  "node:audit",
+  "node:bundle-size",
+  "node:e2e",
+  "node:lighthouse",
+  "ci:semgrep typescript javascript",
+  "iac:trivy",
+]
+
 [tasks.sbom]
 description = "Generate enriched SBOM and scan"
 depends = ["sbom:trivy", "sbom:grype"]
 
 [tasks.all]
 description = "init first, then build/test/ci in parallel"
-run = ["mise run init", "mise run build ::: test ::: ci"]
+run = ["mise run init", "mise run build ::: test ::: release-check"]

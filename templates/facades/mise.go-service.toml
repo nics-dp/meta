@@ -101,10 +101,23 @@ depends = [
   "iac:trivy",
 ]
 
+
+[tasks.release-check]
+description = "Read-only validation for all/release driver (ci minus file-mutating *-fix atoms)"
+depends = [
+  "go:lint-check",
+  "go:sast",
+  "go:audit",
+  "go:dead-code",
+  "iac:img:hadolint",
+  "ci:semgrep golang",
+  "iac:trivy",
+]
+
 [tasks.sbom]
 description = "Generate enriched SBOM and scan"
 depends = ["sbom:trivy", "sbom:grype"]
 
 [tasks.all]
 description = "init -> generate -> api-fix sequentially, then build/test/ci in parallel"
-run = ["mise run init", "mise run go:generate", "mise run go:api-fix", "mise run build ::: test ::: ci"]
+run = ["mise run init", "mise run go:generate", "mise run go:api-fix", "mise run build ::: test ::: release-check"]
