@@ -9,7 +9,7 @@
 # whose attestation verifies cleanly. Revisit (bump toward latest) once an
 # upstream release with a valid TSA attestation — or a mise with an updated
 # Sigstore trust root — is available.
-#MISE tools={"github:betterleaks/betterleaks"="1.5.0"}
+#MISE tools={"github:betterleaks/betterleaks"="1.6.1"}
 set -euo pipefail
 
 # betterleaks: fast, configurable secret scanner from the Gitleaks authors. Used
