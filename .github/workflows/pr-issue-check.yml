@@ -184,6 +184,34 @@ jobs:
           echo "found $count verifiable linked issue(s) (of $total closing reference(s))"
           echo "issues=$issues" >>"$GITHUB_OUTPUT"
 
+      # Fail with actionable guidance when the App credentials are not wired
+      # up, instead of letting create-github-app-token error opaquely: the
+      # org variable may not be visible to a new consumer repo, and callers
+      # must pass the secret explicitly (no inherit).
+      - name: Preflight App credentials
+        if: steps.guard.outputs.run == 'true'
+        env:
+          CLIENT_ID: ${{ vars.CI_READ_APP_CLIENT_ID }}
+          PRIVATE_KEY: ${{ secrets.ci_read_app_private_key }}
+        run: |
+          missing=""
+          [ -n "$CLIENT_ID" ] || missing="org variable CI_READ_APP_CLIENT_ID"
+          if [ -z "$PRIVATE_KEY" ]; then
+            missing="${missing:+$missing + }secret ci_read_app_private_key"
+          fi
+          if [ -n "$missing" ]; then
+            {
+              echo "## ❌ PR Issue Check — App 憑證未設定($missing)"
+              echo ""
+              echo "本 check 需要 nics-dp-ci-read App 憑證查 Projects v2 欄位:"
+              echo ""
+              echo "1. org variable \`CI_READ_APP_CLIENT_ID\` 須對本 repo 可見(org 設定 -> Actions variables)。"
+              echo "2. caller 須在 \`secrets:\` 顯式把 org secret CI_READ_APP_PRIVATE_KEY 傳給 \`ci_read_app_private_key\`(見檔頭 caller example)。"
+            } >>"$GITHUB_STEP_SUMMARY"
+            echo "::error::missing App credentials: $missing. See the job summary."
+            exit 1
+          fi
+
       # Read token for the Projects v2 / cross-repo issue lookup below.
       - name: Mint ci-read App token
         id: app
