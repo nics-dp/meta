@@ -241,6 +241,7 @@ jobs:
         env:
           GH_TOKEN: ${{ steps.app.outputs.token }}
           ISSUES: ${{ steps.linked.outputs.issues }}
+          PROJECT_OWNER: ${{ github.repository_owner }}
           PROJECT_NUMBER: ${{ inputs.project_number }}
           VERSION_FIELD: ${{ inputs.version_field }}
         run: |
@@ -260,7 +261,13 @@ jobs:
                     issue(number: $num) {
                       projectItems(first: 100) {
                         nodes {
-                          project { number }
+                          project {
+                            number
+                            owner {
+                              ... on Organization { login }
+                              ... on User { login }
+                            }
+                          }
                           fieldValueByName(name: $field) {
                             ... on ProjectV2ItemFieldSingleSelectValue { name }
                             ... on ProjectV2ItemFieldTextValue { text }
@@ -277,13 +284,15 @@ jobs:
             # `// []` guards: gh exits non-zero on GraphQL errors (handled
             # above), but belt-and-braces against a null issue/projectItems
             # so jq never iterates null and fails the step with a cryptic
-            # "integer expression expected".
-            in_project=$(jq --argjson pn "$PROJECT_NUMBER" \
+            # "integer expression expected". Project numbers are per-owner,
+            # so match owner login too — a personal project with the same
+            # number must not satisfy (or fail) the gate.
+            in_project=$(jq --argjson pn "$PROJECT_NUMBER" --arg po "$PROJECT_OWNER" \
               '[.data.repository.issue.projectItems.nodes // [] | .[]
-                | select(.project.number == $pn)] | length' <<<"$resp")
-            version=$(jq -r --argjson pn "$PROJECT_NUMBER" \
+                | select(.project.number == $pn and (.project.owner.login // "") == $po)] | length' <<<"$resp")
+            version=$(jq -r --argjson pn "$PROJECT_NUMBER" --arg po "$PROJECT_OWNER" \
               '[.data.repository.issue.projectItems.nodes // [] | .[]
-                | select(.project.number == $pn)
+                | select(.project.number == $pn and (.project.owner.login // "") == $po)
                 | .fieldValueByName | (.name // .text) // empty] | first // ""' <<<"$resp")
             if [ "$in_project" -eq 0 ]; then
               table="${table}| ${link} | ❌ 不在 Project ${PROJECT_NUMBER},請先加入並設 \`${VERSION_FIELD}\` |"$'\n'
