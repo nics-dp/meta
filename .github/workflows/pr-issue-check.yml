@@ -12,8 +12,11 @@ name: PR Issue Check
 #
 # GitHub rulesets have no native rule for either condition, so this workflow
 # is meant to be wired as a REQUIRED STATUS CHECK: callers run it on
-# pull_request and the org ruleset requires the resulting check run
-# (`pr-issue-check / pr-issue-check`).
+# pull_request and the org ruleset requires the resulting check run. The
+# check-run name is `<caller job name> / <this file's job name>` — the
+# called workflow's `name:` is NOT part of it — so with the caller example
+# below it is `pr-issue-check / pr-issue-check` (verified against a live
+# run's check-runs API).
 #
 # Scope / limitations (by design):
 #   - Only PRs whose base branch == `enforce_base` (default: dev) are
@@ -79,8 +82,13 @@ on:
         description: "Name of the Projects v2 custom field every linked issue must have set."
     secrets:
       ci_read_app_private_key:
-        required: true
-        description: "Private key of the nics-dp-ci-read GitHub App (needs Organization Projects: Read + Issues: Read)."
+        # Effectively required, but declared optional on purpose: a missing
+        # required secret kills the caller at startup with an error that is
+        # only visible in the web UI, before any step runs. Optional lets
+        # the Preflight step catch the omission and fail with actionable
+        # zh_TW guidance instead.
+        required: false
+        description: "Private key of the nics-dp-ci-read GitHub App (needs Organization Projects: Read + Issues: Read). Effectively required -- enforced by the preflight step with actionable guidance."
 
 # No checkout and no repo-content access anywhere in this workflow: the only
 # GITHUB_TOKEN use is the GraphQL closingIssuesReferences lookup on the PR.
