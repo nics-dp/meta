@@ -2,14 +2,14 @@
 #MISE description="Scan for leaked secrets (betterleaks; PR gate)"
 #MISE hide=true
 #MISE raw=true
-# Pinned to 1.5.0: betterleaks 1.6.0's GitHub artifact attestation fails
-# mise's Sigstore verification ("TSA timestamp verification failed: no
-# certificate matches issuer and serial number"), which aborts the install and
-# breaks this secret-scan gate for every consumer. 1.5.0 is the latest release
-# whose attestation verifies cleanly. Revisit (bump toward latest) once an
-# upstream release with a valid TSA attestation — or a mise with an updated
-# Sigstore trust root — is available.
-#MISE tools={"github:betterleaks/betterleaks"="1.5.0"}
+# Requires mise >= 2026.7.0. Installing this tool verifies its GitHub artifact
+# attestation; GitHub rotated its TSA cert on 2026-06-12 and older mise builds
+# ship a stale embedded Sigstore trust root, failing every post-rotation
+# attestation with "TSA timestamp verification failed: no certificate matches
+# issuer and serial number" (jdx/mise#10680 — the artifact itself is fine; an
+# earlier note here wrongly blamed betterleaks 1.6.0 for it). The version pin
+# below is Renovate-managed and safe to bump normally.
+#MISE tools={"github:betterleaks/betterleaks"="1.6.1"}
 set -euo pipefail
 
 # betterleaks: fast, configurable secret scanner from the Gitleaks authors. Used

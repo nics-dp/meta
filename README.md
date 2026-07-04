@@ -236,6 +236,7 @@ Go 與 Node 的 dependency-submission 拆成兩支：`go.mod` GitHub 原生解�
 | Workflow                    | 用途                                                          |
 | --------------------------- | ------------------------------------------------------------- |
 | `artifacts-comment.yml`     | PR 留言列當前 run artifacts，含 [nightly.link](https://nightly.link) 下載連結 |
+| `pr-issue-check.yml`        | PR-time 流程 gate：驗證 PR 有 linked issue（closing reference）且每個 linked issue 在 org Projects v2（default Project 3）已設 `version` 欄位；**擋 PR**（設計上搭配 org ruleset required status check）。只 enforce base=`dev` 的 PR（closing keyword 只在 default branch 生效），fork PR 與其他 base 一律綠燈帶 skip 說明。需 org 變數 `CI_READ_APP_CLIENT_ID` + caller 傳 `ci_read_app_private_key`（查 Projects 欄位；App 需 Organization Projects: Read + Issues: Read）。只驗證 GITHUB_TOKEN 可讀的 closing reference（實務上＝同 repo issue；跨 repo private issue 會顯式報錯/警告，不會靜默放行）。caller 的 `pull_request` types 建議含 `edited`（事後補 `Closes #N` 會自動重跑；補 Project 欄位不觸發 event，需手動 re-run） |
 
 ---
 

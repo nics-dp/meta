@@ -28,6 +28,12 @@ jobs:
     with:
       version: ${{ inputs.version }}
       dry_run: ${{ inputs.dry_run }}
+      # Explicit (not relying on auto-release.yml's default): this self-caller
+      # runs auto-release.yml@main, so a default bumped on dev only takes
+      # effect after the NEXT promotion -- passing it here lets the promotion
+      # that carries the bump release itself. Keep in lockstep with
+      # mise-task.yml.
+      mise_version: "2026.7.0"
     secrets:
       ci_read_app_private_key:     ${{ secrets.CI_READ_APP_PRIVATE_KEY }}
       pre_release_app_private_key: ${{ secrets.PRE_RELEASE_APP_PRIVATE_KEY }}
