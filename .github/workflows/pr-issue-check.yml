@@ -3,7 +3,7 @@
 name: PR Issue Check
 
 # PR-time policy gate for the project's issue-tracking workflow. Verifies that
-# a pull request targeting the develop branch:
+# a pull request targeting the develop branch (`dev` org-wide):
 #
 #   1. has at least one linked issue (GitHub "closing references", i.e. the
 #      `Closes #N` keywords in the PR body), and
@@ -24,6 +24,12 @@ name: PR Issue Check
 #     notice in the job summary.
 #   - Fork PRs succeed with a skip notice (App secrets are not passed to
 #     fork-triggered runs, so the Project lookup cannot run).
+#   - Only closing references readable by the caller repo's GITHUB_TOKEN are
+#     counted — in practice same-repo issues (org convention: open the issue
+#     in the component repo itself). A reference the token cannot read (e.g.
+#     a private cross-repo issue) comes back as a null node; all-null fails
+#     LOUDLY with guidance, a mix of readable + null verifies the readable
+#     ones and emits a warning. Never a silent pass.
 #   - Editing the PR body only re-triggers the check when the caller includes
 #     the `edited` type (see the caller example below). Setting the Project
 #     field emits NO PR event: after fixing the issue, re-run the failed
@@ -33,9 +39,11 @@ name: PR Issue Check
 #   - The linked-issue lookup runs on the workflow GITHUB_TOKEN
 #     (pull-requests: read on the PR's own repo).
 #   - The Project-field lookup needs Organization Projects: Read plus
-#     org-wide Issues: Read (a linked issue may live in another repo, e.g.
-#     TMDs), which GITHUB_TOKEN never has. It therefore mints a
-#     nics-dp-ci-read App token; callers pass the App private key explicitly.
+#     org-wide Issues: Read (a readable linked issue may still live in
+#     another repo, e.g. a public one), which GITHUB_TOKEN never has. It
+#     therefore mints a nics-dp-ci-read App token; callers pass the App
+#     private key explicitly (client-id comes from the org variable
+#     CI_READ_APP_CLIENT_ID).
 #
 # Caller example (.github/workflows/pr-issue-check.yml in a consumer repo):
 #   on:
@@ -133,34 +141,48 @@ jobs:
           THIS_REPO: ${{ github.repository }}
         run: |
           # shellcheck disable=SC2016 # $owner/$name/$num are GraphQL variables, not shell
-          issues=$(gh api graphql \
+          resp=$(gh api graphql \
             -F owner="${THIS_REPO%/*}" -F name="${THIS_REPO#*/}" -F num="$PR_NUMBER" \
             -f query='
               query($owner: String!, $name: String!, $num: Int!) {
                 repository(owner: $owner, name: $name) {
                   pullRequest(number: $num) {
-                    closingIssuesReferences(first: 20) {
+                    closingIssuesReferences(first: 100) {
                       nodes { number url repository { nameWithOwner } }
                     }
                   }
                 }
-              }' \
-            --jq '[.data.repository.pullRequest.closingIssuesReferences.nodes[] | select(. != null)]')
+              }')
+          # A reference the token cannot read (private cross-repo issue) is a
+          # null node — count them separately so they surface as an explicit
+          # failure/warning instead of a silent drop.
+          nodes=$(jq '.data.repository.pullRequest.closingIssuesReferences.nodes // []' <<<"$resp")
+          total=$(jq 'length' <<<"$nodes")
+          issues=$(jq -c '[.[] | select(. != null)]' <<<"$nodes")
           count=$(jq 'length' <<<"$issues")
           if [ "$count" -eq 0 ]; then
             {
-              echo "## ❌ PR Issue Check — 沒有 linked issue"
+              echo "## ❌ PR Issue Check — 沒有可驗證的 linked issue"
               echo ""
-              echo "本 PR 沒有任何 closing reference。請:"
-              echo ""
-              echo "1. 在 PR body 加上 closing keyword,例如 \`Closes #123\`(同 repo 的 issue 才會生效;或用 \`/issue:link\`)。"
+              if [ "$total" -gt 0 ]; then
+                echo "偵測到 $total 個 closing reference,但都無法以 GITHUB_TOKEN 讀取(多半是跨 repo 的 private issue)。本 check 只能驗證 PR 所在 repo 的 issue(org 慣例:issue 開在元件 repo 本身):"
+                echo ""
+                echo "1. 請改連結同 repo 的 issue(\`Closes #N\`)。"
+              else
+                echo "本 PR 沒有任何 closing reference。請:"
+                echo ""
+                echo "1. 在 PR body 加上 closing keyword,例如 \`Closes #123\`(同 repo 的 issue 才會生效;或用 \`/issue:link\`)。"
+              fi
               echo "2. body 更新後,\`edited\` event 會自動重跑本 check。"
             } >>"$GITHUB_STEP_SUMMARY"
-            echo "::error::PR has no linked issue (closing reference). Add 'Closes #N' to the PR body."
+            echo "::error::PR has no verifiable linked issue. Add 'Closes #N' referencing a same-repo issue."
             exit 1
           fi
-          echo "found $count linked issue(s)"
-          echo "issues=$(jq -c . <<<"$issues")" >>"$GITHUB_OUTPUT"
+          if [ "$count" -lt "$total" ]; then
+            echo "::warning::$((total - count)) closing reference(s) not readable by GITHUB_TOKEN (cross-repo?); verifying the $count readable issue(s) only."
+          fi
+          echo "found $count verifiable linked issue(s) (of $total closing reference(s))"
+          echo "issues=$issues" >>"$GITHUB_OUTPUT"
 
       # Read token for the Projects v2 / cross-repo issue lookup below.
       - name: Mint ci-read App token
@@ -200,7 +222,7 @@ jobs:
                 query($owner: String!, $name: String!, $num: Int!, $field: String!) {
                   repository(owner: $owner, name: $name) {
                     issue(number: $num) {
-                      projectItems(first: 20) {
+                      projectItems(first: 100) {
                         nodes {
                           project { number }
                           fieldValueByName(name: $field) {
@@ -216,10 +238,15 @@ jobs:
               fail=1
               continue
             fi
+            # `// []` guards: gh exits non-zero on GraphQL errors (handled
+            # above), but belt-and-braces against a null issue/projectItems
+            # so jq never iterates null and fails the step with a cryptic
+            # "integer expression expected".
             in_project=$(jq --argjson pn "$PROJECT_NUMBER" \
-              '[.data.repository.issue.projectItems.nodes[] | select(.project.number == $pn)] | length' <<<"$resp")
+              '[.data.repository.issue.projectItems.nodes // [] | .[]
+                | select(.project.number == $pn)] | length' <<<"$resp")
             version=$(jq -r --argjson pn "$PROJECT_NUMBER" \
-              '[.data.repository.issue.projectItems.nodes[]
+              '[.data.repository.issue.projectItems.nodes // [] | .[]
                 | select(.project.number == $pn)
                 | .fieldValueByName | (.name // .text) // empty] | first // ""' <<<"$resp")
             if [ "$in_project" -eq 0 ]; then
