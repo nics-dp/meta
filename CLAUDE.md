@@ -92,6 +92,7 @@ includes = ["git::https://github.com/nics-dp/meta.git//.mise/tasks?ref=main"]
 
 ### Utility
 - **`artifacts-comment.yml`** — Sticky PR comment listing artifacts (nightly.link URLs).
+- **`pr-issue-check.yml`** — Reusable PR-time policy gate: fails unless the PR has at least one linked issue (`closingIssuesReferences`) AND every linked issue has the `version` custom field set on its org Projects v2 item (inputs: `enforce_base` default `dev`, `project_number` default `3`, `version_field` default `version`). Designed to back an org-ruleset REQUIRED STATUS CHECK. Only enforces PRs whose base == `enforce_base` (closing keywords only register on the default branch; manual Development links have no API) — other bases and fork PRs succeed with a skip summary. Linked-issue lookup uses GITHUB_TOKEN (`pull-requests: read` + `issues: read`), so only token-readable (in practice same-repo) closing references are verified — unreadable cross-repo references fail/warn explicitly, never pass silently; the Project lookup mints a ci-read App token (App needs Organization Projects: Read + org-wide Issues: Read; client-id from org var `CI_READ_APP_CLIENT_ID`). Callers should trigger on `pull_request` types `[opened, edited, reopened, synchronize]` — `edited` re-runs the check when `Closes #N` is added; setting the Project field emits no PR event (manual re-run).
 
 ### Meta CI (meta self-consuming its own reusables)
 - **`ci.yml`** — meta repo's own CI via `mise-task.yml`: `iac:actionlint` (workflow YAML lint) plus `ci:betterleaks` and `ci:trufflehog` secret-scan jobs.

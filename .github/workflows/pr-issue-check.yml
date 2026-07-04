@@ -1,0 +1,326 @@
+# yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
+
+name: PR Issue Check
+
+# PR-time policy gate for the project's issue-tracking workflow. Verifies that
+# a pull request targeting the develop branch (`dev` org-wide):
+#
+#   1. has at least one linked issue (GitHub "closing references", i.e. the
+#      `Closes #N` keywords in the PR body), and
+#   2. every linked issue has the `version` custom field set on its item in
+#      the org-wide Projects v2 board (nics-dp Project 3 by default).
+#
+# GitHub rulesets have no native rule for either condition, so this workflow
+# is meant to be wired as a REQUIRED STATUS CHECK: callers run it on
+# pull_request and the org ruleset requires the resulting check run. The
+# check-run name is `<caller job name> / <this file's job name>` — the
+# called workflow's `name:` is NOT part of it — so with the caller example
+# below it is `pr-issue-check / pr-issue-check` (verified against a live
+# run's check-runs API).
+#
+# Scope / limitations (by design):
+#   - Only PRs whose base branch == `enforce_base` (default: dev) are
+#     enforced. Closing keywords only register when the PR base is the
+#     repo's DEFAULT branch (dev, org-wide), and manual Development-sidebar
+#     links are not readable via any API -- enforcing main/release promotion
+#     PRs would therefore always fail. Non-enforced PRs succeed with a skip
+#     notice in the job summary.
+#   - Fork PRs succeed with a skip notice (App secrets are not passed to
+#     fork-triggered runs, so the Project lookup cannot run).
+#   - Only closing references readable by the caller repo's GITHUB_TOKEN are
+#     counted — in practice same-repo issues (org convention: open the issue
+#     in the component repo itself). A reference the token cannot read (e.g.
+#     a private cross-repo issue) comes back as a null node; all-null fails
+#     LOUDLY with guidance, a mix of readable + null verifies the readable
+#     ones and emits a warning. Never a silent pass.
+#   - Editing the PR body only re-triggers the check when the caller includes
+#     the `edited` type (see the caller example below). Setting the Project
+#     field emits NO PR event: after fixing the issue, re-run the failed
+#     check from the PR's Checks tab.
+#
+# Tokens:
+#   - The linked-issue lookup runs on the workflow GITHUB_TOKEN
+#     (pull-requests: read on the PR's own repo).
+#   - The Project-field lookup needs Organization Projects: Read plus
+#     org-wide Issues: Read (a readable linked issue may still live in
+#     another repo, e.g. a public one), which GITHUB_TOKEN never has. It
+#     therefore mints a nics-dp-ci-read App token; callers pass the App
+#     private key explicitly (client-id comes from the org variable
+#     CI_READ_APP_CLIENT_ID).
+#
+# Caller example (.github/workflows/pr-issue-check.yml in a consumer repo):
+#   on:
+#     pull_request:
+#       # `edited` re-runs the check when `Closes #N` is added to the body
+#       types: [opened, edited, reopened, synchronize]
+#   permissions: {}
+#   jobs:
+#     pr-issue-check:
+#       permissions:
+#         pull-requests: read
+#         issues: read
+#       uses: nics-dp/meta/.github/workflows/pr-issue-check.yml@main
+#       secrets:
+#         ci_read_app_private_key: ${{ secrets.CI_READ_APP_PRIVATE_KEY }}
+on:
+  workflow_call:
+    inputs:
+      enforce_base:
+        required: false
+        type: string
+        default: "dev"
+        description: "Base branch on which the check is enforced. PRs to any other base succeed with a skip notice (closing keywords only register on the default branch)."
+      project_number:
+        required: false
+        type: number
+        default: 3
+        description: "Projects v2 board number (on the repository owner org) holding the version field."
+      version_field:
+        required: false
+        type: string
+        default: "version"
+        description: "Name of the Projects v2 custom field every linked issue must have set."
+    secrets:
+      ci_read_app_private_key:
+        # Effectively required, but declared optional on purpose: a missing
+        # required secret kills the caller at startup with an error that is
+        # only visible in the web UI, before any step runs. Optional lets
+        # the Preflight step catch the omission and fail with actionable
+        # zh_TW guidance instead.
+        required: false
+        description: "Private key of the nics-dp-ci-read GitHub App (needs Organization Projects: Read + Issues: Read). Effectively required -- enforced by the preflight step with actionable guidance."
+
+# No checkout and no repo-content access anywhere in this workflow: the only
+# GITHUB_TOKEN use is the GraphQL closingIssuesReferences lookup on the PR.
+permissions: {}
+
+jobs:
+  pr-issue-check:
+    runs-on: ubuntu-latest
+    permissions:
+      # GraphQL closingIssuesReferences lookup on the PR itself. issues: read
+      # is required too: the referenced nodes are Issue objects, and without
+      # it GraphQL silently returns them as null (observed, not documented).
+      pull-requests: read
+      issues: read
+    steps:
+      # Decide whether the policy applies to this run at all. Skips (wrong
+      # base, fork) succeed with a summary so the required check never blocks
+      # a PR the policy does not cover.
+      - name: Guard (event / base / fork)
+        id: guard
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_REF: ${{ github.base_ref }}
+          ENFORCE_BASE: ${{ inputs.enforce_base }}
+          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+          THIS_REPO: ${{ github.repository }}
+        run: |
+          if [ "$EVENT_NAME" != "pull_request" ]; then
+            echo "::error::pr-issue-check must be called from a pull_request-triggered workflow (got: $EVENT_NAME)"
+            exit 1
+          fi
+          if [ "$BASE_REF" != "$ENFORCE_BASE" ]; then
+            echo "run=false" >>"$GITHUB_OUTPUT"
+            {
+              echo "## PR Issue Check — skipped"
+              echo ""
+              echo "base \`$BASE_REF\` ≠ \`$ENFORCE_BASE\`:非 develop PR(如 main/release promotion)不強制 linked issue — closing keyword 只在 default branch 生效,手動 Development link 無 API 可查。"
+            } >>"$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          if [ "$HEAD_REPO" != "$THIS_REPO" ]; then
+            echo "run=false" >>"$GITHUB_OUTPUT"
+            {
+              echo "## PR Issue Check — skipped"
+              echo ""
+              echo "Fork PR 沒有 App secrets,無法查 Project 欄位,略過。"
+            } >>"$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          echo "run=true" >>"$GITHUB_OUTPUT"
+
+      - name: Check PR has a linked issue
+        id: linked
+        if: steps.guard.outputs.run == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          THIS_REPO: ${{ github.repository }}
+        run: |
+          # shellcheck disable=SC2016 # $owner/$name/$num are GraphQL variables, not shell
+          resp=$(gh api graphql \
+            -F owner="${THIS_REPO%/*}" -F name="${THIS_REPO#*/}" -F num="$PR_NUMBER" \
+            -f query='
+              query($owner: String!, $name: String!, $num: Int!) {
+                repository(owner: $owner, name: $name) {
+                  pullRequest(number: $num) {
+                    closingIssuesReferences(first: 100) {
+                      nodes { number url repository { nameWithOwner } }
+                    }
+                  }
+                }
+              }')
+          # A reference the token cannot read (private cross-repo issue) is a
+          # null node — count them separately so they surface as an explicit
+          # failure/warning instead of a silent drop.
+          nodes=$(jq '.data.repository.pullRequest.closingIssuesReferences.nodes // []' <<<"$resp")
+          total=$(jq 'length' <<<"$nodes")
+          issues=$(jq -c '[.[] | select(. != null)]' <<<"$nodes")
+          count=$(jq 'length' <<<"$issues")
+          if [ "$count" -eq 0 ]; then
+            {
+              echo "## ❌ PR Issue Check — 沒有可驗證的 linked issue"
+              echo ""
+              if [ "$total" -gt 0 ]; then
+                echo "偵測到 $total 個 closing reference,但都無法以 GITHUB_TOKEN 讀取(多半是跨 repo 的 private issue)。本 check 只能驗證 PR 所在 repo 的 issue(org 慣例:issue 開在元件 repo 本身):"
+                echo ""
+                echo "1. 請改連結同 repo 的 issue(\`Closes #N\`)。"
+              else
+                echo "本 PR 沒有任何 closing reference。請:"
+                echo ""
+                echo "1. 在 PR body 加上 closing keyword,例如 \`Closes #123\`(同 repo 的 issue 才會生效;或用 \`/issue:link\`)。"
+              fi
+              echo "2. body 更新後,\`edited\` event 會自動重跑本 check。"
+            } >>"$GITHUB_STEP_SUMMARY"
+            echo "::error::PR has no verifiable linked issue. Add 'Closes #N' referencing a same-repo issue."
+            exit 1
+          fi
+          if [ "$count" -lt "$total" ]; then
+            echo "::warning::$((total - count)) closing reference(s) not readable by GITHUB_TOKEN (cross-repo?); verifying the $count readable issue(s) only."
+          fi
+          echo "found $count verifiable linked issue(s) (of $total closing reference(s))"
+          echo "issues=$issues" >>"$GITHUB_OUTPUT"
+
+      # Fail with actionable guidance when the App credentials are not wired
+      # up, instead of letting create-github-app-token error opaquely: the
+      # org variable may not be visible to a new consumer repo, and callers
+      # must pass the secret explicitly (no inherit).
+      - name: Preflight App credentials
+        if: steps.guard.outputs.run == 'true'
+        env:
+          CLIENT_ID: ${{ vars.CI_READ_APP_CLIENT_ID }}
+          PRIVATE_KEY: ${{ secrets.ci_read_app_private_key }}
+        run: |
+          missing=""
+          [ -n "$CLIENT_ID" ] || missing="org variable CI_READ_APP_CLIENT_ID"
+          if [ -z "$PRIVATE_KEY" ]; then
+            missing="${missing:+$missing + }secret ci_read_app_private_key"
+          fi
+          if [ -n "$missing" ]; then
+            {
+              echo "## ❌ PR Issue Check — App 憑證未設定($missing)"
+              echo ""
+              echo "本 check 需要 nics-dp-ci-read App 憑證查 Projects v2 欄位:"
+              echo ""
+              echo "1. org variable \`CI_READ_APP_CLIENT_ID\` 須對本 repo 可見(org 設定 -> Actions variables)。"
+              echo "2. caller 須在 \`secrets:\` 顯式把 org secret CI_READ_APP_PRIVATE_KEY 傳給 \`ci_read_app_private_key\`(見檔頭 caller example)。"
+            } >>"$GITHUB_STEP_SUMMARY"
+            echo "::error::missing App credentials: $missing. See the job summary."
+            exit 1
+          fi
+
+      # Read token for the Projects v2 / cross-repo issue lookup below.
+      - name: Mint ci-read App token
+        id: app
+        if: steps.guard.outputs.run == 'true'
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          client-id: ${{ vars.CI_READ_APP_CLIENT_ID }}
+          private-key: ${{ secrets.ci_read_app_private_key }}
+          owner: ${{ github.repository_owner }}
+          # Scope the minted token down to exactly what the lookup needs (a
+          # linked issue may live in another org repo, so no `repositories:`
+          # narrowing -- the token keeps installation-wide repo access but
+          # only these permissions).
+          permission-issues: read
+          permission-organization-projects: read
+
+      - name: Check version field on linked issues
+        if: steps.guard.outputs.run == 'true'
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          ISSUES: ${{ steps.linked.outputs.issues }}
+          PROJECT_OWNER: ${{ github.repository_owner }}
+          PROJECT_NUMBER: ${{ inputs.project_number }}
+          VERSION_FIELD: ${{ inputs.version_field }}
+        run: |
+          fail=0
+          table=""
+          while IFS= read -r row; do
+            repo=$(jq -r '.repository.nameWithOwner' <<<"$row")
+            num=$(jq -r '.number' <<<"$row")
+            url=$(jq -r '.url' <<<"$row")
+            link="[${repo}#${num}](${url})"
+            # shellcheck disable=SC2016 # $owner/$name/$num/$field are GraphQL variables, not shell
+            if ! resp=$(gh api graphql \
+              -F owner="${repo%/*}" -F name="${repo#*/}" -F num="$num" -F field="$VERSION_FIELD" \
+              -f query='
+                query($owner: String!, $name: String!, $num: Int!, $field: String!) {
+                  repository(owner: $owner, name: $name) {
+                    issue(number: $num) {
+                      projectItems(first: 100) {
+                        nodes {
+                          project {
+                            number
+                            owner {
+                              ... on Organization { login }
+                              ... on User { login }
+                            }
+                          }
+                          fieldValueByName(name: $field) {
+                            ... on ProjectV2ItemFieldSingleSelectValue { name }
+                            ... on ProjectV2ItemFieldTextValue { text }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }'); then
+              table="${table}| ${link} | ❌ 無法讀取(App token 權限不足?) |"$'\n'
+              fail=1
+              continue
+            fi
+            # `// []` guards: gh exits non-zero on GraphQL errors (handled
+            # above), but belt-and-braces against a null issue/projectItems
+            # so jq never iterates null and fails the step with a cryptic
+            # "integer expression expected". Project numbers are per-owner,
+            # so match owner login too — a personal project with the same
+            # number must not satisfy (or fail) the gate.
+            in_project=$(jq --argjson pn "$PROJECT_NUMBER" --arg po "$PROJECT_OWNER" \
+              '[.data.repository.issue.projectItems.nodes // [] | .[]
+                | select(.project.number == $pn and (.project.owner.login // "") == $po)] | length' <<<"$resp")
+            version=$(jq -r --argjson pn "$PROJECT_NUMBER" --arg po "$PROJECT_OWNER" \
+              '[.data.repository.issue.projectItems.nodes // [] | .[]
+                | select(.project.number == $pn and (.project.owner.login // "") == $po)
+                | .fieldValueByName | (.name // .text) // empty] | first // ""' <<<"$resp")
+            if [ "$in_project" -eq 0 ]; then
+              table="${table}| ${link} | ❌ 不在 Project ${PROJECT_NUMBER},請先加入並設 \`${VERSION_FIELD}\` |"$'\n'
+              fail=1
+            elif [ -z "$version" ]; then
+              table="${table}| ${link} | ❌ 未設 \`${VERSION_FIELD}\` 欄位 |"$'\n'
+              fail=1
+            else
+              table="${table}| ${link} | ✅ ${version} |"$'\n'
+            fi
+          done < <(jq -c '.[]' <<<"$ISSUES")
+          if [ "$fail" -ne 0 ]; then
+            {
+              echo "## ❌ PR Issue Check — linked issue 缺 \`${VERSION_FIELD}\` 欄位"
+              echo ""
+              echo "| linked issue | 狀態 |"
+              echo "|---|---|"
+              printf '%s' "$table"
+              echo ""
+              echo "補救:到 Projects v2 board(Project ${PROJECT_NUMBER})把上列 issue 的 \`${VERSION_FIELD}\` 欄位設好(或用 \`/issue:version\`),然後回到本 PR 的 Checks 分頁 **Re-run** 本 check — Project 欄位變更不會觸發 PR event,不會自動重跑。"
+            } >>"$GITHUB_STEP_SUMMARY"
+            echo "::error::Some linked issues are missing the '${VERSION_FIELD}' Project field. See the job summary."
+            exit 1
+          fi
+          {
+            echo "## ✅ PR Issue Check"
+            echo ""
+            echo "| linked issue | ${VERSION_FIELD} |"
+            echo "|---|---|"
+            printf '%s' "$table"
+          } >>"$GITHUB_STEP_SUMMARY"
