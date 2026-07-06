@@ -1,0 +1,24 @@
+# yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
+
+name: pr-issue-check
+
+# PR gate: the PR must have a linked same-repo issue (Closes #N) and every
+# linked issue must have the `version` field set on its Project 3 item. See
+# nics-dp/meta/.github/workflows/pr-issue-check.yml for scope and details.
+# Intended to back an org-ruleset required status check
+# (`pr-issue-check / pr-issue-check`); keep the job id stable.
+on:
+  pull_request:
+    # `edited` re-runs the check when `Closes #N` is added to the body
+    types: [opened, edited, reopened, synchronize]
+
+permissions: {}
+
+jobs:
+  pr-issue-check:
+    permissions:
+      pull-requests: read
+      issues: read
+    uses: nics-dp/meta/.github/workflows/pr-issue-check.yml@main
+    secrets:
+      ci_read_app_private_key: ${{ secrets.CI_READ_APP_PRIVATE_KEY }}
