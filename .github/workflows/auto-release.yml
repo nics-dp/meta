@@ -355,18 +355,30 @@ jobs:
       # the merge commit SHA (MAIN_SHA), not this branch, so removing it loses nothing.
       # Dry-run: ci/auto-release/<version> — validation-only, never merged. On FAILURE
       # the branch is intentionally left behind for investigation / manual recovery
-      # (see the partial-failure note on "Create snapshot branch from dev"). Idempotent:
-      # a 404/422 (already gone) warns rather than fails. GITHUB_TOKEN (contents: write)
-      # suffices — the branch is in an unprotected namespace.
+      # (see the partial-failure note on "Create snapshot branch from dev").
+      # Idempotent and never fatal: a 404/422 (branch already gone) is treated as
+      # success; any OTHER error (403/5xx/network) is surfaced as a ::warning:: carrying
+      # gh's stderr so a genuinely stuck delete is diagnosable — but it still does NOT
+      # fail the run, because by here the merge/tag/release already succeeded and a
+      # leftover branch in an unprotected namespace is harmless (delete it manually).
+      # GITHUB_TOKEN (contents: write) suffices — the branch is in an unprotected namespace.
       - name: Delete snapshot branch
         if: ${{ success() }}
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if gh api -X DELETE "repos/${GH_REPO}/git/refs/heads/${TARGET_BRANCH}" >/dev/null 2>&1; then
+          # Capture stderr (2>&1 >/dev/null), same tri-state shape as the tag guards:
+          # a bare `if gh api …; then` would fold 403/5xx into the "already gone" branch
+          # and discard the reason. 204 => empty err, success.
+          if err="$(gh api -X DELETE "repos/${GH_REPO}/git/refs/heads/${TARGET_BRANCH}" 2>&1 >/dev/null)"; then
             echo "Deleted snapshot branch ${TARGET_BRANCH}."
           else
-            echo "::warning::Could not delete snapshot branch ${TARGET_BRANCH} (already removed?)."
+            case "$err" in
+              *"HTTP 404"* | *"HTTP 422"*)
+                echo "Snapshot branch ${TARGET_BRANCH} already gone — nothing to delete." ;;
+              *)
+                echo "::warning::Could not delete snapshot branch ${TARGET_BRANCH} (non-404/422; left behind, delete manually): ${err}" ;;
+            esac
           fi
 
       - name: Summary
