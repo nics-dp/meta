@@ -11,7 +11,7 @@
 # driver therefore serves go-service / go-lib / go-cli / frontend / python /
 # image repos unchanged — each repo's mise.toml decides what `all` does.
 #
-# dry_run=true: validate only against ci/release/<version>; skip merge/tag/release.
+# dry_run=true: validate only against ci/auto-release/<version>; skip merge/tag/release.
 #
 # Usage in downstream `.github/workflows/auto-release.yml`:
 #   name: Auto-Release
@@ -45,7 +45,7 @@ on:
         required: true
         type: string
       dry_run:
-        description: "Validate only — skip merge/tag/release; use ci/release/<version> snapshot"
+        description: "Validate only — skip merge/tag/release; use ci/auto-release/<version> snapshot"
         required: false
         default: false
         type: boolean
@@ -79,7 +79,7 @@ concurrency:
   cancel-in-progress: false
 
 permissions:
-  contents: write # GITHUB_TOKEN creates the release/<version> or ci/release/<version> snapshot (unprotected)
+  contents: write # GITHUB_TOKEN creates the auto-release/<version> or ci/auto-release/<version> snapshot (unprotected)
 
 jobs:
   release:
@@ -157,9 +157,9 @@ jobs:
       - name: Resolve target branch
         run: |
           if [ "${DRY_RUN}" = "true" ]; then
-            echo "TARGET_BRANCH=ci/release/${VERSION}" >> "$GITHUB_ENV"
+            echo "TARGET_BRANCH=ci/auto-release/${VERSION}" >> "$GITHUB_ENV"
           else
-            echo "TARGET_BRANCH=release/${VERSION}" >> "$GITHUB_ENV"
+            echo "TARGET_BRANCH=auto-release/${VERSION}" >> "$GITHUB_ENV"
           fi
 
       # Read token for private module/submodule fetch during validation.
@@ -184,7 +184,7 @@ jobs:
           owner: ${{ github.repository_owner }}
 
       # Snapshot the exact dev commit being released into TARGET_BRANCH (unprotected
-      # namespace; release/* and ci/release/* are not in the main/dev ruleset).
+      # namespace; auto-release/* and ci/auto-release/* are not in the main/dev ruleset).
       # GITHUB_TOKEN (contents: write) suffices. Idempotent.
       # NOTE on partial-failure recovery: a real run that fails AFTER "Merge to main"
       # but before the release is created leaves main advanced without a release.
@@ -195,7 +195,7 @@ jobs:
         run: |
           # Use singular git/ref/<ref> (exact "get a single reference", 404 if absent),
           # not plural git/refs/<ref> which prefix-matches and would return an array
-          # for a longer sibling (e.g. heads/release/v0.3.0 matching release/v0.3.0.1).
+          # for a longer sibling (e.g. heads/auto-release/v0.3.0 matching auto-release/v0.3.0.1).
           sha="$(gh api "repos/${GH_REPO}/git/ref/heads/dev" --jq .object.sha)"
           if gh api "repos/${GH_REPO}/git/ref/heads/${TARGET_BRANCH}" >/dev/null 2>&1; then
             gh api -X PATCH "repos/${GH_REPO}/git/refs/heads/${TARGET_BRANCH}" \
@@ -349,6 +349,25 @@ jobs:
             --title "${VERSION}" \
             --notes "Automated release ${VERSION} (merged ${TARGET_BRANCH} → main). Build/publish runs via release.yml."
           echo "Created tag + release ${VERSION} at ${MAIN_SHA}."
+
+      # Cleanup: drop the snapshot working branch once the run has SUCCEEDED. Real run:
+      # auto-release/<version> — already merged into main, and the tag/release point at
+      # the merge commit SHA (MAIN_SHA), not this branch, so removing it loses nothing.
+      # Dry-run: ci/auto-release/<version> — validation-only, never merged. On FAILURE
+      # the branch is intentionally left behind for investigation / manual recovery
+      # (see the partial-failure note on "Create snapshot branch from dev"). Idempotent:
+      # a 404/422 (already gone) warns rather than fails. GITHUB_TOKEN (contents: write)
+      # suffices — the branch is in an unprotected namespace.
+      - name: Delete snapshot branch
+        if: ${{ success() }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh api -X DELETE "repos/${GH_REPO}/git/refs/heads/${TARGET_BRANCH}" >/dev/null 2>&1; then
+            echo "Deleted snapshot branch ${TARGET_BRANCH}."
+          else
+            echo "::warning::Could not delete snapshot branch ${TARGET_BRANCH} (already removed?)."
+          fi
 
       - name: Summary
         if: success()
