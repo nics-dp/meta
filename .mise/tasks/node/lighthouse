@@ -41,10 +41,10 @@ fi
 # bypasses the trap and can still leave the file behind).
 #
 # meta/configs ships the default in both JSON and YAML. A repo with no
-# committed config may pick which one to fetch via META_LIGHTHOUSE_DEFAULT
+# repo-local config may pick which one to fetch via META_LIGHTHOUSE_DEFAULT
 # (basename only); defaults to lighthouserc.json for backward compatibility.
-# We fetch to that same filename at the repo root so lhci auto-detects it, and
-# the cleanup removes exactly what we fetched.
+# We fetch to that filename at the repo root and pass it explicitly via
+# --config below; the cleanup removes exactly what we fetched.
 META_CONFIG_BASE="${META_CONFIG_BASE:-https://raw.githubusercontent.com/nics-dp/meta/main/configs}"
 default_config="${META_LIGHTHOUSE_DEFAULT:-lighthouserc.json}"
 # Only the formats meta actually ships in configs/ are valid for the FETCHED
@@ -68,6 +68,8 @@ cleanup() {
   exit "$rc"
 }
 trap cleanup EXIT
-echo "No repo-local lighthouserc found; fetching shared meta default $default_config from $META_CONFIG_BASE"
+# Log only the filename, never the full base URL — META_CONFIG_BASE may be
+# overridden with a credentialed/signed URL that must not leak into CI logs.
+echo "No repo-local lighthouserc found; fetching shared meta default: $default_config"
 curl -fsSL "$META_CONFIG_BASE/$default_config" -o "$default_config"
 bunx --bun @lhci/cli autorun --config "$default_config"
