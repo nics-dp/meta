@@ -30,7 +30,8 @@ if [ -n "$repo_config" ]; then
 fi
 
 # No repo config: fetch the shared meta default into the repo root, run, and
-# clean it up on exit so it never lingers in the working tree.
+# attempt to clean it up on exit (best-effort — a hard kill such as SIGKILL
+# bypasses the trap and can still leave the file behind).
 #
 # meta/configs ships the default in both JSON and YAML. A repo with no
 # committed config may pick which one to fetch via META_LIGHTHOUSE_DEFAULT
