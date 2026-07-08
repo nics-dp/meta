@@ -15,11 +15,15 @@ set -euo pipefail
 # Detection is by file PRESENCE (not git-tracked status): a normal checkout
 # only carries the committed config, though a leftover fallback file from a
 # hard-killed prior run would also be treated as repo-local until removed.
-# Filenames match what lhci auto-detects (json/js/cjs/yml/yaml, with/without dot).
+# Scan in lhci's own auto-detect priority order (dotted variant first per
+# extension: js, cjs, json, yml, yaml) and pass the picked file explicitly via
+# --config below, so the file we echo is exactly the one lhci runs even when a
+# repo happens to carry more than one lighthouserc.*.
 repo_config=""
 for c in \
-  lighthouserc.js lighthouserc.cjs lighthouserc.json lighthouserc.yml lighthouserc.yaml \
-  .lighthouserc.js .lighthouserc.cjs .lighthouserc.json .lighthouserc.yml .lighthouserc.yaml; do
+  .lighthouserc.js lighthouserc.js .lighthouserc.cjs lighthouserc.cjs \
+  .lighthouserc.json lighthouserc.json .lighthouserc.yml lighthouserc.yml \
+  .lighthouserc.yaml lighthouserc.yaml; do
   if [ -f "$c" ]; then
     repo_config="$c"
     break
@@ -28,7 +32,7 @@ done
 
 if [ -n "$repo_config" ]; then
   echo "Using repo-local $repo_config (skipping shared meta default)"
-  bunx --bun @lhci/cli autorun
+  bunx --bun @lhci/cli autorun --config "$repo_config"
   exit 0
 fi
 
@@ -66,4 +70,4 @@ cleanup() {
 trap cleanup EXIT
 echo "No repo-local lighthouserc found; fetching shared meta default $default_config from $META_CONFIG_BASE"
 curl -fsSL "$META_CONFIG_BASE/$default_config" -o "$default_config"
-bunx --bun @lhci/cli autorun
+bunx --bun @lhci/cli autorun --config "$default_config"
