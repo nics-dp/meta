@@ -39,10 +39,13 @@ fi
 # the cleanup removes exactly what we fetched.
 META_CONFIG_BASE="${META_CONFIG_BASE:-https://raw.githubusercontent.com/nics-dp/meta/main/configs}"
 default_config="${META_LIGHTHOUSE_DEFAULT:-lighthouserc.json}"
+# Only the formats meta actually ships in configs/ are valid here (this selects
+# a meta-hosted default to fetch, not an arbitrary local filename). YAML users
+# fetch lighthouserc.yml; lhci auto-detects .yml fine, so .yaml is not offered.
 case "$default_config" in
-  lighthouserc.json | lighthouserc.yml | lighthouserc.yaml) ;;
+  lighthouserc.json | lighthouserc.yml) ;;
   *)
-    echo "Invalid META_LIGHTHOUSE_DEFAULT='$default_config' (expected lighthouserc.json|lighthouserc.yml|lighthouserc.yaml)" >&2
+    echo "Invalid META_LIGHTHOUSE_DEFAULT='$default_config' (expected lighthouserc.json|lighthouserc.yml)" >&2
     exit 1
     ;;
 esac
