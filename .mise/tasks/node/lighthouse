@@ -1,10 +1,36 @@
 #!/usr/bin/env bash
-#MISE description="Run Lighthouse CI on built dist/"
+#MISE description="Run Lighthouse CI on built dist/ (repo-local lighthouserc wins; else meta default)"
 #MISE hide=true
 #MISE raw=true
 #MISE tools={bun="1.3.14"}
 #MISE depends=["node:build"]
 
+set -euo pipefail
+
+# Prefer a repo-committed Lighthouse config if present: use it verbatim and
+# never fetch or overwrite anything. This lets a repo pin app-specific
+# thresholds/budgets (e.g. error-level CWV, byte budgets) while repos without
+# one fall back to the shared meta default below. Also avoids the network
+# dependency on the meta CDN when a repo ships its own config.
+# Filenames match what lhci auto-detects (json/js/cjs/yml/yaml, with/without dot).
+repo_config=""
+for c in \
+  lighthouserc.js lighthouserc.cjs lighthouserc.json lighthouserc.yml lighthouserc.yaml \
+  .lighthouserc.js .lighthouserc.cjs .lighthouserc.json .lighthouserc.yml .lighthouserc.yaml; do
+  if [ -f "$c" ]; then
+    repo_config="$c"
+    break
+  fi
+done
+
+if [ -n "$repo_config" ]; then
+  echo "Using repo-local $repo_config (skipping shared meta default)"
+  bunx --bun @lhci/cli autorun
+  exit 0
+fi
+
+# No repo config: fetch the shared meta default into the repo root, run, and
+# clean it up on exit so it never lingers in the working tree.
 META_CONFIG_BASE="${META_CONFIG_BASE:-https://raw.githubusercontent.com/nics-dp/meta/main/configs}"
 cleanup() {
   rc=$?
@@ -12,6 +38,6 @@ cleanup() {
   exit "$rc"
 }
 trap cleanup EXIT
+echo "No repo-local lighthouserc found; using shared meta default from $META_CONFIG_BASE"
 curl -fsSL "$META_CONFIG_BASE/lighthouserc.json" -o lighthouserc.json
-
 bunx --bun @lhci/cli autorun
