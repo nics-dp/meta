@@ -55,7 +55,10 @@ case "$default_config" in
 esac
 cleanup() {
   rc=$?
-  rm -f "$default_config"
+  # Best-effort: never let an rm failure clobber the real exit code. Under
+  # `set -e` a failing command inside the EXIT trap would abort before the
+  # `exit "$rc"` below, overwriting the original status.
+  rm -f "$default_config" || true
   exit "$rc"
 }
 trap cleanup EXIT
