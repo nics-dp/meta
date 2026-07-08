@@ -7,11 +7,14 @@
 
 set -euo pipefail
 
-# Prefer a repo-committed Lighthouse config if present: use it verbatim and
-# never fetch or overwrite anything. This lets a repo pin app-specific
+# Prefer a repo-local Lighthouse config when one is present: use it verbatim
+# and never fetch or overwrite anything. This lets a repo pin app-specific
 # thresholds/budgets (e.g. error-level CWV, byte budgets) while repos without
 # one fall back to the shared meta default below. Also avoids the network
 # dependency on the meta CDN when a repo ships its own config.
+# Detection is by file PRESENCE (not git-tracked status): a normal checkout
+# only carries the committed config, though a leftover fallback file from a
+# hard-killed prior run would also be treated as repo-local until removed.
 # Filenames match what lhci auto-detects (json/js/cjs/yml/yaml, with/without dot).
 repo_config=""
 for c in \
