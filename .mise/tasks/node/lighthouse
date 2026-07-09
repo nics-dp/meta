@@ -71,5 +71,5 @@ trap cleanup EXIT
 # Log only the filename, never the full base URL — META_CONFIG_BASE may be
 # overridden with a credentialed/signed URL that must not leak into CI logs.
 echo "No repo-local lighthouserc found; fetching shared meta default: $default_config"
-curl -fsSL "$META_CONFIG_BASE/$default_config" -o "$default_config"
+curl -fsSL --retry 3 --retry-delay 2 --retry-all-errors "$META_CONFIG_BASE/$default_config" -o "$default_config"
 bunx --bun @lhci/cli autorun --config "$default_config"

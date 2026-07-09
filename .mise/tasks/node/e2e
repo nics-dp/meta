@@ -5,13 +5,8 @@
 #MISE tools={bun="1.3.14"}
 #MISE depends=["node:install", "node:e2e-install"]
 
-META_CONFIG_BASE="${META_CONFIG_BASE:-https://raw.githubusercontent.com/nics-dp/meta/main/configs}"
-cleanup() {
-  rc=$?
-  rm -f playwright.config.ts
-  exit "$rc"
-}
-trap cleanup EXIT
-curl -fsSL "$META_CONFIG_BASE/playwright.config.ts" -o playwright.config.ts
+# Repo-local playwright.config.ts wins; else fetched with retry + fail-loud (see lib/fetch-config).
+source "$(dirname "$0")/../lib/fetch-config"
+fetch_config playwright.config.ts
 
 bunx playwright test
