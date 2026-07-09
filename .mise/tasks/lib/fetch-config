@@ -26,7 +26,8 @@
 # lighthouse atom: a leftover fetched file from a hard-killed prior run will
 # be treated as repo-local until removed.
 
-META_CONFIG_BASE="${META_CONFIG_BASE:-https://raw.githubusercontent.com/nics-dp/meta/main/configs}"
+_META_CONFIG_DEFAULT="https://raw.githubusercontent.com/nics-dp/meta/main/configs"
+META_CONFIG_BASE="${META_CONFIG_BASE:-$_META_CONFIG_DEFAULT}"
 
 # Bash 3.2-safe (macOS default shell for mise tasks): plain space-joined
 # string instead of an array, filenames here never contain spaces.
@@ -49,9 +50,10 @@ fetch_config() {
       continue
     fi
     # --retry-all-errors: curl only retries "transient" errors by default,
-    # and 429 without a Retry-After header is not among them.
-    if curl -fsSL --retry 3 --retry-delay 2 --retry-all-errors \
-      "$META_CONFIG_BASE/$f" -o "$f"; then
+    # and 429 without a Retry-After header is not among them. -w captures the
+    # last HTTP status even when -f makes curl exit non-zero.
+    if http_code=$(curl -fsSL --retry 3 --retry-delay 2 --retry-all-errors \
+      -w '%{http_code}' "$META_CONFIG_BASE/$f" -o "$f"); then
       _FETCHED_CONFIGS="$_FETCHED_CONFIGS $f"
     else
       status=$?
@@ -59,11 +61,17 @@ fetch_config() {
       # for a repo-local config.
       rm -f "$f"
       echo "" >&2
-      echo "✗ Failed to fetch shared config '$f' (curl exit $status)" >&2
+      echo "✗ Failed to fetch shared config '$f' (HTTP ${http_code:-000}, curl exit $status)" >&2
+      # Log only the filename, never the expanded base URL — META_CONFIG_BASE
+      # may be overridden with a credentialed/signed URL that must not leak
+      # into CI logs (same rule as the lighthouse atom).
       echo "  from: \$META_CONFIG_BASE/$f" >&2
+      if [ "$META_CONFIG_BASE" != "$_META_CONFIG_DEFAULT" ]; then
+        echo "  (META_CONFIG_BASE is overridden in this environment; value withheld from logs)" >&2
+      fi
       echo "  Refusing to run with the tool's built-in defaults — that would" >&2
       echo "  mis-flag (or worse, rewrite) the whole tree in the wrong style." >&2
-      echo "  Fix: retry later (usually a raw.githubusercontent.com 429)," >&2
+      echo "  Fix: retry later (HTTP 429 = raw.githubusercontent.com rate limit)," >&2
       echo "  or commit a repo-local $f to skip the fetch entirely." >&2
       exit 1
     fi
