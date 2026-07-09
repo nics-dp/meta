@@ -14,14 +14,9 @@
 # the version is controlled by each repo's package.json devDeps (renovate-bumped,
 # knip-ignored) — avoids @latest drift across repos on beta oxfmt.
 
-META_CONFIG_BASE="${META_CONFIG_BASE:-https://raw.githubusercontent.com/nics-dp/meta/main/configs}"
-cleanup() {
-  rc=$?
-  rm -f .oxfmtrc.json
-  exit "$rc"
-}
-trap cleanup EXIT
-curl -fsSL "$META_CONFIG_BASE/.oxfmtrc.json" -o .oxfmtrc.json
+# Repo-local .oxfmtrc.json wins; else fetched with retry + fail-loud (see lib/fetch-config).
+source "$(dirname "$0")/../lib/fetch-config"
+fetch_config .oxfmtrc.json
 
 # Warn if oxfmt is missing (bunx would otherwise fetch @latest, risking drift).
 if [ ! -d "node_modules/oxfmt" ] && ! grep -q '"oxfmt"' package.json 2>/dev/null; then
