@@ -34,7 +34,9 @@ META_CONFIG_BASE="${META_CONFIG_BASE:-$_META_CONFIG_DEFAULT}"
 _FETCHED_CONFIGS=""
 
 _fetch_config_cleanup() {
-  rc=$?
+  # local: this file is sourced, so bare assignments would leak into (or
+  # clobber) the calling task's variables of the same name.
+  local rc=$? f
   # Best-effort: never let an rm failure clobber the real exit code.
   for f in $_FETCHED_CONFIGS; do
     rm -f "$f" || true
@@ -44,6 +46,7 @@ _fetch_config_cleanup() {
 trap _fetch_config_cleanup EXIT
 
 fetch_config() {
+  local f http_code status
   for f in "$@"; do
     if [ -f "$f" ]; then
       echo "Using repo-local $f (skipping shared meta default)"

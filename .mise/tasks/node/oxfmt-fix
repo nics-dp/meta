@@ -6,6 +6,8 @@
 #MISE tools={bun="1.3.14"}
 #MISE depends=["node:install"]
 
+set -euo pipefail
+
 # oxfmt (OXC) — native single-binary formatter, run through bun so no Node
 # runtime is needed. Parallel/opt-in replacement for the prettier-based
 # node:format-fix (prettier atom stays). Config fetched from meta configs/;
