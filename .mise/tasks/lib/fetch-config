@@ -1,0 +1,83 @@
+#!/usr/bin/env bash
+# Sourced helper. Hardened shared-config fetching for node/* atoms.
+#
+#   source "$(dirname "$0")/../lib/fetch-config"
+#   fetch_config .oxfmtrc.json [more files...]
+#
+# For each file, in order of preference:
+#
+#   1. Repo-local file already present → use it verbatim, never fetch, never
+#      delete. This lets a repo pin its own config (same mechanism as the
+#      lighthouse atom, nics-dp/meta#260) and removes the runtime dependency
+#      on raw.githubusercontent.com entirely.
+#   2. Otherwise fetch "$META_CONFIG_BASE/<file>" with retries
+#      (raw.githubusercontent.com rate-limits shared CI runner IPs with 429).
+#      Fetched files are registered for cleanup on EXIT — only the files WE
+#      fetched; a committed repo-local config is never touched.
+#   3. Fetch still failing after retries → FAIL LOUD (exit 1) with the HTTP
+#      status. NEVER fall through and let the tool run with its built-in
+#      defaults: a --check would flag every file in the repo (misleading
+#      "371 files misformatted" instead of "config fetch failed"), and a
+#      --write/--fix would silently rewrite the whole tree in the wrong
+#      style. Both have bitten consumers (dcf-access-web, 2026-07-08:
+#      three consecutive 429s on CI plus one local tree pollution).
+#
+# Detection is by file PRESENCE (not git-tracked status), mirroring the
+# lighthouse atom: a leftover fetched file from a hard-killed prior run will
+# be treated as repo-local until removed.
+
+_META_CONFIG_DEFAULT="https://raw.githubusercontent.com/nics-dp/meta/main/configs"
+META_CONFIG_BASE="${META_CONFIG_BASE:-$_META_CONFIG_DEFAULT}"
+
+# Bash 3.2-safe (macOS default shell for mise tasks): plain space-joined
+# string instead of an array, filenames here never contain spaces.
+_FETCHED_CONFIGS=""
+
+_fetch_config_cleanup() {
+  # local: this file is sourced, so bare assignments would leak into (or
+  # clobber) the calling task's variables of the same name.
+  local rc=$? f
+  # Best-effort: never let an rm failure clobber the real exit code.
+  for f in $_FETCHED_CONFIGS; do
+    rm -f "$f" || true
+  done
+  exit "$rc"
+}
+trap _fetch_config_cleanup EXIT
+
+fetch_config() {
+  local f http_code status
+  for f in "$@"; do
+    if [ -f "$f" ]; then
+      echo "Using repo-local $f (skipping shared meta default)"
+      continue
+    fi
+    # --retry-all-errors: curl only retries "transient" errors by default,
+    # and 429 without a Retry-After header is not among them. -w captures the
+    # last HTTP status even when -f makes curl exit non-zero.
+    if http_code=$(curl -fsSL --retry 3 --retry-delay 2 --retry-all-errors \
+      -w '%{http_code}' "$META_CONFIG_BASE/$f" -o "$f"); then
+      _FETCHED_CONFIGS="$_FETCHED_CONFIGS $f"
+    else
+      status=$?
+      # Don't leave a partial/empty file behind for the next run to mistake
+      # for a repo-local config. Best-effort: callers run under set -e, and a
+      # failing rm must not abort before the diagnostics below are printed.
+      rm -f "$f" || true
+      echo "" >&2
+      echo "✗ Failed to fetch shared config '$f' (HTTP ${http_code:-000}, curl exit $status)" >&2
+      # Log only the filename, never the expanded base URL — META_CONFIG_BASE
+      # may be overridden with a credentialed/signed URL that must not leak
+      # into CI logs (same rule as the lighthouse atom).
+      echo "  from: \$META_CONFIG_BASE/$f" >&2
+      if [ "$META_CONFIG_BASE" != "$_META_CONFIG_DEFAULT" ]; then
+        echo "  (META_CONFIG_BASE is overridden in this environment; value withheld from logs)" >&2
+      fi
+      echo "  Refusing to run with the tool's built-in defaults — that would" >&2
+      echo "  mis-flag (or worse, rewrite) the whole tree in the wrong style." >&2
+      echo "  Fix: retry later (HTTP 429 = raw.githubusercontent.com rate limit)," >&2
+      echo "  or commit a repo-local $f to skip the fetch entirely." >&2
+      exit 1
+    fi
+  done
+}

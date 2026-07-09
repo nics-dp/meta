@@ -5,14 +5,8 @@
 #MISE tools={bun="1.3.14"}
 #MISE depends=["node:install"]
 
-META_CONFIG_BASE="${META_CONFIG_BASE:-https://raw.githubusercontent.com/nics-dp/meta/main/configs}"
-cleanup() {
-  rc=$?
-  rm -f .prettierrc.json .prettierignore
-  exit "$rc"
-}
-trap cleanup EXIT
-curl -fsSL "$META_CONFIG_BASE/.prettierrc.json" -o .prettierrc.json
-curl -fsSL "$META_CONFIG_BASE/.prettierignore" -o .prettierignore
+# Repo-local configs win; else fetched with retry + fail-loud (see lib/fetch-config).
+source "$(dirname "$0")/../lib/fetch-config"
+fetch_config .prettierrc.json .prettierignore
 
 bunx prettier --check .

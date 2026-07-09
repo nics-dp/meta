@@ -5,14 +5,9 @@
 #MISE tools={bun="1.3.14"}
 #MISE depends=["node:install"]
 
-META_CONFIG_BASE="${META_CONFIG_BASE:-https://raw.githubusercontent.com/nics-dp/meta/main/configs}"
-cleanup() {
-  rc=$?
-  rm -f eslint.config.js
-  exit "$rc"
-}
-trap cleanup EXIT
-curl -fsSL "$META_CONFIG_BASE/eslint.config.js" -o eslint.config.js
+# Repo-local eslint.config.js wins; else fetched with retry + fail-loud (see lib/fetch-config).
+source "$(dirname "$0")/../lib/fetch-config"
+fetch_config eslint.config.js
 
 # Warn if eslint plugins required by shared config are missing.
 REQUIRED_PLUGINS=(
