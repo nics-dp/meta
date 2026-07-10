@@ -90,71 +90,112 @@ jobs:
           publish_results: false
 
       - name: Filter Scorecard SARIF posture noise
-        # Remove findings that cannot or should not be actioned, keeping only genuine
-        # signal (mirrors the surrounding non-blocking steps):
-        #   * TokenPermissionsID job-level writes -- required by reusable delegation
-        #     (SARIF upload / package push / release). Top-level writes are KEPT.
-        #   * PinnedDependenciesID on nics-dp/ internal reusables -- pinned by @main
-        #     on purpose. External unpinned actions are KEPT.
+        # Copy results.sarif (written by the Docker scorecard-action as root) to a
+        # runner-owned results.filtered.sarif, then filter the copy and upload that.
+        # The copy + filter run inside Python, not a bash `cp` under `set -e`. Both
+        # the copy and the filtered write go via a temp file + os.replace, so DST is
+        # only ever a complete file. If the copy fails, results.filtered.sarif is
+        # absent and the Select step below falls back to uploading the raw
+        # results.sarif; if filtering fails after a successful copy, DST stays the
+        # intact unfiltered copy and is uploaded (fail-safe). Temp files are always
+        # cleaned up. Keeps genuine signal: TokenPermissionsID top-level
+        # writes and external unpinned actions stay; job-level writes (required by
+        # reusable delegation) and PinnedDependenciesID on nics-dp/ internal
+        # reusables are dropped.
         if: always() && hashFiles('results.sarif') != ''
         continue-on-error: true
         shell: bash
         run: |
           python3 - <<'FILTER_PY'
-          import json, os, sys
+          import json, os, shutil, sys
           from urllib.parse import unquote
-          SARIF = "results.sarif"
+          SRC = "results.sarif"
+          DST = "results.filtered.sarif"
+          CP_TMP = DST + ".copy.tmp"
           try:
-              with open(SARIF, encoding="utf-8") as fh:
-                  data = json.load(fh)
+              shutil.copyfile(SRC, CP_TMP)
+              os.replace(CP_TMP, DST)
           except Exception as e:
-              print(f"sarif-filter: cannot read {SARIF}: {e}; leaving unchanged")
+              print(f"sarif-filter: cannot copy {SRC} -> {DST}: {e}; raw SARIF used as fallback")
+              try:
+                  os.remove(CP_TMP)
+              except OSError:
+                  pass
               sys.exit(0)
-          _lines_cache = {}
-          def flagged_line(uri, line):
-              if not uri or not line:
-                  return ""
-              path = unquote(uri)
-              if not os.path.isabs(path):
-                  workspace = os.environ.get("GITHUB_WORKSPACE")
-                  if workspace:
-                      path = os.path.join(workspace, path)
-              if path not in _lines_cache:
-                  try:
-                      with open(path, encoding="utf-8") as fh:
-                          _lines_cache[path] = fh.read().splitlines()
-                  except Exception:
-                      _lines_cache[path] = []
-              rows = _lines_cache[path]
-              return rows[line - 1] if 0 < line <= len(rows) else ""
-          def keep(r):
-              rid = r.get("ruleId")
-              msg = (r.get("message") or {}).get("text", "")
-              if rid == "TokenPermissionsID" and "jobLevel" in msg:
-                  return False
-              if rid == "PinnedDependenciesID":
-                  loc = (r.get("locations") or [{}])[0].get("physicalLocation", {})
-                  uri = (loc.get("artifactLocation") or {}).get("uri", "")
-                  line = (loc.get("region") or {}).get("startLine")
-                  if "nics-dp/" in flagged_line(uri, line):
+          try:
+              with open(DST, encoding="utf-8") as fh:
+                  data = json.load(fh)
+              _lines_cache = {}
+              def flagged_line(uri, line):
+                  if not uri or not line:
+                      return ""
+                  path = unquote(uri)
+                  if not os.path.isabs(path):
+                      workspace = os.environ.get("GITHUB_WORKSPACE")
+                      if workspace:
+                          path = os.path.join(workspace, path)
+                  if path not in _lines_cache:
+                      try:
+                          with open(path, encoding="utf-8") as fh2:
+                              _lines_cache[path] = fh2.read().splitlines()
+                      except Exception:
+                          _lines_cache[path] = []
+                  rows = _lines_cache[path]
+                  return rows[line - 1] if 0 < line <= len(rows) else ""
+              def keep(r):
+                  rid = r.get("ruleId")
+                  msg = (r.get("message") or {}).get("text", "")
+                  if rid == "TokenPermissionsID" and "jobLevel" in msg:
                       return False
-              return True
-          removed = 0
-          for run in data.get("runs", []):
-              before = run.get("results", []) or []
-              after = [r for r in before if keep(r)]
-              removed += len(before) - len(after)
-              run["results"] = after
-          with open(SARIF, "w", encoding="utf-8") as fh:
-              json.dump(data, fh, indent=2)
-          print(f"sarif-filter: removed {removed} posture-noise result(s)")
+                  if rid == "PinnedDependenciesID":
+                      loc = (r.get("locations") or [{}])[0].get("physicalLocation", {})
+                      uri = (loc.get("artifactLocation") or {}).get("uri", "")
+                      line = (loc.get("region") or {}).get("startLine")
+                      if "nics-dp/" in flagged_line(uri, line):
+                          return False
+                  return True
+              removed = 0
+              for run in data.get("runs", []):
+                  before = run.get("results", []) or []
+                  after = [r for r in before if keep(r)]
+                  removed += len(before) - len(after)
+                  run["results"] = after
+              tmp = DST + ".tmp"
+              try:
+                  with open(tmp, "w", encoding="utf-8") as fh:
+                      json.dump(data, fh, indent=2)
+                  os.replace(tmp, DST)
+              finally:
+                  if os.path.exists(tmp):
+                      try:
+                          os.remove(tmp)
+                      except OSError:
+                          pass
+              print(f"sarif-filter: removed {removed} posture-noise result(s)")
+          except Exception as e:
+              print(f"sarif-filter: filtering failed ({e}); uploading unfiltered copy")
           FILTER_PY
 
+      - name: Select SARIF file to upload
+        # Prefer the filtered SARIF; if the filter step produced no file at all
+        # (e.g. it errored before writing one) fall back to the raw results.sarif so
+        # code scanning still refreshes. Non-blocking best effort.
+        id: pick
+        if: always()
+        continue-on-error: true
+        shell: bash
+        run: |
+          if [ -f results.filtered.sarif ]; then
+            echo "sarif_to_upload=results.filtered.sarif" >> "$GITHUB_OUTPUT"
+          elif [ -f results.sarif ]; then
+            echo "sarif_to_upload=results.sarif" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Upload Scorecard SARIF
-        if: always() && hashFiles('results.sarif') != ''
+        if: always() && steps.pick.outputs.sarif_to_upload != ''
         # non-blocking: a failed upload must not fail the job (mirrors security-sarif.yml).
         continue-on-error: true
         uses: github/codeql-action/upload-sarif@54f647b7e1bb85c95cddabcd46b0c578ec92bc1a # v4.36.3
         with:
-          sarif_file: results.sarif
+          sarif_file: ${{ steps.pick.outputs.sarif_to_upload }}
           category: scorecard
