@@ -222,8 +222,7 @@ Go 與 Node 的 dependency-submission 拆成兩支：`go.mod` GitHub 原生解�
 | --------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `security-sarif.yml`              | Gate-only scanners（gosec、govulncheck、semgrep、trivy config、hadolint），各自上傳獨立 code-scanning SARIF category；**non-blocking**（只填 Security tab，不擋 CI） |
 | `dependency-review.yml`           | PR-time `dependency-review-action` 掃 GitHub dependency graph；引入帶已知漏洞（≥ `fail_on_severity`，default `high`）或禁用授權的相依時 **擋 PR**；須由 `pull_request` 觸發的 workflow 呼叫 |
-| `scorecard.yml`                   | OpenSSF Scorecard（PRIVATE 變體），上傳 SARIF 至 code scanning（`category: scorecard`，non-blocking）；用 nics-dp-scorecard App 對私有 repo 評分；`publish_results: false` |
-| `scorecard-publish.yml`           | Scorecard 的 PUBLIC 變體：另發佈結果至 OpenSSF 公開 API（badge），僅適用公開 repo（如 meta 自身）                                                       |
+| `scorecard.yml`                   | OpenSSF Scorecard（唯一變體，不 publish）；filter 掉 posture 噪音後將 SARIF 上傳至 code scanning（`category: scorecard`，non-blocking）；用 nics-dp-scorecard App 對私有 repo 評分；`publish_results: false` |
 | `go-dependency-submission.yml`    | 送 Go 相依圖至 Dependency Submission API；用 ci-read App token 做 org-scoped 私模 git rewrite                                                          |
 | `node-dependency-submission.yml`  | 送 bun 專案完整 transitive npm 圖（GitHub 不解析 `bun.lock`，故 `bun install` 後用 Syft catalog `node_modules`）；全公開 npm，免 token                  |
 
@@ -243,7 +242,7 @@ Go 與 Node 的 dependency-submission 拆成兩支：`go.mod` GitHub 原生解�
 ### Meta CI（meta 自我消費自家 reusables）
 
 - `ci.yml` — meta repo 自家 CI，透過 `mise-task.yml` matrix 跑 `iac:actionlint`（workflow YAML lint）＋ `ci:betterleaks` / `ci:trufflehog` secret-scan jobs。
-- `self-supply-chain.yml` — meta 消費自家 `scorecard-publish.yml`（`publish: true`，meta 為公開 repo）；無 dependency-submission job（meta 無編譯語言 manifest，純配置）。
+- `self-supply-chain.yml` — meta 消費自家 `scorecard.yml`（`publish: false`，改走 filtered 路徑）；無 dependency-submission job（meta 無編譯語言 manifest，純配置）。
 - `self-dependency-review.yml` — meta 的 PR-time dependency review，透過 `dependency-review.yml` reusable。
 
 ---

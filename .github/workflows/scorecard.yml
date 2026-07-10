@@ -2,19 +2,17 @@
 
 name: Scorecard
 
-# PRIVATE-repo variant of OpenSSF Scorecard: runs Scorecard, uploads SARIF to
-# GitHub code scanning (Security > Code scanning, category `scorecard`), and
-# NEVER publishes to the public OpenSSF API. Callers add a job that `uses:` this.
+# OpenSSF Scorecard (the only variant): runs Scorecard, filters posture noise
+# from the SARIF, and uploads the result to GitHub code scanning (Security >
+# Code scanning, category
+# `scorecard`), and NEVER publishes to the public OpenSSF API. Callers add a job
+# that `uses:` this; every nics-dp repo (including meta itself, via
+# self-supply-chain.yml) routes through here so posture noise is filtered
+# consistently.
 #
-# Why a dedicated private file (see scorecard-publish.yml for the public one):
-# Scorecard's publish path (publish_results: true) is verified server-side by the
-# OpenSSF API, which scans the whole workflow and picks "the first job with a
-# scorecard-action step" via an UNORDERED map -- so a file with both a publish
-# job and a token-minting private job would intermittently fail verification
-# (env vars / non-allowlist step / another job's id-token). Keeping the two
-# paths in separate files means each file has exactly one scorecard-action job.
-# Because this file never publishes, it is free to mint an App token and use a
-# job env (neither is ever verified).
+# Because this file never publishes (publish_results: false), it is free to mint
+# an App token and use a job env; the public OpenSSF publish path (verified
+# server-side against a strict step allowlist) is not used anywhere.
 #
 # NON-BLOCKING throughout: a token-mint, scorecard, or upload failure never fails
 # the caller's CI (mirrors security-sarif.yml).
@@ -25,7 +23,7 @@ on:
         required: false
         type: boolean
         default: false
-        description: "Retained for caller compatibility only. This file is the PRIVATE variant and never publishes; to publish (public repos) use scorecard-publish.yml. A truthy value here is ignored."
+        description: "Retained for caller compatibility only. This workflow never publishes to the public OpenSSF API; a truthy value here is ignored."
     secrets:
       scorecard_app_private_key:
         required: false
@@ -86,7 +84,7 @@ jobs:
           # Administration: Read for Branch-Protection); falls back to the
           # default token when the App is not configured.
           repo_token: ${{ steps.sc-token.outputs.token || github.token }}
-          # This is the private variant: never publish (see scorecard-publish.yml).
+          # Never publish to the public OpenSSF API.
           publish_results: false
 
       - name: Filter Scorecard SARIF posture noise
