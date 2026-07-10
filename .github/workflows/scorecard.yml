@@ -96,10 +96,11 @@ jobs:
         # the copy and the filtered write go via a temp file + os.replace, so DST is
         # only ever a complete file: if the copy fails DST is absent and nothing is
         # uploaded; if filtering fails after a successful copy DST stays the intact
-        # unfiltered copy and the upload still proceeds (fail-safe). Keeps genuine
-        # signal: TokenPermissionsID top-level writes and external unpinned actions
-        # stay; job-level writes (required by reusable delegation) and
-        # PinnedDependenciesID on nics-dp/ internal reusables are dropped.
+        # unfiltered copy and the upload still proceeds (fail-safe). Temp files are
+        # always cleaned up. Keeps genuine signal: TokenPermissionsID top-level
+        # writes and external unpinned actions stay; job-level writes (required by
+        # reusable delegation) and PinnedDependenciesID on nics-dp/ internal
+        # reusables are dropped.
         if: always() && hashFiles('results.sarif') != ''
         continue-on-error: true
         shell: bash
@@ -159,9 +160,16 @@ jobs:
                   removed += len(before) - len(after)
                   run["results"] = after
               tmp = DST + ".tmp"
-              with open(tmp, "w", encoding="utf-8") as fh:
-                  json.dump(data, fh, indent=2)
-              os.replace(tmp, DST)
+              try:
+                  with open(tmp, "w", encoding="utf-8") as fh:
+                      json.dump(data, fh, indent=2)
+                  os.replace(tmp, DST)
+              finally:
+                  if os.path.exists(tmp):
+                      try:
+                          os.remove(tmp)
+                      except OSError:
+                          pass
               print(f"sarif-filter: removed {removed} posture-noise result(s)")
           except Exception as e:
               print(f"sarif-filter: filtering failed ({e}); uploading unfiltered copy")
