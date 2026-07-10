@@ -2,8 +2,9 @@
 
 name: Scorecard
 
-# OpenSSF Scorecard (the only variant): runs Scorecard, uploads a filtered
-# results.sarif to GitHub code scanning (Security > Code scanning, category
+# OpenSSF Scorecard (the only variant): runs Scorecard, filters posture noise
+# from the SARIF, and uploads the result to GitHub code scanning (Security >
+# Code scanning, category
 # `scorecard`), and NEVER publishes to the public OpenSSF API. Callers add a job
 # that `uses:` this; every nics-dp repo (including meta itself, via
 # self-supply-chain.yml) routes through here so posture noise is filtered
@@ -22,7 +23,7 @@ on:
         required: false
         type: boolean
         default: false
-        description: "Retained for caller compatibility only. This file is the PRIVATE variant and never publishes; this workflow never publishes to the public OpenSSF API. A truthy value here is ignored."
+        description: "Retained for caller compatibility only. This workflow never publishes to the public OpenSSF API; a truthy value here is ignored."
     secrets:
       scorecard_app_private_key:
         required: false
