@@ -95,7 +95,7 @@ includes = ["git::https://github.com/nics-dp/meta.git//.mise/tasks?ref=main"]
 
 ### Meta CI (meta self-consuming its own reusables)
 - **`ci.yml`** — meta repo's own CI via `mise-task.yml`: `iac:actionlint` (workflow YAML lint) plus `ci:betterleaks` and `ci:trufflehog` secret-scan jobs.
-- **`self-supply-chain.yml`** — meta consumes its own `scorecard.yml` reusable (private, filtered) with `publish: false`. No dependency-submission job — meta has no compiled-language manifests (config only).
+- **`self-supply-chain.yml`** — meta consumes its own `scorecard.yml` reusable (filtered) with `publish: false`. No dependency-submission job — meta has no compiled-language manifests (config only).
 - **`self-dependency-review.yml`** — meta's PR-time dependency review via the `dependency-review.yml` reusable.
 
 ## Editing Guidelines

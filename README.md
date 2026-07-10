@@ -242,7 +242,7 @@ Go 與 Node 的 dependency-submission 拆成兩支：`go.mod` GitHub 原生解�
 ### Meta CI（meta 自我消費自家 reusables）
 
 - `ci.yml` — meta repo 自家 CI，透過 `mise-task.yml` matrix 跑 `iac:actionlint`（workflow YAML lint）＋ `ci:betterleaks` / `ci:trufflehog` secret-scan jobs。
-- `self-supply-chain.yml` — meta 消費自家 `scorecard.yml`（`publish: false`，改走 filtered 私有變體）；無 dependency-submission job（meta 無編譯語言 manifest，純配置）。
+- `self-supply-chain.yml` — meta 消費自家 `scorecard.yml`（`publish: false`，改走 filtered 路徑）；無 dependency-submission job（meta 無編譯語言 manifest，純配置）。
 - `self-dependency-review.yml` — meta 的 PR-time dependency review，透過 `dependency-review.yml` reusable。
 
 ---

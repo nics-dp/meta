@@ -1,7 +1,7 @@
 # yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
 name: self-supply-chain
 
-# meta self-consumes its own PRIVATE Scorecard reusable (scorecard.yml,
+# meta self-consumes its own Scorecard reusable (scorecard.yml,
 # publish_results: false), so its code scanning goes through the same SARIF
 # posture-noise filter as every other repo. No public OpenSSF API publish.
 # No dependency-submission: meta has no compiled-language manifests (config only).
