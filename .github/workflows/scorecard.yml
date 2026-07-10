@@ -94,10 +94,11 @@ jobs:
         # runner-owned results.filtered.sarif, then filter the copy and upload that.
         # The copy + filter run inside Python, not a bash `cp` under `set -e`. Both
         # the copy and the filtered write go via a temp file + os.replace, so DST is
-        # only ever a complete file: if the copy fails DST is absent and nothing is
-        # uploaded; if filtering fails after a successful copy DST stays the intact
-        # unfiltered copy and the upload still proceeds (fail-safe). Temp files are
-        # always cleaned up. Keeps genuine signal: TokenPermissionsID top-level
+        # only ever a complete file. If the copy fails, results.filtered.sarif is
+        # absent and the Select step below falls back to uploading the raw
+        # results.sarif; if filtering fails after a successful copy, DST stays the
+        # intact unfiltered copy and is uploaded (fail-safe). Temp files are always
+        # cleaned up. Keeps genuine signal: TokenPermissionsID top-level
         # writes and external unpinned actions stay; job-level writes (required by
         # reusable delegation) and PinnedDependenciesID on nics-dp/ internal
         # reusables are dropped.
@@ -115,7 +116,7 @@ jobs:
               shutil.copyfile(SRC, CP_TMP)
               os.replace(CP_TMP, DST)
           except Exception as e:
-              print(f"sarif-filter: cannot copy {SRC} -> {DST}: {e}; nothing uploaded")
+              print(f"sarif-filter: cannot copy {SRC} -> {DST}: {e}; raw SARIF used as fallback")
               try:
                   os.remove(CP_TMP)
               except OSError:
