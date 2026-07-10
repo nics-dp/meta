@@ -156,10 +156,14 @@ jobs:
 
       - name: Resolve target branch
         run: |
+          # VERSION is format-validated upstream; strip anything outside the allowed
+          # charset as a defence-in-depth barrier before writing GITHUB_ENV
+          # (CodeQL actions/envvar-injection).
+          safe_version="${VERSION//[^0-9A-Za-z._-]/}"
           if [ "${DRY_RUN}" = "true" ]; then
-            echo "TARGET_BRANCH=ci/auto-release/${VERSION}" >> "$GITHUB_ENV"
+            echo "TARGET_BRANCH=ci/auto-release/${safe_version}" >> "$GITHUB_ENV"
           else
-            echo "TARGET_BRANCH=auto-release/${VERSION}" >> "$GITHUB_ENV"
+            echo "TARGET_BRANCH=auto-release/${safe_version}" >> "$GITHUB_ENV"
           fi
 
       # Read token for private module/submodule fetch during validation.
