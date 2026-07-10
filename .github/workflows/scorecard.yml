@@ -100,10 +100,11 @@ jobs:
         continue-on-error: true
         shell: bash
         run: |
+          cp results.sarif results.filtered.sarif
           python3 - <<'FILTER_PY'
           import json, os, sys
           from urllib.parse import unquote
-          SARIF = "results.sarif"
+          SARIF = "results.filtered.sarif"
           try:
               with open(SARIF, encoding="utf-8") as fh:
                   data = json.load(fh)
@@ -151,10 +152,10 @@ jobs:
           FILTER_PY
 
       - name: Upload Scorecard SARIF
-        if: always() && hashFiles('results.sarif') != ''
+        if: always() && hashFiles('results.filtered.sarif') != ''
         # non-blocking: a failed upload must not fail the job (mirrors security-sarif.yml).
         continue-on-error: true
         uses: github/codeql-action/upload-sarif@54f647b7e1bb85c95cddabcd46b0c578ec92bc1a # v4.36.3
         with:
-          sarif_file: results.sarif
+          sarif_file: results.filtered.sarif
           category: scorecard
