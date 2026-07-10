@@ -79,11 +79,13 @@ concurrency:
   cancel-in-progress: false
 
 permissions:
-  contents: write # GITHUB_TOKEN creates the auto-release/<version> or ci/auto-release/<version> snapshot (unprotected)
+  contents: read
 
 jobs:
   release:
     name: Auto-Release ${{ inputs.version }}${{ inputs.dry_run && ' (dry-run)' || '' }}
+    permissions:
+      contents: write # GITHUB_TOKEN creates the auto-release/<version> or ci/auto-release/<version> snapshot (unprotected)
     runs-on: ${{ fromJSON(inputs.runs_on) }}
     # This driver targets Linux runners (ubuntu-latest, or a Linux self-hosted group
     # via runs_on); every run: step uses POSIX/bash. Pin bash so a runner whose default
