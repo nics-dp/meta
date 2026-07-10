@@ -90,65 +90,71 @@ jobs:
           publish_results: false
 
       - name: Filter Scorecard SARIF posture noise
-        # Remove findings that cannot or should not be actioned, keeping only genuine
-        # signal (mirrors the surrounding non-blocking steps):
-        #   * TokenPermissionsID job-level writes -- required by reusable delegation
-        #     (SARIF upload / package push / release). Top-level writes are KEPT.
-        #   * PinnedDependenciesID on nics-dp/ internal reusables -- pinned by @main
-        #     on purpose. External unpinned actions are KEPT.
+        # Copy results.sarif (written by the Docker scorecard-action as root) to a
+        # runner-owned results.filtered.sarif, then filter the copy and upload that.
+        # Copy + filter run inside Python (not a bash `cp` under `set -e`), so a
+        # failure never aborts the step before results.filtered.sarif exists; on any
+        # error the file is left as the unfiltered copy and the upload still proceeds.
+        # Keeps genuine signal: TokenPermissionsID top-level writes and external
+        # unpinned actions stay; job-level writes (required by reusable delegation)
+        # and PinnedDependenciesID on nics-dp/ internal reusables are dropped.
         if: always() && hashFiles('results.sarif') != ''
         continue-on-error: true
         shell: bash
         run: |
-          cp results.sarif results.filtered.sarif
           python3 - <<'FILTER_PY'
-          import json, os, sys
+          import json, os, shutil, sys
           from urllib.parse import unquote
-          SARIF = "results.filtered.sarif"
+          SRC = "results.sarif"
+          DST = "results.filtered.sarif"
           try:
-              with open(SARIF, encoding="utf-8") as fh:
-                  data = json.load(fh)
+              shutil.copyfile(SRC, DST)
           except Exception as e:
-              print(f"sarif-filter: cannot read {SARIF}: {e}; leaving unchanged")
+              print(f"sarif-filter: cannot copy {SRC} -> {DST}: {e}; nothing uploaded")
               sys.exit(0)
-          _lines_cache = {}
-          def flagged_line(uri, line):
-              if not uri or not line:
-                  return ""
-              path = unquote(uri)
-              if not os.path.isabs(path):
-                  workspace = os.environ.get("GITHUB_WORKSPACE")
-                  if workspace:
-                      path = os.path.join(workspace, path)
-              if path not in _lines_cache:
-                  try:
-                      with open(path, encoding="utf-8") as fh:
-                          _lines_cache[path] = fh.read().splitlines()
-                  except Exception:
-                      _lines_cache[path] = []
-              rows = _lines_cache[path]
-              return rows[line - 1] if 0 < line <= len(rows) else ""
-          def keep(r):
-              rid = r.get("ruleId")
-              msg = (r.get("message") or {}).get("text", "")
-              if rid == "TokenPermissionsID" and "jobLevel" in msg:
-                  return False
-              if rid == "PinnedDependenciesID":
-                  loc = (r.get("locations") or [{}])[0].get("physicalLocation", {})
-                  uri = (loc.get("artifactLocation") or {}).get("uri", "")
-                  line = (loc.get("region") or {}).get("startLine")
-                  if "nics-dp/" in flagged_line(uri, line):
+          try:
+              with open(DST, encoding="utf-8") as fh:
+                  data = json.load(fh)
+              _lines_cache = {}
+              def flagged_line(uri, line):
+                  if not uri or not line:
+                      return ""
+                  path = unquote(uri)
+                  if not os.path.isabs(path):
+                      workspace = os.environ.get("GITHUB_WORKSPACE")
+                      if workspace:
+                          path = os.path.join(workspace, path)
+                  if path not in _lines_cache:
+                      try:
+                          with open(path, encoding="utf-8") as fh2:
+                              _lines_cache[path] = fh2.read().splitlines()
+                      except Exception:
+                          _lines_cache[path] = []
+                  rows = _lines_cache[path]
+                  return rows[line - 1] if 0 < line <= len(rows) else ""
+              def keep(r):
+                  rid = r.get("ruleId")
+                  msg = (r.get("message") or {}).get("text", "")
+                  if rid == "TokenPermissionsID" and "jobLevel" in msg:
                       return False
-              return True
-          removed = 0
-          for run in data.get("runs", []):
-              before = run.get("results", []) or []
-              after = [r for r in before if keep(r)]
-              removed += len(before) - len(after)
-              run["results"] = after
-          with open(SARIF, "w", encoding="utf-8") as fh:
-              json.dump(data, fh, indent=2)
-          print(f"sarif-filter: removed {removed} posture-noise result(s)")
+                  if rid == "PinnedDependenciesID":
+                      loc = (r.get("locations") or [{}])[0].get("physicalLocation", {})
+                      uri = (loc.get("artifactLocation") or {}).get("uri", "")
+                      line = (loc.get("region") or {}).get("startLine")
+                      if "nics-dp/" in flagged_line(uri, line):
+                          return False
+                  return True
+              removed = 0
+              for run in data.get("runs", []):
+                  before = run.get("results", []) or []
+                  after = [r for r in before if keep(r)]
+                  removed += len(before) - len(after)
+                  run["results"] = after
+              with open(DST, "w", encoding="utf-8") as fh:
+                  json.dump(data, fh, indent=2)
+              print(f"sarif-filter: removed {removed} posture-noise result(s)")
+          except Exception as e:
+              print(f"sarif-filter: filtering failed ({e}); uploading unfiltered copy")
           FILTER_PY
 
       - name: Upload Scorecard SARIF
