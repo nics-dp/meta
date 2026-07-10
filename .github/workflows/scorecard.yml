@@ -89,6 +89,55 @@ jobs:
           # This is the private variant: never publish (see scorecard-publish.yml).
           publish_results: false
 
+      - name: Filter Scorecard SARIF posture noise
+        # Remove findings that cannot or should not be actioned, keeping only genuine
+        # signal (mirrors the surrounding non-blocking steps):
+        #   * TokenPermissionsID job-level writes -- required by reusable delegation
+        #     (SARIF upload / package push / release). Top-level writes are KEPT.
+        #   * PinnedDependenciesID on nics-dp/ internal reusables -- pinned by @main
+        #     on purpose. External unpinned actions are KEPT.
+        if: always() && hashFiles('results.sarif') != ''
+        continue-on-error: true
+        shell: bash
+        run: |
+          python3 - <<'FILTER_PY'
+          import json, sys
+          SARIF = "results.sarif"
+          try:
+              data = json.load(open(SARIF, encoding="utf-8"))
+          except Exception as e:
+              print(f"sarif-filter: cannot read {SARIF}: {e}; leaving unchanged")
+              sys.exit(0)
+          def flagged_line(uri, line):
+              if not uri or not line:
+                  return ""
+              try:
+                  rows = open(uri, encoding="utf-8").read().splitlines()
+                  return rows[line - 1] if 0 < line <= len(rows) else ""
+              except Exception:
+                  return ""
+          def keep(r):
+              rid = r.get("ruleId")
+              msg = (r.get("message") or {}).get("text", "")
+              if rid == "TokenPermissionsID" and "jobLevel" in msg:
+                  return False
+              if rid == "PinnedDependenciesID":
+                  loc = (r.get("locations") or [{}])[0].get("physicalLocation", {})
+                  uri = (loc.get("artifactLocation") or {}).get("uri", "")
+                  line = (loc.get("region") or {}).get("startLine")
+                  if "nics-dp/" in flagged_line(uri, line):
+                      return False
+              return True
+          removed = 0
+          for run in data.get("runs", []):
+              before = run.get("results", []) or []
+              after = [r for r in before if keep(r)]
+              removed += len(before) - len(after)
+              run["results"] = after
+          json.dump(data, open(SARIF, "w", encoding="utf-8"), indent=2)
+          print(f"sarif-filter: removed {removed} posture-noise result(s)")
+          FILTER_PY
+
       - name: Upload Scorecard SARIF
         if: always() && hashFiles('results.sarif') != ''
         # non-blocking: a failed upload must not fail the job (mirrors security-sarif.yml).
