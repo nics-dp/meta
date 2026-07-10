@@ -93,13 +93,14 @@ jobs:
         # Copy results.sarif (written by the Docker scorecard-action as root) to a
         # runner-owned results.filtered.sarif, then filter the copy and upload that.
         # The copy + filter run inside Python, not a bash `cp` under `set -e`. If the
-        # copy itself fails (results.sarif unreadable) there is nothing to upload and
-        # the step exits cleanly. If the copy succeeds but filtering fails,
-        # results.filtered.sarif is left as the unfiltered copy so the upload still
-        # proceeds (fail-safe). Keeps genuine signal: TokenPermissionsID top-level
-        # writes and external unpinned actions stay; job-level writes (required by
-        # reusable delegation) and PinnedDependenciesID on nics-dp/ internal
-        # reusables are dropped.
+        # copy fails (results.sarif unreadable) there is nothing to upload and the
+        # step exits cleanly. Otherwise the filtered SARIF is written atomically
+        # (temp file + os.replace); if filtering or the write fails,
+        # results.filtered.sarif is left as the intact unfiltered copy so the upload
+        # still proceeds (fail-safe). Keeps genuine signal: TokenPermissionsID
+        # top-level writes and external unpinned actions stay; job-level writes
+        # (required by reusable delegation) and PinnedDependenciesID on nics-dp/
+        # internal reusables are dropped.
         if: always() && hashFiles('results.sarif') != ''
         continue-on-error: true
         shell: bash
@@ -152,8 +153,10 @@ jobs:
                   after = [r for r in before if keep(r)]
                   removed += len(before) - len(after)
                   run["results"] = after
-              with open(DST, "w", encoding="utf-8") as fh:
+              tmp = DST + ".tmp"
+              with open(tmp, "w", encoding="utf-8") as fh:
                   json.dump(data, fh, indent=2)
+              os.replace(tmp, DST)
               print(f"sarif-filter: removed {removed} posture-noise result(s)")
           except Exception as e:
               print(f"sarif-filter: filtering failed ({e}); uploading unfiltered copy")
