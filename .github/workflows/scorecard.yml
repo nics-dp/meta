@@ -101,7 +101,8 @@ jobs:
         shell: bash
         run: |
           python3 - <<'FILTER_PY'
-          import json, sys
+          import json, os, sys
+          from urllib.parse import unquote
           SARIF = "results.sarif"
           try:
               with open(SARIF, encoding="utf-8") as fh:
@@ -113,13 +114,18 @@ jobs:
           def flagged_line(uri, line):
               if not uri or not line:
                   return ""
-              if uri not in _lines_cache:
+              path = unquote(uri)
+              if not os.path.isabs(path):
+                  workspace = os.environ.get("GITHUB_WORKSPACE")
+                  if workspace:
+                      path = os.path.join(workspace, path)
+              if path not in _lines_cache:
                   try:
-                      with open(uri, encoding="utf-8") as fh:
-                          _lines_cache[uri] = fh.read().splitlines()
+                      with open(path, encoding="utf-8") as fh:
+                          _lines_cache[path] = fh.read().splitlines()
                   except Exception:
-                      _lines_cache[uri] = []
-              rows = _lines_cache[uri]
+                      _lines_cache[path] = []
+              rows = _lines_cache[path]
               return rows[line - 1] if 0 < line <= len(rows) else ""
           def keep(r):
               rid = r.get("ruleId")
