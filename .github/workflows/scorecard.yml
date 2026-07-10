@@ -104,18 +104,23 @@ jobs:
           import json, sys
           SARIF = "results.sarif"
           try:
-              data = json.load(open(SARIF, encoding="utf-8"))
+              with open(SARIF, encoding="utf-8") as fh:
+                  data = json.load(fh)
           except Exception as e:
               print(f"sarif-filter: cannot read {SARIF}: {e}; leaving unchanged")
               sys.exit(0)
+          _lines_cache = {}
           def flagged_line(uri, line):
               if not uri or not line:
                   return ""
-              try:
-                  rows = open(uri, encoding="utf-8").read().splitlines()
-                  return rows[line - 1] if 0 < line <= len(rows) else ""
-              except Exception:
-                  return ""
+              if uri not in _lines_cache:
+                  try:
+                      with open(uri, encoding="utf-8") as fh:
+                          _lines_cache[uri] = fh.read().splitlines()
+                  except Exception:
+                      _lines_cache[uri] = []
+              rows = _lines_cache[uri]
+              return rows[line - 1] if 0 < line <= len(rows) else ""
           def keep(r):
               rid = r.get("ruleId")
               msg = (r.get("message") or {}).get("text", "")
@@ -134,7 +139,8 @@ jobs:
               after = [r for r in before if keep(r)]
               removed += len(before) - len(after)
               run["results"] = after
-          json.dump(data, open(SARIF, "w", encoding="utf-8"), indent=2)
+          with open(SARIF, "w", encoding="utf-8") as fh:
+              json.dump(data, fh, indent=2)
           print(f"sarif-filter: removed {removed} posture-noise result(s)")
           FILTER_PY
 
