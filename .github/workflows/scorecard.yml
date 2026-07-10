@@ -92,12 +92,14 @@ jobs:
       - name: Filter Scorecard SARIF posture noise
         # Copy results.sarif (written by the Docker scorecard-action as root) to a
         # runner-owned results.filtered.sarif, then filter the copy and upload that.
-        # Copy + filter run inside Python (not a bash `cp` under `set -e`), so a
-        # failure never aborts the step before results.filtered.sarif exists; on any
-        # error the file is left as the unfiltered copy and the upload still proceeds.
-        # Keeps genuine signal: TokenPermissionsID top-level writes and external
-        # unpinned actions stay; job-level writes (required by reusable delegation)
-        # and PinnedDependenciesID on nics-dp/ internal reusables are dropped.
+        # The copy + filter run inside Python, not a bash `cp` under `set -e`. If the
+        # copy itself fails (results.sarif unreadable) there is nothing to upload and
+        # the step exits cleanly. If the copy succeeds but filtering fails,
+        # results.filtered.sarif is left as the unfiltered copy so the upload still
+        # proceeds (fail-safe). Keeps genuine signal: TokenPermissionsID top-level
+        # writes and external unpinned actions stay; job-level writes (required by
+        # reusable delegation) and PinnedDependenciesID on nics-dp/ internal
+        # reusables are dropped.
         if: always() && hashFiles('results.sarif') != ''
         continue-on-error: true
         shell: bash
