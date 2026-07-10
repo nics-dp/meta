@@ -175,11 +175,26 @@ jobs:
               print(f"sarif-filter: filtering failed ({e}); uploading unfiltered copy")
           FILTER_PY
 
+      - name: Select SARIF file to upload
+        # Prefer the filtered SARIF; if the filter step produced no file at all
+        # (e.g. it errored before writing one) fall back to the raw results.sarif so
+        # code scanning still refreshes. Non-blocking best effort.
+        id: pick
+        if: always()
+        continue-on-error: true
+        shell: bash
+        run: |
+          if [ -f results.filtered.sarif ]; then
+            echo "sarif_to_upload=results.filtered.sarif" >> "$GITHUB_OUTPUT"
+          elif [ -f results.sarif ]; then
+            echo "sarif_to_upload=results.sarif" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Upload Scorecard SARIF
-        if: always() && hashFiles('results.filtered.sarif') != ''
+        if: always() && steps.pick.outputs.sarif_to_upload != ''
         # non-blocking: a failed upload must not fail the job (mirrors security-sarif.yml).
         continue-on-error: true
         uses: github/codeql-action/upload-sarif@54f647b7e1bb85c95cddabcd46b0c578ec92bc1a # v4.36.3
         with:
-          sarif_file: results.filtered.sarif
+          sarif_file: ${{ steps.pick.outputs.sarif_to_upload }}
           category: scorecard
