@@ -92,15 +92,14 @@ jobs:
       - name: Filter Scorecard SARIF posture noise
         # Copy results.sarif (written by the Docker scorecard-action as root) to a
         # runner-owned results.filtered.sarif, then filter the copy and upload that.
-        # The copy + filter run inside Python, not a bash `cp` under `set -e`. If the
-        # copy fails (results.sarif unreadable) there is nothing to upload and the
-        # step exits cleanly. Otherwise the filtered SARIF is written atomically
-        # (temp file + os.replace); if filtering or the write fails,
-        # results.filtered.sarif is left as the intact unfiltered copy so the upload
-        # still proceeds (fail-safe). Keeps genuine signal: TokenPermissionsID
-        # top-level writes and external unpinned actions stay; job-level writes
-        # (required by reusable delegation) and PinnedDependenciesID on nics-dp/
-        # internal reusables are dropped.
+        # The copy + filter run inside Python, not a bash `cp` under `set -e`. Both
+        # the copy and the filtered write go via a temp file + os.replace, so DST is
+        # only ever a complete file: if the copy fails DST is absent and nothing is
+        # uploaded; if filtering fails after a successful copy DST stays the intact
+        # unfiltered copy and the upload still proceeds (fail-safe). Keeps genuine
+        # signal: TokenPermissionsID top-level writes and external unpinned actions
+        # stay; job-level writes (required by reusable delegation) and
+        # PinnedDependenciesID on nics-dp/ internal reusables are dropped.
         if: always() && hashFiles('results.sarif') != ''
         continue-on-error: true
         shell: bash
@@ -110,10 +109,16 @@ jobs:
           from urllib.parse import unquote
           SRC = "results.sarif"
           DST = "results.filtered.sarif"
+          CP_TMP = DST + ".copy.tmp"
           try:
-              shutil.copyfile(SRC, DST)
+              shutil.copyfile(SRC, CP_TMP)
+              os.replace(CP_TMP, DST)
           except Exception as e:
               print(f"sarif-filter: cannot copy {SRC} -> {DST}: {e}; nothing uploaded")
+              try:
+                  os.remove(CP_TMP)
+              except OSError:
+                  pass
               sys.exit(0)
           try:
               with open(DST, encoding="utf-8") as fh:
