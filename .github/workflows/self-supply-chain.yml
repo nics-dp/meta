@@ -1,8 +1,9 @@
 # yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
 name: self-supply-chain
 
-# meta self-consumes its own OpenSSF Scorecard reusable. meta is public, so
-# publish: true posts results to the public Scorecard API (badge / transparency).
+# meta self-consumes its own PRIVATE Scorecard reusable (scorecard.yml,
+# publish_results: false), so its code scanning goes through the same SARIF
+# posture-noise filter as every other repo. No public OpenSSF API publish.
 # No dependency-submission: meta has no compiled-language manifests (config only).
 on:
   push:
@@ -18,9 +19,10 @@ jobs:
   scorecard:
     permissions:
       security-events: write
-      id-token: write
       contents: read
       actions: read
-    uses: nics-dp/meta/.github/workflows/scorecard-publish.yml@main
+    uses: nics-dp/meta/.github/workflows/scorecard.yml@main
     with:
-      publish: true
+      publish: false
+    secrets:
+      scorecard_app_private_key: ${{ secrets.SCORECARD_APP_PRIVATE_KEY }}
