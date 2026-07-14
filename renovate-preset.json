@@ -9,6 +9,7 @@
   "registryAliases": {
     "dhi.io": "dhi.io"
   },
+  "minimumReleaseAge": "7 days",
   "customManagers": [
     {
       "customType": "regex",
