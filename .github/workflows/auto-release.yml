@@ -2,8 +2,12 @@
 # Reusable workflow: one-shot release driver (no PR, no approval).
 #
 # Validates dev, snapshots it, merges to main, tags, and creates the GitHub
-# Release — which triggers the repo's release.yml to build/publish. main writes
-# use a release App that must be in the main/dev ruleset bypass_actors.
+# Release — which triggers the repo's release.yml to build/publish — then
+# back-merges main into dev so the release's merge commit (and thus its tag)
+# enters dev's ancestry (gitflow close-out). Without that back-merge dev never
+# sees the tag and `git describe --tags` on dev reports the PREVIOUS version,
+# leaving dev-deployed environments a version behind. main/dev writes use a
+# release App that must be in the main/dev ruleset bypass_actors.
 #
 # LANGUAGE-AGNOSTIC: there is no actions/setup-go here. The toolchain (go,
 # python, node, uv, …) comes entirely from the repo's mise.toml [tools] via
@@ -356,6 +360,68 @@ jobs:
             --notes "Automated release ${VERSION} (merged ${TARGET_BRANCH} → main). Build/publish runs via release.yml."
           echo "Created tag + release ${VERSION} at ${MAIN_SHA}."
 
+      # gitflow release close-out. Everything above only forward-merges dev→main, so
+      # the tag lives solely on main; dev's ancestry never sees it and `git describe
+      # --tags` on dev keeps reporting the PREVIOUS version (vX.Y.Z-N-gSHA), leaving
+      # dev-deployed environments a version behind. Merge main back into dev so the
+      # release merge commit (and thus the tag) becomes an ancestor of dev.
+      #   - Release App token (not GITHUB_TOKEN): the App is a main/dev ruleset
+      #     bypass_actor, so this server-side merge skips dev's PR/approval rules and
+      #     the merge commit is GitHub-signed (satisfies required_signatures). Note an
+      #     App-token push DOES trigger dev's on:push CI/CD (GITHUB_TOKEN would not) —
+      #     intended (dev rebuilds on the new lineage); no recursion since auto-release
+      #     is workflow_dispatch-only.
+      #   - NON-FATAL: the release already succeeded and the artifact is published, so
+      #     a back-merge problem must NEVER turn the run red. Mirror the "Delete
+      #     snapshot branch" tri-state — surface every issue as a ::warning:: with a
+      #     manual fix, never exit non-zero.
+      #   - Real runs only (`!inputs.dry_run`): dry-run mints no release-app token and
+      #     never sets MAIN_SHA, so the step is skipped and dev is left untouched.
+      - name: Back-merge main into dev
+        if: ${{ !inputs.dry_run && success() }}
+        env:
+          GH_TOKEN: ${{ steps.release-app.outputs.token }}
+        run: |
+          # Combined stdout+stderr capture (2>&1), keyed on the `if`'s exit status —
+          # the same inline-capture idiom as "Delete snapshot branch", extended to keep
+          # stdout too. On SUCCESS the Merges API returns the merge-commit JSON (201) or
+          # an empty body (204, dev already contains main) on stdout and writes nothing
+          # to stderr; on FAILURE it writes the reason (e.g. "HTTP 409") to stderr. One
+          # capture thus separates every outcome, with NO temp file and NO follow-up
+          # `cat` — deliberately: a standalone `err=$(cat …)` is a plain assignment whose
+          # non-zero status trips `set -e` and fails THIS step, which is exactly the
+          # "back-merge must never redden the run" contract we're keeping (a failed step
+          # would also skip the success()-gated snapshot cleanup below). That is also why
+          # `continue-on-error` is unnecessary: the step cannot fail by construction. The
+          # `if assign; then` form suspends set -e for the non-2xx; the only remaining
+          # substitution (jq) sits inside an echo argument, which never aborts — GitHub's
+          # bash runs `-eo pipefail` WITHOUT inherit_errexit, so a command substitution's
+          # failure inside a successful command does not propagate. head=main (not
+          # MAIN_SHA) is the standard back-merge: it makes all of main an ancestor of
+          # dev, satisfying `git merge-base --is-ancestor origin/main dev`.
+          if resp="$(gh api -X POST "repos/${GH_REPO}/merges" \
+            -f base=dev \
+            -f head=main \
+            -f "commit_message=chore: back-merge main into dev after ${VERSION}" 2>&1)"; then
+            if [ -n "$resp" ]; then
+              echo "Back-merged main → dev (merge commit $(printf '%s' "$resp" | jq -r '.sha // "?"' 2>/dev/null))."
+              echo "BACKMERGE_RESULT=merged" >> "$GITHUB_ENV"
+            else
+              # 204: dev already contains main — nothing to do.
+              echo "dev already contains main — no back-merge needed."
+              echo "BACKMERGE_RESULT=up-to-date" >> "$GITHUB_ENV"
+            fi
+          else
+            case "$resp" in
+              *"HTTP 409"*)
+                echo "::warning::Back-merge main → dev conflicted — open a PR merging main into dev manually. Release ${VERSION} itself SUCCEEDED; this only restores dev's tag ancestry."
+                echo "BACKMERGE_RESULT=conflict" >> "$GITHUB_ENV" ;;
+              *)
+                echo "::warning::Back-merge main → dev failed (release ${VERSION} succeeded; merge main into dev manually to restore dev's version lineage): ${resp}"
+                echo "BACKMERGE_RESULT=failed" >> "$GITHUB_ENV" ;;
+            esac
+          fi
+
       # Cleanup: drop the snapshot working branch once the run has SUCCEEDED. Real run:
       # auto-release/<version> — already merged into main, and the tag/release point at
       # the merge commit SHA (MAIN_SHA), not this branch, so removing it loses nothing.
@@ -400,6 +466,14 @@ jobs:
             else
               echo "Merged \`${TARGET_BRANCH}\` → \`main\`, tagged \`${VERSION}\`, created the Release."
               echo "Build/publish is running via \`release.yml\` (triggered by the release)."
+              # Back-merge outcome (BACKMERGE_RESULT is exported by the back-merge step).
+              case "${BACKMERGE_RESULT:-}" in
+                merged)     echo "Back-merged \`main\` → \`dev\` — the release tag is now on dev's ancestry." ;;
+                up-to-date) echo "\`dev\` already contained \`main\` — no back-merge needed." ;;
+                conflict)   echo "⚠️ Back-merge \`main\` → \`dev\` conflicted — merge it manually (the release still succeeded)." ;;
+                failed)     echo "⚠️ Back-merge \`main\` → \`dev\` failed — merge it manually (the release still succeeded)." ;;
+                *)          echo "⚠️ Back-merge \`main\` → \`dev\` status unknown — verify \`dev\` contains \`main\`." ;;
+              esac
             fi
           } >> "$GITHUB_STEP_SUMMARY"
 
