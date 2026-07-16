@@ -243,12 +243,15 @@ jobs:
           # || true is a guard in case the build itself errors out.
           govulncheck -format sarif ./... > govulncheck.sarif || true
           # Drop GO-2026-5932 (golang.org/x/crypto/openpgp is unmaintained) from the
-          # SARIF before upload. govulncheck has no native ignore flag, and the finding
-          # is non-actionable here: it fires on the transitively-present openpgp
-          # subpackage whose symbols we never call (govulncheck itself reports "doesn't
-          # appear to call any of the vulnerable symbols") and it has no fixed version.
-          # Scoped to this one ID so real reachable vulns still surface. Fail-safe: on
-          # any error the original SARIF is left untouched and still uploaded.
+          # SARIF before upload. govulncheck has no native ignore flag, and this
+          # finding is non-actionable here: it fires on the transitively-present
+          # openpgp subpackage whose symbols we never call, and it has no fixed
+          # version. Scoped to this ID AND note level only: govulncheck SARIF levels
+          # are note = module is only a dependency (symbols not called), warning =
+          # vulnerable package imported, error = vulnerable symbol actually called, so
+          # dropping just "note" keeps a genuinely reachable openpgp use (warning /
+          # error) visible if a downstream repo ever calls it. Fail-safe: on any error
+          # the original SARIF is left untouched and still uploaded.
           python3 - <<'FILTER_PY'
           import json, os
           SRC = "govulncheck.sarif"
@@ -260,22 +263,29 @@ jobs:
                   rid = r.get("ruleId")
                   if rid:
                       return rid
-                  idx = (r.get("rule") or {}).get("index")
+                  # SARIF 2.1.0: the rule-array index is the result's top-level
+                  # "ruleIndex"; "rule.index" (a reportingDescriptorReference) is the
+                  # secondary spec-valid form. Try both, preferring ruleIndex.
+                  idx = r.get("ruleIndex")
+                  if not isinstance(idx, int) or idx < 0:
+                      idx = (r.get("rule") or {}).get("index")
                   if isinstance(idx, int) and 0 <= idx < len(rules):
                       return rules[idx].get("id")
                   return None
+              def drop(r, rules):
+                  return resolved_id(r, rules) in IGNORE and r.get("level") == "note"
               removed = 0
               for run in data.get("runs", []):
                   rules = ((run.get("tool") or {}).get("driver") or {}).get("rules", []) or []
                   before = run.get("results", []) or []
-                  after = [r for r in before if resolved_id(r, rules) not in IGNORE]
+                  after = [r for r in before if not drop(r, rules)]
                   removed += len(before) - len(after)
                   run["results"] = after
               tmp = SRC + ".tmp"
               with open(tmp, "w", encoding="utf-8") as fh:
                   json.dump(data, fh)
               os.replace(tmp, SRC)
-              print(f"govulncheck-filter: removed {removed} ignored result(s): {sorted(IGNORE)}")
+              print(f"govulncheck-filter: removed {removed} note-level result(s) for {sorted(IGNORE)}")
           except Exception as e:
               print(f"govulncheck-filter: skipped ({e}); original SARIF kept")
           FILTER_PY
