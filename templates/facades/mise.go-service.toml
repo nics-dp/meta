@@ -9,7 +9,7 @@ unix_default_inline_shell_args = "bash -c"
 # ------------------------------------------------------------------------------
 [tools]
 # Go toolchain
-go = "1.26.4"
+go = "1.26.5"
 
 [env]
 # Override meta config base if forking nics-dp/meta
