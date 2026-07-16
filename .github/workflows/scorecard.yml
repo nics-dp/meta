@@ -105,7 +105,7 @@ jobs:
         shell: bash
         run: |
           python3 - <<'FILTER_PY'
-          import json, os, shutil, sys
+          import json, os, re, shutil, sys
           from urllib.parse import unquote
           SRC = "results.sarif"
           DST = "results.filtered.sarif"
@@ -140,6 +140,14 @@ jobs:
                           _lines_cache[path] = []
                   rows = _lines_cache[path]
                   return rows[line - 1] if 0 < line <= len(rows) else ""
+              # Scorecard's Vulnerabilities check lists each vuln on its own
+              # "Project is vulnerable to: <ID>" line. IDs come straight from OSV, so
+              # the prefix varies by ecosystem (GO-*, OSV-*, PYSEC-*, RUSTSEC-*,
+              # GHSA-*, CVE-*, ...). Capture the full remainder of each line rather
+              # than a fixed ID pattern, so an unrecognized co-listed ID is preserved
+              # instead of silently ignored (fail-safe: we only drop when GO-2026-5932
+              # is the SOLE listed vuln).
+              VULN_LINE_RE = re.compile(r"Project is vulnerable to:\s*(.+?)\s*$", re.M)
               def keep(r):
                   rid = r.get("ruleId")
                   msg = (r.get("message") or {}).get("text", "")
@@ -150,6 +158,16 @@ jobs:
                       uri = (loc.get("artifactLocation") or {}).get("uri", "")
                       line = (loc.get("region") or {}).get("startLine")
                       if "nics-dp/" in flagged_line(uri, line):
+                          return False
+                  # Drop the Vulnerabilities finding when the ONLY vuln it lists is
+                  # GO-2026-5932 (golang.org/x/crypto/openpgp unmaintained): a
+                  # transitively-present, never-called subpackage with no fixed version
+                  # (govulncheck confirms the symbols are not reachable). Scoped by
+                  # exact ID set so a finding that also lists a real reachable vuln is
+                  # kept. Mirrors the govulncheck SARIF filter in security-sarif.yml.
+                  if rid == "VulnerabilitiesID":
+                      vulns = {v.strip() for v in VULN_LINE_RE.findall(msg)}
+                      if vulns == {"GO-2026-5932"}:
                           return False
                   return True
               removed = 0
