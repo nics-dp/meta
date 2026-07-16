@@ -281,6 +281,30 @@
         "github.com/nics-dp/**"
       ],
       "enabled": false
+    },
+    {
+      "description": "Collapse the Go toolchain's separate per-manager update PRs into one. go.mod (gomod), mise.toml (mise), the dhi.io/golang base image (dockerfile), and a downstream README copy (custom.regex) all track the same Go version but live in different manager groups, so they used to open and merge as independent PRs (e.g. nics-dp/otel-bundle#123's mise bump merged while go.mod and the image lagged). matchManagers scopes this to exactly those managers, so an unrelated dep named `go` in another ecosystem (e.g. an npm package) is not swept in — and its update policy is left untouched. dependencyDashboardApproval is off so the combined bump opens directly (overriding the gomod dashboard-only rule above for these deps); automerge is off so a human reviews the single PR. Note: groupName batches whatever updates are available in a given run — it does not wait for every member nor force identical versions across datasources, so this narrows the drift window rather than guaranteeing lockstep. Placed last to override the per-manager groups above.",
+      "matchManagers": [
+        "gomod",
+        "mise",
+        "dockerfile",
+        "custom.regex"
+      ],
+      "matchDepNames": [
+        "go",
+        "dhi.io/golang"
+      ],
+      "groupName": "go toolchain",
+      "commitMessagePrefix": "chore(go.toolchain):",
+      "labels": [
+        "dependencies",
+        "go"
+      ],
+      "automerge": false,
+      "dependencyDashboardApproval": false,
+      "assignees": [
+        "charliie-dev"
+      ]
     }
   ]
 }
