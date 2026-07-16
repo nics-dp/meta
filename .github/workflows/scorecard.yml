@@ -105,7 +105,7 @@ jobs:
         shell: bash
         run: |
           python3 - <<'FILTER_PY'
-          import json, os, shutil, sys
+          import json, os, re, shutil, sys
           from urllib.parse import unquote
           SRC = "results.sarif"
           DST = "results.filtered.sarif"
@@ -140,6 +140,8 @@ jobs:
                           _lines_cache[path] = []
                   rows = _lines_cache[path]
                   return rows[line - 1] if 0 < line <= len(rows) else ""
+              # Vuln IDs the Scorecard Vulnerabilities check reports in its message.
+              VULN_RE = re.compile(r"GO-\d{4}-\d+|CVE-\d{4}-\d+|GHSA-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{4}", re.I)
               def keep(r):
                   rid = r.get("ruleId")
                   msg = (r.get("message") or {}).get("text", "")
@@ -150,6 +152,16 @@ jobs:
                       uri = (loc.get("artifactLocation") or {}).get("uri", "")
                       line = (loc.get("region") or {}).get("startLine")
                       if "nics-dp/" in flagged_line(uri, line):
+                          return False
+                  # Drop the Vulnerabilities finding when the ONLY vuln it lists is
+                  # GO-2026-5932 (golang.org/x/crypto/openpgp unmaintained): a
+                  # transitively-present, never-called subpackage with no fixed version
+                  # (govulncheck confirms the symbols are not reachable). Scoped by
+                  # exact ID set so a finding that also lists a real reachable vuln is
+                  # kept. Mirrors the govulncheck SARIF filter in security-sarif.yml.
+                  if rid == "VulnerabilitiesID":
+                      vulns = {v.upper() for v in VULN_RE.findall(msg)}
+                      if vulns == {"GO-2026-5932"}:
                           return False
                   return True
               removed = 0
