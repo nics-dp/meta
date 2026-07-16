@@ -5,4 +5,6 @@
 #MISE depends=["sbom:enrich"]
 #MISE tools={grype="latest"}
 
-grype sbom:enriched-source.cdx.json
+# --only-fixed mirrors the CI gate (sbom-source.yml / sbom-image.yml): report
+# only actionable vulnerabilities that have an upstream fix available.
+grype --only-fixed sbom:enriched-source.cdx.json
