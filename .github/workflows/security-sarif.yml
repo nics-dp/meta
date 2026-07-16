@@ -242,6 +242,43 @@ jobs:
           # -format sarif makes govulncheck exit 0 regardless of findings; the
           # || true is a guard in case the build itself errors out.
           govulncheck -format sarif ./... > govulncheck.sarif || true
+          # Drop GO-2026-5932 (golang.org/x/crypto/openpgp is unmaintained) from the
+          # SARIF before upload. govulncheck has no native ignore flag, and the finding
+          # is non-actionable here: it fires on the transitively-present openpgp
+          # subpackage whose symbols we never call (govulncheck itself reports "doesn't
+          # appear to call any of the vulnerable symbols") and it has no fixed version.
+          # Scoped to this one ID so real reachable vulns still surface. Fail-safe: on
+          # any error the original SARIF is left untouched and still uploaded.
+          python3 - <<'FILTER_PY'
+          import json, os
+          SRC = "govulncheck.sarif"
+          IGNORE = {"GO-2026-5932"}
+          try:
+              with open(SRC, encoding="utf-8") as fh:
+                  data = json.load(fh)
+              def resolved_id(r, rules):
+                  rid = r.get("ruleId")
+                  if rid:
+                      return rid
+                  idx = (r.get("rule") or {}).get("index")
+                  if isinstance(idx, int) and 0 <= idx < len(rules):
+                      return rules[idx].get("id")
+                  return None
+              removed = 0
+              for run in data.get("runs", []):
+                  rules = ((run.get("tool") or {}).get("driver") or {}).get("rules", []) or []
+                  before = run.get("results", []) or []
+                  after = [r for r in before if resolved_id(r, rules) not in IGNORE]
+                  removed += len(before) - len(after)
+                  run["results"] = after
+              tmp = SRC + ".tmp"
+              with open(tmp, "w", encoding="utf-8") as fh:
+                  json.dump(data, fh)
+              os.replace(tmp, SRC)
+              print(f"govulncheck-filter: removed {removed} ignored result(s): {sorted(IGNORE)}")
+          except Exception as e:
+              print(f"govulncheck-filter: skipped ({e}); original SARIF kept")
+          FILTER_PY
 
       - name: Upload govulncheck SARIF
         if: always() && inputs.run_go && hashFiles('govulncheck.sarif') != ''
