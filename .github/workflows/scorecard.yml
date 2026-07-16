@@ -140,8 +140,14 @@ jobs:
                           _lines_cache[path] = []
                   rows = _lines_cache[path]
                   return rows[line - 1] if 0 < line <= len(rows) else ""
-              # Vuln IDs the Scorecard Vulnerabilities check reports in its message.
-              VULN_RE = re.compile(r"GO-\d{4}-\d+|CVE-\d{4}-\d+|GHSA-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{4}", re.I)
+              # Scorecard's Vulnerabilities check lists each vuln on its own
+              # "Project is vulnerable to: <ID>" line. IDs come straight from OSV, so
+              # the prefix varies by ecosystem (GO-*, OSV-*, PYSEC-*, RUSTSEC-*,
+              # GHSA-*, CVE-*, ...). Capture the full remainder of each line rather
+              # than a fixed ID pattern, so an unrecognized co-listed ID is preserved
+              # instead of silently ignored (fail-safe: we only drop when GO-2026-5932
+              # is the SOLE listed vuln).
+              VULN_LINE_RE = re.compile(r"Project is vulnerable to:\s*(.+?)\s*$", re.M)
               def keep(r):
                   rid = r.get("ruleId")
                   msg = (r.get("message") or {}).get("text", "")
@@ -160,7 +166,7 @@ jobs:
                   # exact ID set so a finding that also lists a real reachable vuln is
                   # kept. Mirrors the govulncheck SARIF filter in security-sarif.yml.
                   if rid == "VulnerabilitiesID":
-                      vulns = {v.upper() for v in VULN_RE.findall(msg)}
+                      vulns = {v.strip() for v in VULN_LINE_RE.findall(msg)}
                       if vulns == {"GO-2026-5932"}:
                           return False
                   return True
