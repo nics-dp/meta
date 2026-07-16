@@ -220,7 +220,7 @@ jobs:
         if: inputs.run_go
         continue-on-error: true
         run: |
-          go install github.com/securego/gosec/v2/cmd/gosec@v2.27.1
+          go install github.com/securego/gosec/v2/cmd/gosec@v2.28.0
           # -no-fail keeps exit 0 regardless of findings; SARIF lands in gosec.sarif
           gosec -fmt sarif -out gosec.sarif -no-fail ./...
 
