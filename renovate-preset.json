@@ -281,6 +281,24 @@
         "github.com/nics-dp/**"
       ],
       "enabled": false
+    },
+    {
+      "description": "Keep the Go toolchain version in lockstep across managers so it can't drift (the failure mode where mise's `go` PR merges while go.mod's `go` directive and the dhi.io/golang base image lag behind). go.mod (gomod) and mise (mise) both resolve to depName `go`; dhi.io/golang is the dockerfile base image; repos may also add a README custom manager on depName `go`. Grouping them opens one combined PR instead of three that race. dependencyDashboardApproval is disabled here so the combined bump opens directly (overriding the gomod dashboard-only rule above for `go`), and automerge is off so a human reviews the single PR. Placed last to override the per-manager groups above for these deps.",
+      "matchDepNames": [
+        "go",
+        "dhi.io/golang"
+      ],
+      "groupName": "go toolchain",
+      "commitMessagePrefix": "chore(go.toolchain):",
+      "labels": [
+        "dependencies",
+        "go"
+      ],
+      "automerge": false,
+      "dependencyDashboardApproval": false,
+      "assignees": [
+        "charliie-dev"
+      ]
     }
   ]
 }
