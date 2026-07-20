@@ -126,6 +126,24 @@ jobs:
             trivy-source.sarif > trivy-source-fixed.sarif
           mv trivy-source-fixed.sarif trivy-source.sarif
 
+      - name: Drop non-actionable openpgp advisory from Trivy SARIF
+        run: |
+          # Drop GO-2026-5932 (golang.org/x/crypto/openpgp, unmaintained, no fixed
+          # version) before upload, mirroring the govulncheck filter in
+          # security-sarif.yml and the trivy-image scan. The advisory is
+          # non-actionable (transitively-present openpgp subpackage, symbols never
+          # called, no fixed version); Trivy SARIF carries no reachability level,
+          # so this drops by rule id unconditionally. The full unfixed set stays
+          # in the Trivy JSON release asset. Fail-safe: on any jq error the
+          # original SARIF is kept and still uploaded.
+          if jq '.runs[].results |= map(select(.ruleId != "GO-2026-5932"))' \
+               trivy-source.sarif > trivy-source-filtered.sarif; then
+            mv trivy-source-filtered.sarif trivy-source.sarif
+          else
+            echo "::warning::trivy-filter skipped (jq error); original SARIF kept"
+            rm -f trivy-source-filtered.sarif
+          fi
+
       - name: Upload Trivy SARIF to GitHub Security tab
         uses: github/codeql-action/upload-sarif@99df26d4f13ea111d4ec1a7dddef6063f76b97e9 # v4.37.0
         with:
