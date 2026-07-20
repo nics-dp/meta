@@ -74,8 +74,8 @@ includes = ["git::https://github.com/nics-dp/meta.git//.mise/tasks?ref=main"]
 ### Release & Build
 - **`go-release.yml`** — Multi-arch Go binary release (cosign, macOS notarize via quill, GitHub Release).
 - **`image-release.yml`** — Docker image dual-registry (DockerHub + GHCR) + attestations + cosign keyless. Outputs `digest` for `sbom-image.yml`.
-- **`sbom-image.yml`** — Container image CycloneDX 1.6 SBOM (anchore/sbom-action + parlay enrich) + Trivy + Grype vuln scan → GitHub Release + Security tab.
-- **`sbom-source.yml`** — Source-tree (filesystem) SBOM. Input `project_name` for artifact naming.
+- **`sbom-image.yml`** — Container image CycloneDX 1.6 SBOM (anchore/sbom-action + parlay enrich) + Trivy + Grype vuln scan → GitHub Release + Security tab. The Trivy SARIF (`category: trivy-image`) is post-filtered to drop `GO-2026-5932` (`golang.org/x/crypto/openpgp` unmaintained) before upload — mirrors the govulncheck filter in `security-sarif.yml`, but since Trivy SARIF has no reachability level it drops by rule id unconditionally (jq, fail-safe: keeps the original SARIF on error). The unfixed advisory still ships in the Trivy JSON asset on release runs (snapshot runs upload no assets). Grype needs no such filter (`only-fixed: true` already excludes this no-fix advisory).
+- **`sbom-source.yml`** — Source-tree (filesystem) SBOM. Input `project_name` for artifact naming. Applies the same `GO-2026-5932` Trivy SARIF post-filter (`category: trivy-source`) as `sbom-image.yml`.
 
 ### CodeQL
 - **`codeql-reusable.yml`** — CodeQL Advanced analysis (configurable language matrix + Go build).
