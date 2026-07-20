@@ -133,9 +133,10 @@ jobs:
           # security-sarif.yml and the trivy-image scan. The advisory is
           # non-actionable (transitively-present openpgp subpackage, symbols never
           # called, no fixed version); Trivy SARIF carries no reachability level,
-          # so this drops by rule id unconditionally. The full unfixed set stays
-          # in the Trivy JSON release asset. Fail-safe: on any jq error the
-          # original SARIF is kept and still uploaded.
+          # so this drops by rule id unconditionally. The full unfixed set still
+          # ships in the Trivy JSON asset on release runs (snapshot runs upload
+          # no assets). Fail-safe: on any jq error the original SARIF is kept
+          # and still uploaded.
           if jq '.runs[].results |= map(select(.ruleId != "GO-2026-5932"))' \
                trivy-source.sarif > trivy-source-filtered.sarif; then
             mv trivy-source-filtered.sarif trivy-source.sarif
