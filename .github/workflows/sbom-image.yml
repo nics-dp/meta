@@ -22,6 +22,17 @@ on:
         type: string
         default: ""
         description: "Git ref to checkout (defaults to event ref)"
+      sarif_ref:
+        required: false
+        type: string
+        default: ""
+        description: >
+          Git ref (e.g. "refs/heads/dev") to attribute the image-scan SARIF
+          (trivy-image / grype-image) to in code scanning. Empty (default) uses
+          the triggering event's ref/sha. On a release the event ref is the tag,
+          so image alerts land on a tag ref that the security overview never
+          refreshes; set this to the default branch so each release supersedes
+          the previous scan and stale alerts auto-close.
       snapshot:
         required: false
         type: boolean
@@ -71,10 +82,18 @@ jobs:
       artifact-metadata: write
       id-token: write
     steps:
+      # When sarif_ref is set it also drives the checkout, so the workspace HEAD
+      # is that branch's tip. codeql-action derives the uploaded analysis's
+      # commit_oid from `git rev-parse HEAD` of the checkout (not the sha input;
+      # see git-utils.ts getCommitOid), so checking the branch out here is what
+      # makes commit_oid match the ref we attribute the SARIF to. Nothing in
+      # this job reads the source tree (version comes from the release tag env,
+      # the SBOM from the image digest, release upload from the tag), so this is
+      # safe. Empty → default event-ref checkout (unchanged).
       - name: Checkout
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
-          ref: ${{ inputs.ref }}
+          ref: ${{ inputs.sarif_ref || inputs.ref }}
           fetch-depth: 1
           # The ref is a workflow_call input and may be attacker-influenced;
           # do not persist the GITHUB_TOKEN into the checkout so later steps
@@ -100,6 +119,22 @@ jobs:
             TAG="${RELEASE_TAG:-$GITHUB_REF_NAME}"
             echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
             echo "version_tag=${TAG}" >> "$GITHUB_OUTPUT"
+          fi
+
+      # Emit the ref/sha passed to upload-sarif. When sarif_ref is set, sha is
+      # the checkout HEAD (== the commit_oid codeql-action derives via
+      # `git rev-parse HEAD`), so ref and commit agree; codeql-action also
+      # requires both ref and sha when either is given. Empty outputs →
+      # upload-sarif auto-detects the event ref/sha (unchanged default).
+      - name: Resolve SARIF ref/sha
+        id: sarifref
+        env:
+          SARIF_REF: ${{ inputs.sarif_ref }}
+        run: |
+          if [[ -n "$SARIF_REF" ]]; then
+            { echo "ref=$SARIF_REF"; echo "sha=$(git rev-parse HEAD)"; } >> "$GITHUB_OUTPUT"
+          else
+            { echo "ref="; echo "sha="; } >> "$GITHUB_OUTPUT"
           fi
 
       - name: Generate SBOM from image (CycloneDX JSON 1.6)
@@ -176,6 +211,9 @@ jobs:
         with:
           sarif_file: trivy-image.sarif
           category: trivy-image
+          # Empty ref/sha → upload-sarif auto-detects the event ref/sha.
+          ref: ${{ steps.sarifref.outputs.ref }}
+          sha: ${{ steps.sarifref.outputs.sha }}
 
       - name: Scan SBOM with Trivy (JSON)
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
@@ -204,6 +242,8 @@ jobs:
         with:
           sarif_file: ${{ steps.grype-sarif.outputs.sarif }}
           category: grype-image
+          ref: ${{ steps.sarifref.outputs.ref }}
+          sha: ${{ steps.sarifref.outputs.sha }}
 
       - name: Scan SBOM with Grype (JSON)
         id: grype-json
