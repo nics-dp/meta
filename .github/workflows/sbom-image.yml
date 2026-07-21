@@ -82,10 +82,18 @@ jobs:
       artifact-metadata: write
       id-token: write
     steps:
+      # When sarif_ref is set it also drives the checkout, so the workspace HEAD
+      # is that branch's tip. codeql-action derives the uploaded analysis's
+      # commit_oid from `git rev-parse HEAD` of the checkout (not the sha input;
+      # see git-utils.ts getCommitOid), so checking the branch out here is what
+      # makes commit_oid match the ref we attribute the SARIF to. Nothing in
+      # this job reads the source tree (version comes from the release tag env,
+      # the SBOM from the image digest, release upload from the tag), so this is
+      # safe. Empty → default event-ref checkout (unchanged).
       - name: Checkout
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
-          ref: ${{ inputs.ref }}
+          ref: ${{ inputs.sarif_ref || inputs.ref }}
           fetch-depth: 1
           # The ref is a workflow_call input and may be attacker-influenced;
           # do not persist the GITHUB_TOKEN into the checkout so later steps
@@ -113,25 +121,18 @@ jobs:
             echo "version_tag=${TAG}" >> "$GITHUB_OUTPUT"
           fi
 
-      # Resolve where the image-scan SARIF should be attributed. When sarif_ref
-      # is set (e.g. the default branch), look up that branch's current HEAD so
-      # upload-sarif can tag the analysis to it; otherwise emit empty outputs so
-      # upload-sarif falls back to auto-detecting the event ref/sha.
+      # Emit the ref/sha passed to upload-sarif. When sarif_ref is set, sha is
+      # the checkout HEAD (== the commit_oid codeql-action derives via
+      # `git rev-parse HEAD`), so ref and commit agree; codeql-action also
+      # requires both ref and sha when either is given. Empty outputs →
+      # upload-sarif auto-detects the event ref/sha (unchanged default).
       - name: Resolve SARIF ref/sha
         id: sarifref
         env:
           SARIF_REF: ${{ inputs.sarif_ref }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          REPO: ${{ github.repository }}
         run: |
           if [[ -n "$SARIF_REF" ]]; then
-            branch="${SARIF_REF#refs/heads/}"
-            sha=$(gh api "repos/$REPO/commits/$branch" --jq '.sha')
-            if [[ -z "$sha" ]]; then
-              echo "::error::could not resolve SHA for sarif_ref='$SARIF_REF'"
-              exit 1
-            fi
-            { echo "ref=$SARIF_REF"; echo "sha=$sha"; } >> "$GITHUB_OUTPUT"
+            { echo "ref=$SARIF_REF"; echo "sha=$(git rev-parse HEAD)"; } >> "$GITHUB_OUTPUT"
           else
             { echo "ref="; echo "sha="; } >> "$GITHUB_OUTPUT"
           fi
