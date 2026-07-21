@@ -22,6 +22,17 @@ on:
         type: string
         default: ""
         description: "Git ref to checkout (defaults to event ref)"
+      sarif_ref:
+        required: false
+        type: string
+        default: ""
+        description: >
+          Git ref (e.g. "refs/heads/dev") to attribute the image-scan SARIF
+          (trivy-image / grype-image) to in code scanning. Empty (default) uses
+          the triggering event's ref/sha. On a release the event ref is the tag,
+          so image alerts land on a tag ref that the security overview never
+          refreshes; set this to the default branch so each release supersedes
+          the previous scan and stale alerts auto-close.
       snapshot:
         required: false
         type: boolean
@@ -102,6 +113,29 @@ jobs:
             echo "version_tag=${TAG}" >> "$GITHUB_OUTPUT"
           fi
 
+      # Resolve where the image-scan SARIF should be attributed. When sarif_ref
+      # is set (e.g. the default branch), look up that branch's current HEAD so
+      # upload-sarif can tag the analysis to it; otherwise emit empty outputs so
+      # upload-sarif falls back to auto-detecting the event ref/sha.
+      - name: Resolve SARIF ref/sha
+        id: sarifref
+        env:
+          SARIF_REF: ${{ inputs.sarif_ref }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: |
+          if [[ -n "$SARIF_REF" ]]; then
+            branch="${SARIF_REF#refs/heads/}"
+            sha=$(gh api "repos/$REPO/commits/$branch" --jq '.sha')
+            if [[ -z "$sha" ]]; then
+              echo "::error::could not resolve SHA for sarif_ref='$SARIF_REF'"
+              exit 1
+            fi
+            { echo "ref=$SARIF_REF"; echo "sha=$sha"; } >> "$GITHUB_OUTPUT"
+          else
+            { echo "ref="; echo "sha="; } >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Generate SBOM from image (CycloneDX JSON 1.6)
         uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
         with:
@@ -176,6 +210,9 @@ jobs:
         with:
           sarif_file: trivy-image.sarif
           category: trivy-image
+          # Empty ref/sha → upload-sarif auto-detects the event ref/sha.
+          ref: ${{ steps.sarifref.outputs.ref }}
+          sha: ${{ steps.sarifref.outputs.sha }}
 
       - name: Scan SBOM with Trivy (JSON)
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
@@ -204,6 +241,8 @@ jobs:
         with:
           sarif_file: ${{ steps.grype-sarif.outputs.sarif }}
           category: grype-image
+          ref: ${{ steps.sarifref.outputs.ref }}
+          sha: ${{ steps.sarifref.outputs.sha }}
 
       - name: Scan SBOM with Grype (JSON)
         id: grype-json
