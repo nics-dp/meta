@@ -3,7 +3,6 @@
 [settings]
 jobs = 16
 task.output = "keep-order"
-unix_default_inline_shell_args = "bash -c"
 
 # ------------------------------------------------------------------------------
 # All required tools are declared inline by the shared tasks under

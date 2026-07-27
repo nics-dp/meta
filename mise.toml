@@ -1,7 +1,6 @@
 [settings]
 jobs = 16
 task.output = "keep-order"
-unix_default_inline_shell_args = "bash -c"
 
 # ------------------------------------------------------------------------------
 # Tools needed by mise tasks are declared inline via `#MISE tools={...}` in each
