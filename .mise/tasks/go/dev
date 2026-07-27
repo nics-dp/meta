@@ -2,7 +2,7 @@
 #MISE description="Run a Go cmd from cmd/ with air live-reload (hot reload on save)"
 #MISE hide=true
 #MISE raw=true
-#MISE tools={"go:github.com/air-verse/air"="v1.65.3"}
+#MISE tools={"go:github.com/air-verse/air"="v1.66.0"}
 #USAGE arg "[name]" help="Script name to run (auto-detected if cmd/ has only one entry)"
 # shellcheck disable=SC2154 # usage_name is set by mise USAGE
 
