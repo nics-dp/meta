@@ -64,7 +64,7 @@ jobs:
           private-key: ${{ secrets.scorecard_app_private_key }}
 
       - name: Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 1
           # Do not persist the GITHUB_TOKEN into the checkout so later steps
@@ -75,7 +75,7 @@ jobs:
         # non-blocking: a scorecard run error (e.g. no App token on a private
         # repo) must not fail the caller's CI (mirrors security-sarif.yml).
         continue-on-error: true
-        uses: ossf/scorecard-action@4eaacf0543bb3f2c246792bd56e8cdeffafb205a # v2.4.3
+        uses: ossf/scorecard-action@2d1146689b8cda280b9bc96326124645441f03bc # v2.4.4
         with:
           results_format: sarif
           results_file: results.sarif
@@ -211,7 +211,7 @@ jobs:
         if: always() && steps.pick.outputs.sarif_to_upload != ''
         # non-blocking: a failed upload must not fail the job (mirrors security-sarif.yml).
         continue-on-error: true
-        uses: github/codeql-action/upload-sarif@7188fc363630916deb702c7fdcf4e481b751f97a # v4.37.1
+        uses: github/codeql-action/upload-sarif@e4fba868fa4b1b91e1fdab776edc8cfbe6e9fb81 # v4.37.3
         with:
           sarif_file: ${{ steps.pick.outputs.sarif_to_upload }}
           category: scorecard
