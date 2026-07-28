@@ -27,6 +27,12 @@ name: PR Issue Check
 #     notice in the job summary.
 #   - Fork PRs succeed with a skip notice (App secrets are not passed to
 #     fork-triggered runs, so the Project lookup cannot run).
+#   - PRs authored by a Bot (pull_request.user.type == "Bot": dependabot,
+#     renovate, the db-cfg submodule-bump App, …) succeed with a skip notice.
+#     Automation PRs have no human issue behind them, and having a bot open
+#     its own tracking issue just to satisfy this gate would pollute the
+#     Project board with one throwaway item per dependency bump. This is an
+#     org-wide policy exemption, not a per-repo opt-out.
 #   - Only closing references readable by the caller repo's GITHUB_TOKEN are
 #     counted — in practice same-repo issues (org convention: open the issue
 #     in the component repo itself). A reference the token cannot read (e.g.
@@ -107,7 +113,7 @@ jobs:
       # Decide whether the policy applies to this run at all. Skips (wrong
       # base, fork) succeed with a summary so the required check never blocks
       # a PR the policy does not cover.
-      - name: Guard (event / base / fork)
+      - name: Guard (event / base / fork / bot)
         id: guard
         env:
           EVENT_NAME: ${{ github.event_name }}
@@ -115,6 +121,7 @@ jobs:
           ENFORCE_BASE: ${{ inputs.enforce_base }}
           HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
           THIS_REPO: ${{ github.repository }}
+          AUTHOR_TYPE: ${{ github.event.pull_request.user.type }}
         run: |
           if [ "$EVENT_NAME" != "pull_request" ]; then
             echo "::error::pr-issue-check must be called from a pull_request-triggered workflow (got: $EVENT_NAME)"
@@ -135,6 +142,15 @@ jobs:
               echo "## PR Issue Check — skipped"
               echo ""
               echo "Fork PR 沒有 App secrets,無法查 Project 欄位,略過。"
+            } >>"$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          if [ "$AUTHOR_TYPE" = "Bot" ]; then
+            echo "run=false" >>"$GITHUB_OUTPUT"
+            {
+              echo "## PR Issue Check — skipped"
+              echo ""
+              echo "PR 作者是 Bot,不受 linked-issue policy 約束:自動化 PR(dependabot / renovate / submodule bump 等)沒有對應的人工 issue,而讓 bot 自建 tracking issue 只會汙染 Project board。"
             } >>"$GITHUB_STEP_SUMMARY"
             exit 0
           fi
