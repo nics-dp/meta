@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-#MISE description="Fail if committed go:generate output is stale (read-only gate)"
+#MISE description="Run go:generate, then fail if committed output was stale (rewrites generated files)"
 #MISE hide=true
 #MISE raw=true
 #MISE depends=["go:generate"]
