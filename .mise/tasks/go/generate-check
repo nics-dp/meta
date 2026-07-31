@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+#MISE description="Fail if committed go:generate output is stale (read-only gate)"
+#MISE hide=true
+#MISE raw=true
+#MISE depends=["go:generate"]
+
+set -euo pipefail
+
+dirty=$(git status --porcelain)
+
+if [ -n "$dirty" ]; then
+  echo ""
+  echo "✗ Committed generated files are stale (or generation left the tree dirty)."
+  echo "  Run 'mise run go:generate' and commit the result."
+  echo ""
+  echo "$dirty"
+  exit 1
+fi
