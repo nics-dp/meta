@@ -8,10 +8,11 @@ on:
     paths-ignore:
       - "**/*.md"
       - "**/*.txt"
+  # No paths-ignore here, deliberately asymmetric with push: the org ruleset's code_scanning
+  # rule waits for a CodeQL result on every PR, and a workflow skipped by a path filter
+  # produces none — a doc-only PR then sits at BLOCKED forever with no check-run to point at
+  # (it never existed, so it is absent from `gh pr checks`). See nics-dp/TMDs#791.
   pull_request:
-    paths-ignore:
-      - "**/*.md"
-      - "**/*.txt"
   schedule:
     - cron: "0 0 * * 1" # Every Monday 08:00 on UTC+8
   workflow_dispatch:
