@@ -64,6 +64,10 @@ jobs:
   run:
     name: ${{ inputs.name != '' && inputs.name || inputs.task }}
     runs-on: ${{ fromJSON(inputs.runs_on) }}
+    defaults:
+      run:
+        # Every run block uses Bash syntax, and runs_on may select a Windows runner.
+        shell: bash
     # mise's minimum_release_age supply-chain control is forwarded to the pipx
     # backend as a pip-only flag (--pip-args=--uploaded-prior-to=...), which the
     # uv-backed pipx installer rejects ("Fatal error from uv"), breaking pipx
@@ -88,13 +92,16 @@ jobs:
     env:
       MISE_MINIMUM_RELEASE_AGE: "0"
       # secrets cannot be used in step-level if:, so bridge to env here.
+      HAS_CI_CLIENT_ID: ${{ vars.CI_READ_APP_CLIENT_ID != '' }}
+      HAS_CI_PRIVATE_KEY: ${{ secrets.ci_read_app_private_key != '' }}
       HAS_CI_APP: ${{ vars.CI_READ_APP_CLIENT_ID != '' && secrets.ci_read_app_private_key != '' }}
+      UNTRUSTED_TRIGGER: ${{ github.event_name == 'pull_request_target' || github.event_name == 'workflow_run' }}
     steps:
       # Mint a nics-dp-ci-read App token for private module access, but only when this
       # run actually needs private modules. The client-id comes from the CI_READ_APP_CLIENT_ID org variable.
       - name: Setup | Mint private-module token
         id: priv-token
-        if: ${{ env.HAS_CI_APP == 'true' && inputs.private-modules }}
+        if: ${{ env.HAS_CI_APP == 'true' && inputs.private-modules && env.UNTRUSTED_TRIGGER != 'true' }}
         uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
         with:
           client-id: ${{ vars.CI_READ_APP_CLIENT_ID }}
@@ -104,6 +111,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: ${{ inputs.fetch-depth }}
+          persist-credentials: false
 
       - uses: jdx/mise-action@9e7f7633ff6f6d6048a9418a68d48f288f50eb14 # v4.2.3
         with:
@@ -116,10 +124,27 @@ jobs:
           GH_PAT: ${{ steps.priv-token.outputs.token }}
         run: |
           if [ -z "$GH_PAT" ]; then
-            echo "::warning::private-modules=true but the ci-read App token is unavailable (ci_read_app_* secrets not inherited?)"
+            if [ "$HAS_CI_APP" = "true" ] && [ "$UNTRUSTED_TRIGGER" = "true" ]; then
+              echo "::warning::private-modules=true but the configured ci-read App credential was withheld on an untrusted trigger"
+            elif [ "$HAS_CI_CLIENT_ID" != "true" ]; then
+              echo "::warning::private-modules=true but CI_READ_APP_CLIENT_ID is unavailable"
+            elif [ "$HAS_CI_PRIVATE_KEY" != "true" ]; then
+              echo "::warning::private-modules=true but ci_read_app_private_key is unavailable"
+            else
+              echo "::warning::private-modules=true but no private-module token was minted"
+            fi
             exit 0
           fi
-          git config --global url."https://x-access-token:${GH_PAT}@github.com/nics-dp/".insteadOf "https://github.com/nics-dp/"
+
+          PRIV_GITCONFIG="${RUNNER_TEMP}/mise-task-gitconfig"
+          {
+            echo "GIT_CONFIG_GLOBAL=$PRIV_GITCONFIG"
+            echo "GOPRIVATE=github.com/nics-dp"
+            echo "GONOSUMDB=github.com/nics-dp"
+          } >> "$GITHUB_ENV"
+          rm -f "$PRIV_GITCONFIG"
+          umask 077
+          git config --file "$PRIV_GITCONFIG" url."https://x-access-token:${GH_PAT}@github.com/nics-dp/".insteadOf "https://github.com/nics-dp/"
 
       - id: check
         name: Run ${{ inputs.task }}
@@ -128,9 +153,6 @@ jobs:
         # shell metacharacters (;, |, &&), neutralizing injection.
         env:
           TASK: ${{ inputs.task }}
-        # Force bash: the run block uses bash-only syntax (read -ra, ${PIPESTATUS[0]})
-        # and runs_on may be a non-Ubuntu runner whose default shell isn't bash.
-        shell: bash
         run: |
           set +e
           # Split TASK into an argv array so task+args are preserved
@@ -140,6 +162,12 @@ jobs:
           mise run "${task_args[@]}" 2>&1 | tee /tmp/output.log
           exit "${PIPESTATUS[0]}"
         continue-on-error: true
+
+      - name: Revoke private-module credential
+        if: always()
+        run: |
+          rm -f "${RUNNER_TEMP}/mise-task-gitconfig"
+          echo "GIT_CONFIG_GLOBAL=" >> "$GITHUB_ENV"
 
       - name: Job summary
         if: always()
