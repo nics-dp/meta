@@ -137,14 +137,14 @@ jobs:
           fi
 
           PRIV_GITCONFIG="${RUNNER_TEMP}/mise-task-gitconfig"
-          {
-            echo "GIT_CONFIG_GLOBAL=$PRIV_GITCONFIG"
-            echo "GOPRIVATE=github.com/nics-dp"
-            echo "GONOSUMDB=github.com/nics-dp"
-          } >> "$GITHUB_ENV"
           rm -f "$PRIV_GITCONFIG"
           umask 077
           git config --file "$PRIV_GITCONFIG" url."https://x-access-token:${GH_PAT}@github.com/nics-dp/".insteadOf "https://github.com/nics-dp/"
+          {
+            echo "PRIVATE_GIT_CONFIG=$PRIV_GITCONFIG"
+            echo "GOPRIVATE=github.com/nics-dp"
+            echo "GONOSUMDB=github.com/nics-dp"
+          } >> "$GITHUB_ENV"
 
       - id: check
         name: Run ${{ inputs.task }}
@@ -154,6 +154,9 @@ jobs:
         env:
           TASK: ${{ inputs.task }}
         run: |
+          if [ -n "${PRIVATE_GIT_CONFIG:-}" ]; then
+            export GIT_CONFIG_GLOBAL="$PRIVATE_GIT_CONFIG"
+          fi
           set +e
           # Split TASK into an argv array so task+args are preserved
           # (e.g. "ci:semgrep golang" → task + arg) WITHOUT triggering pathname
@@ -167,7 +170,7 @@ jobs:
         if: always()
         run: |
           rm -f "${RUNNER_TEMP}/mise-task-gitconfig"
-          echo "GIT_CONFIG_GLOBAL=" >> "$GITHUB_ENV"
+          echo "PRIVATE_GIT_CONFIG=" >> "$GITHUB_ENV"
 
       - name: Job summary
         if: always()
