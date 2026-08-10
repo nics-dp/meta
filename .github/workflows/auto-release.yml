@@ -258,6 +258,94 @@ jobs:
           cache: true
           experimental: true
 
+      - name: Resolve Go cache
+        id: go-cache
+        env:
+          GO_SUM_HASH: ${{ hashFiles('go.sum') }}
+        run: |
+          if ! command -v go >/dev/null 2>&1; then
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Go cache disabled: go is unavailable"
+            exit 0
+          fi
+          if [ ! -s go.sum ] || [ -z "$GO_SUM_HASH" ]; then
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Go cache disabled: go.sum is absent or empty"
+            exit 0
+          fi
+
+          goversion="$(go env GOVERSION)"
+          goos="$(go env GOOS)"
+          goarch="$(go env GOARCH)"
+          for field in goversion goos goarch; do
+            value="${!field}"
+            if [ -z "$value" ] || [[ ! "$value" =~ ^[A-Za-z0-9._-]+$ ]]; then
+              echo "::error::Go cache identity field '$field' is empty or unsafe"
+              exit 1
+            fi
+          done
+          if [[ ! "$GO_SUM_HASH" =~ ^[A-Za-z0-9._-]+$ ]]; then
+            echo "::error::Go cache identity field 'go_sum_hash' is unsafe"
+            exit 1
+          fi
+
+          if [ -z "$RUNNER_TEMP" ] || [[ "$RUNNER_TEMP" == *$'\r'* ]] || [[ "$RUNNER_TEMP" == *$'\n'* ]]; then
+            echo "::error::Go cache disabled: RUNNER_TEMP must be non-empty and single-line"
+            exit 1
+          fi
+          if [[ "$RUNNER_TEMP" != /* ]] && [[ ! "$RUNNER_TEMP" =~ ^[A-Za-z]:[\\/].* ]]; then
+            echo "::error::Go cache disabled: RUNNER_TEMP must be POSIX absolute or Windows drive-qualified"
+            exit 1
+          fi
+          runner_temp_slashes="${RUNNER_TEMP//\\//}"
+          if [[ "/${runner_temp_slashes#/}/" == */../* ]]; then
+            echo "::error::Go cache disabled: RUNNER_TEMP must not contain a '..' path segment"
+            exit 1
+          fi
+
+          runner_temp_base="${RUNNER_TEMP%/}"
+          cache_root="${runner_temp_base}/dcf-go-cache"
+          if [ -z "$runner_temp_base" ] || [ "$cache_root" = "$RUNNER_TEMP" ] || \
+             [ "$cache_root" != "${RUNNER_TEMP%/}/dcf-go-cache" ] || \
+             [ "${cache_root%/dcf-go-cache}" != "$runner_temp_base" ]; then
+            echo "::error::Go cache disabled: cache root is not the fixed RUNNER_TEMP child"
+            exit 1
+          fi
+          if [ -e "$cache_root" ] || [ -L "$cache_root" ]; then
+            find "$cache_root" -type d -exec chmod u+w {} +
+            rm -rf -- "$cache_root"
+          fi
+          if [ -e "$cache_root" ] || [ -L "$cache_root" ]; then
+            echo "::error::Go cache stale-root purge did not remove the fixed cache root"
+            exit 1
+          fi
+          echo "Go cache stale-root purge complete."
+          mkdir -p "$cache_root/build" "$cache_root/mod"
+          chmod 0700 "$cache_root" "$cache_root/build" "$cache_root/mod"
+          {
+            echo "GOCACHE=$cache_root/build"
+            echo "GOMODCACHE=$cache_root/mod"
+          } >> "$GITHUB_ENV"
+          {
+            echo "enabled=true"
+            echo "goversion=$goversion"
+            echo "goos=$goos"
+            echo "goarch=$goarch"
+            echo "go_sum_hash=$GO_SUM_HASH"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Restore Go cache
+        id: go-cache-restore
+        if: ${{ steps.go-cache.outputs.enabled == 'true' }}
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ${{ runner.temp }}/dcf-go-cache/build
+            ${{ runner.temp }}/dcf-go-cache/mod
+            !${{ runner.temp }}/dcf-go-cache/mod/cache/vcs
+            !${{ runner.temp }}/dcf-go-cache/mod/cache/vcs/**
+          key: dcf-go-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.go-cache.outputs.goos }}-${{ steps.go-cache.outputs.goarch }}-${{ steps.go-cache.outputs.goversion }}-${{ steps.go-cache.outputs.go_sum_hash }}
+
       # Full release validation: init (deps/submodules/vendor) -> generate -> api-fix
       # -> build -> test -> ci, exactly as the repo defines `all`. Does NOT bump deps;
       # trusts dev's lockfile/go.mod.
@@ -287,11 +375,127 @@ jobs:
       - name: Deep secret scan
         run: mise run ci:trufflehog
 
+      # Teardown: remove the token-bearing insteadOf rewrite before cache publication
+      # and before any release mutation. Paired with the setup self-heal above.
+      - name: Revoke private module git config
+        id: revoke
+        # Unconditional: a prior interrupted self-hosted run may have left a token-bearing
+        # section behind even when this run minted no token.
+        if: ${{ always() }}
+        run: |
+          while read -r s; do
+            if [ -n "$s" ]; then git config --global --remove-section "$s" 2>/dev/null || true; fi
+          done < <(git config --global --name-only --get-regexp '^url\..*@github\.com/nics-dp' 2>/dev/null | sed -E 's/\.insteadof$//' | sort -u || true)
+
+      - name: Sanitize Go cache
+        id: go-cache-sanitize
+        if: always()
+        run: |
+          if [ -z "$RUNNER_TEMP" ] || [[ "$RUNNER_TEMP" == *$'\r'* ]] || [[ "$RUNNER_TEMP" == *$'\n'* ]]; then
+            echo "::error::Cannot sanitize Go cache: RUNNER_TEMP must be non-empty and single-line"
+            exit 1
+          fi
+          if [[ "$RUNNER_TEMP" != /* ]] && [[ ! "$RUNNER_TEMP" =~ ^[A-Za-z]:[\\/].* ]]; then
+            echo "::error::Cannot sanitize Go cache: RUNNER_TEMP must be POSIX absolute or Windows drive-qualified"
+            exit 1
+          fi
+          runner_temp_slashes="${RUNNER_TEMP//\\//}"
+          if [[ "/${runner_temp_slashes#/}/" == */../* ]]; then
+            echo "::error::Cannot sanitize Go cache: RUNNER_TEMP must not contain a '..' path segment"
+            exit 1
+          fi
+
+          runner_temp_base="${RUNNER_TEMP%/}"
+          cache_root="${runner_temp_base}/dcf-go-cache"
+          if [ -z "$runner_temp_base" ] || [ "$cache_root" = "$RUNNER_TEMP" ] || \
+             [ "$cache_root" != "${RUNNER_TEMP%/}/dcf-go-cache" ] || \
+             [ "${cache_root%/dcf-go-cache}" != "$runner_temp_base" ]; then
+            echo "::error::Cannot sanitize Go cache: cache root is not the fixed RUNNER_TEMP child"
+            exit 1
+          fi
+
+          # This assumes a normal runner user and an unshared RUNNER_TEMP; never elevate this traversal.
+          for ancestor in "$cache_root" "$cache_root/mod" "$cache_root/mod/cache"; do
+            if [ -L "$ancestor" ]; then
+              echo "::error::Cannot sanitize Go cache: ancestor is a symlink: $ancestor"
+              exit 1
+            fi
+            if [ -e "$ancestor" ] && [ ! -d "$ancestor" ]; then
+              echo "::error::Cannot sanitize Go cache: ancestor is not a directory: $ancestor"
+              exit 1
+            fi
+          done
+
+          vcs_root="$cache_root/mod/cache/vcs"
+          if [ -L "$vcs_root" ]; then
+            rm -f -- "$vcs_root"
+          elif [ -e "$vcs_root" ]; then
+            if [ ! -d "$vcs_root" ]; then
+              echo "::error::Cannot sanitize Go cache: VCS root is not a directory: $vcs_root"
+              exit 1
+            fi
+            find "$vcs_root" -type d -exec chmod u+w {} +
+            rm -rf -- "$vcs_root"
+          fi
+          if [ -e "$vcs_root" ] || [ -L "$vcs_root" ]; then
+            echo "::error::Go cache sanitation did not remove the fixed VCS root"
+            exit 1
+          fi
+          echo "Go cache VCS sanitation complete."
+
+      - name: Save Go cache
+        id: go-cache-save
+        if: ${{ success() && steps.go-cache.outputs.enabled == 'true' && steps.go-cache-restore.outputs.cache-hit != 'true' && steps.revoke.outcome == 'success' && steps.go-cache-sanitize.outcome == 'success' }}
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ${{ runner.temp }}/dcf-go-cache/build
+            ${{ runner.temp }}/dcf-go-cache/mod
+            !${{ runner.temp }}/dcf-go-cache/mod/cache/vcs
+            !${{ runner.temp }}/dcf-go-cache/mod/cache/vcs/**
+          key: ${{ steps.go-cache-restore.outputs.cache-primary-key }}
+
+      - name: Cleanup Go cache
+        id: go-cache-cleanup
+        if: always()
+        run: |
+          if [ -z "$RUNNER_TEMP" ] || [[ "$RUNNER_TEMP" == *$'\r'* ]] || [[ "$RUNNER_TEMP" == *$'\n'* ]]; then
+            echo "::error::Cannot clean Go cache: RUNNER_TEMP must be non-empty and single-line"
+            exit 1
+          fi
+          if [[ "$RUNNER_TEMP" != /* ]] && [[ ! "$RUNNER_TEMP" =~ ^[A-Za-z]:[\\/].* ]]; then
+            echo "::error::Cannot clean Go cache: RUNNER_TEMP must be POSIX absolute or Windows drive-qualified"
+            exit 1
+          fi
+          runner_temp_slashes="${RUNNER_TEMP//\\//}"
+          if [[ "/${runner_temp_slashes#/}/" == */../* ]]; then
+            echo "::error::Cannot clean Go cache: RUNNER_TEMP must not contain a '..' path segment"
+            exit 1
+          fi
+
+          runner_temp_base="${RUNNER_TEMP%/}"
+          cache_root="${runner_temp_base}/dcf-go-cache"
+          if [ -z "$runner_temp_base" ] || [ "$cache_root" = "$RUNNER_TEMP" ] || \
+             [ "$cache_root" != "${RUNNER_TEMP%/}/dcf-go-cache" ] || \
+             [ "${cache_root%/dcf-go-cache}" != "$runner_temp_base" ]; then
+            echo "::error::Cannot clean Go cache: cache root is not the fixed RUNNER_TEMP child"
+            exit 1
+          fi
+          if [ -e "$cache_root" ] || [ -L "$cache_root" ]; then
+            find "$cache_root" -type d -exec chmod u+w {} +
+            rm -rf -- "$cache_root"
+          fi
+          if [ -e "$cache_root" ] || [ -L "$cache_root" ]; then
+            echo "::error::Go cache cleanup did not remove the fixed cache root"
+            exit 1
+          fi
+          echo "Go cache cleanup complete."
+
       # TOCTOU mitigation: the duplicate-tag guard ran before the (long) validation,
       # so a same-name tag/release could have appeared meanwhile. Re-check right
       # before mutating main — shrinks the race window to this tiny gap.
       - name: Re-check tag before merge
-        if: ${{ !inputs.dry_run }}
+        if: ${{ success() && !inputs.dry_run && steps.revoke.outcome == 'success' && steps.go-cache-sanitize.outcome == 'success' && steps.go-cache-cleanup.outcome == 'success' && (steps.go-cache-save.outcome == 'success' || steps.go-cache-save.outcome == 'skipped') }}
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -476,21 +680,3 @@ jobs:
               esac
             fi
           } >> "$GITHUB_STEP_SUMMARY"
-
-      # Teardown: remove the token-bearing insteadOf rewrite so it can't persist in a
-      # self-hosted runner's global git config across jobs. always() = runs even if a
-      # step above failed. Paired with the self-healing cleanup in "Configure git".
-      - name: Revoke private module git config
-        # Unconditional (always, not gated on this run minting a token): on a self-hosted
-        # runner a prior interrupted run may have left a token-bearing section behind, and
-        # a run that mints no token would otherwise never clean it. The regex removal needs
-        # no token, so sweeping every time is safe (a no-op on ephemeral runners).
-        if: ${{ always() }}
-        run: |
-          # Remove every url.*@github.com/nics-dp insteadOf section (both the trailing-
-          # slash and no-slash variants, regardless of token) so nothing token-bearing
-          # persists in a self-hosted runner's global git config. Same matcher as the
-          # setup self-heal — more thorough than removing only the section we wrote.
-          while read -r s; do
-            if [ -n "$s" ]; then git config --global --remove-section "$s" 2>/dev/null || true; fi
-          done < <(git config --global --name-only --get-regexp '^url\..*@github\.com/nics-dp' 2>/dev/null | sed -E 's/\.insteadof$//' | sort -u || true)
