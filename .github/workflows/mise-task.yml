@@ -122,7 +122,15 @@ jobs:
         id: go-cache
         env:
           GO_SUM_HASH: ${{ hashFiles('go.sum') }}
+          PRIVATE_MODULES: ${{ inputs.private-modules }}
         run: |
+          remote_cache=true
+          if [ "$PRIVATE_MODULES" = "true" ]; then
+            remote_cache=false
+            echo "::notice::Remote Go cache disabled: private module source must not cross the PR cache trust boundary"
+          fi
+          echo "remote_cache=$remote_cache" >> "$GITHUB_OUTPUT"
+
           if ! command -v go >/dev/null 2>&1; then
             echo "enabled=false" >> "$GITHUB_OUTPUT"
             echo "::notice::Go cache disabled: go is unavailable"
@@ -196,7 +204,9 @@ jobs:
 
       - name: Restore Go cache
         id: go-cache-restore
-        if: ${{ steps.go-cache.outputs.enabled == 'true' }}
+        # Fork PRs may read base-branch caches. Never publish or restore GOMODCACHE
+        # when private modules are in scope; it contains downloaded and extracted source.
+        if: ${{ steps.go-cache.outputs.enabled == 'true' && steps.go-cache.outputs.remote_cache == 'true' }}
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
@@ -204,7 +214,7 @@ jobs:
             ${{ runner.temp }}/dcf-go-cache/mod
             !${{ runner.temp }}/dcf-go-cache/mod/cache/vcs
             !${{ runner.temp }}/dcf-go-cache/mod/cache/vcs/**
-          key: dcf-go-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.go-cache.outputs.goos }}-${{ steps.go-cache.outputs.goarch }}-${{ steps.go-cache.outputs.goversion }}-${{ steps.go-cache.outputs.go_sum_hash }}
+          key: dcf-go-public-v2-${{ runner.os }}-${{ runner.arch }}-${{ steps.go-cache.outputs.goos }}-${{ steps.go-cache.outputs.goarch }}-${{ steps.go-cache.outputs.goversion }}-${{ steps.go-cache.outputs.go_sum_hash }}
 
       - name: Configure git for private modules
         if: ${{ inputs.private-modules }}
@@ -317,9 +327,27 @@ jobs:
           fi
           echo "Go cache VCS sanitation complete."
 
+      - name: Check Go cache content
+        id: go-cache-content
+        if: ${{ always() && steps.go-cache.outputs.enabled == 'true' && steps.go-cache.outputs.remote_cache == 'true' }}
+        run: |
+          has_entries=false
+          for root in "$GOCACHE" "$GOMODCACHE"; do
+            if [ -d "$root" ] && [ -n "$(find "$root" -mindepth 1 -print -quit)" ]; then
+              has_entries=true
+              break
+            fi
+          done
+          echo "has_entries=$has_entries" >> "$GITHUB_OUTPUT"
+          if [ "$has_entries" != "true" ]; then
+            echo "::notice::Remote Go cache save skipped: no cache entries were produced"
+          fi
+
       - name: Save Go cache
         id: go-cache-save
-        if: ${{ always() && steps.go-cache.outputs.enabled == 'true' && steps.go-cache-restore.outputs.cache-hit != 'true' && steps.check.outcome == 'success' && steps.revoke.outcome == 'success' && steps.go-cache-sanitize.outcome == 'success' }}
+        # Avoid letting a successful non-Go matrix task permanently claim the shared
+        # immutable key with a directory-only archive.
+        if: ${{ always() && steps.go-cache.outputs.enabled == 'true' && steps.go-cache.outputs.remote_cache == 'true' && steps.go-cache-restore.outputs.cache-hit != 'true' && steps.check.outcome == 'success' && steps.revoke.outcome == 'success' && steps.go-cache-sanitize.outcome == 'success' && steps.go-cache-content.outcome == 'success' && steps.go-cache-content.outputs.has_entries == 'true' }}
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
@@ -370,11 +398,14 @@ jobs:
         env:
           JOB_NAME: ${{ inputs.name != '' && inputs.name || inputs.task }}
           CACHE_ENABLED: ${{ steps.go-cache.outputs.enabled }}
+          REMOTE_CACHE: ${{ steps.go-cache.outputs.remote_cache }}
           CACHE_HIT: ${{ steps.go-cache-restore.outputs.cache-hit }}
+          CACHE_HAS_ENTRIES: ${{ steps.go-cache-content.outputs.has_entries }}
           TASK_OUTCOME: ${{ steps.check.outcome }}
           REVOKE_OUTCOME: ${{ steps.revoke.outcome }}
           RESTORE_OUTCOME: ${{ steps.go-cache-restore.outcome }}
           SANITIZE_OUTCOME: ${{ steps.go-cache-sanitize.outcome }}
+          CONTENT_OUTCOME: ${{ steps.go-cache-content.outcome }}
           SAVE_OUTCOME: ${{ steps.go-cache-save.outcome }}
           CLEANUP_OUTCOME: ${{ steps.go-cache-cleanup.outcome }}
         run: |
@@ -383,10 +414,16 @@ jobs:
              [ "$SANITIZE_OUTCOME" != "success" ] || [ "$CLEANUP_OUTCOME" != "success" ]; then
             overall=fail
           fi
-          if [ "$CACHE_ENABLED" = "true" ] && [ "$RESTORE_OUTCOME" != "success" ]; then
+          if [ "$CACHE_ENABLED" = "true" ] && [ "$REMOTE_CACHE" = "true" ] && \
+             [ "$RESTORE_OUTCOME" != "success" ]; then
             overall=fail
           fi
-          if [ "$CACHE_ENABLED" = "true" ] && [ "$CACHE_HIT" != "true" ] && \
+          if [ "$CACHE_ENABLED" = "true" ] && [ "$REMOTE_CACHE" = "true" ] && \
+             [ "$CONTENT_OUTCOME" != "success" ]; then
+            overall=fail
+          fi
+          if [ "$CACHE_ENABLED" = "true" ] && [ "$REMOTE_CACHE" = "true" ] && \
+             [ "$CACHE_HIT" != "true" ] && [ "$CACHE_HAS_ENTRIES" = "true" ] && \
              [ "$TASK_OUTCOME" = "success" ] && [ "$REVOKE_OUTCOME" = "success" ] && \
              [ "$SANITIZE_OUTCOME" = "success" ] && [ "$SAVE_OUTCOME" != "success" ]; then
             overall=fail
@@ -403,8 +440,10 @@ jobs:
             echo
             echo "- task: $TASK_OUTCOME"
             echo "- credential revoke: $REVOKE_OUTCOME"
+            echo "- remote cache allowed: ${REMOTE_CACHE:-false}"
             echo "- cache restore: $RESTORE_OUTCOME"
             echo "- cache sanitize: $SANITIZE_OUTCOME"
+            echo "- cache content: $CONTENT_OUTCOME (entries=${CACHE_HAS_ENTRIES:-false})"
             echo "- cache save: $SAVE_OUTCOME"
             echo "- cache cleanup: $CLEANUP_OUTCOME"
             echo
@@ -418,5 +457,5 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Enforce
-        if: ${{ always() && (steps.check.outcome != 'success' || steps.revoke.outcome != 'success' || steps.go-cache-sanitize.outcome != 'success' || steps.go-cache-cleanup.outcome != 'success' || steps.go-cache-restore.outcome == 'failure' || steps.go-cache-save.outcome == 'failure') }}
+        if: ${{ always() && (steps.check.outcome != 'success' || steps.revoke.outcome != 'success' || steps.go-cache-sanitize.outcome != 'success' || steps.go-cache-cleanup.outcome != 'success' || steps.go-cache-restore.outcome == 'failure' || steps.go-cache-content.outcome == 'failure' || steps.go-cache-save.outcome == 'failure') }}
         run: exit 1

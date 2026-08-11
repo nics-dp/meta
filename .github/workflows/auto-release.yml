@@ -242,9 +242,37 @@ jobs:
           # rewrites left by a prior run on a self-hosted runner (global git config can
           # persist across jobs) so we never pick up an expired token. Paired with the
           # always() teardown step at the end. Mirrors go-release.yml.
-          while read -r s; do
-            if [ -n "$s" ]; then git config --global --remove-section "$s" 2>/dev/null || true; fi
-          done < <(git config --global --name-only --get-regexp '^url\..*@github\.com/nics-dp' 2>/dev/null | sed -E 's/\.insteadof$//' | sort -u || true)
+          remove_private_rewrites() {
+            set +e
+            matches="$(git config --global --name-only --get-regexp '^url\..*@github\.com/nics-dp' 2>/dev/null)"
+            query_status=$?
+            set -e
+            case "$query_status" in
+              0) ;;
+              1) matches="" ;;
+              *) echo "::error::Failed to inspect private-module Git rewrites"; return 1 ;;
+            esac
+            if [ -n "$matches" ]; then
+              sections="$(printf '%s\n' "$matches" | sed -E 's/\.insteadof$//' | sort -u)"
+              while IFS= read -r section; do
+                [ -z "$section" ] && continue
+                if ! git config --global --remove-section "$section" 2>/dev/null; then
+                  echo "::error::Failed to remove a private-module Git rewrite"
+                  return 1
+                fi
+              done <<< "$sections"
+            fi
+            set +e
+            git config --global --name-only --get-regexp '^url\..*@github\.com/nics-dp' >/dev/null 2>&1
+            query_status=$?
+            set -e
+            case "$query_status" in
+              1) return 0 ;;
+              0) echo "::error::A private-module Git rewrite remains after cleanup"; return 1 ;;
+              *) echo "::error::Failed to verify private-module Git rewrite cleanup"; return 1 ;;
+            esac
+          }
+          remove_private_rewrites
           # insteadOf is multi-valued — the second line MUST use --add or it overwrites
           # the first, breaking https go-module fetch (could not read Username).
           git config --global url."https://x-access-token:${APP_TOKEN}@github.com/nics-dp/".insteadOf "https://github.com/nics-dp/"
@@ -262,7 +290,15 @@ jobs:
         id: go-cache
         env:
           GO_SUM_HASH: ${{ hashFiles('go.sum') }}
+          HAS_PRIVATE_MODULE_AUTH: ${{ steps.ci-read.outputs.token != '' }}
         run: |
+          remote_cache=true
+          if [ "$HAS_PRIVATE_MODULE_AUTH" = "true" ]; then
+            remote_cache=false
+            echo "::notice::Remote Go cache disabled: private module source must not cross the PR cache trust boundary"
+          fi
+          echo "remote_cache=$remote_cache" >> "$GITHUB_OUTPUT"
+
           if ! command -v go >/dev/null 2>&1; then
             echo "enabled=false" >> "$GITHUB_OUTPUT"
             echo "::notice::Go cache disabled: go is unavailable"
@@ -336,7 +372,9 @@ jobs:
 
       - name: Restore Go cache
         id: go-cache-restore
-        if: ${{ steps.go-cache.outputs.enabled == 'true' }}
+        # Private-authenticated module caches contain downloaded and extracted source.
+        # Keep them job-local because fork PRs may read base-branch caches.
+        if: ${{ steps.go-cache.outputs.enabled == 'true' && steps.go-cache.outputs.remote_cache == 'true' }}
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
@@ -344,7 +382,7 @@ jobs:
             ${{ runner.temp }}/dcf-go-cache/mod
             !${{ runner.temp }}/dcf-go-cache/mod/cache/vcs
             !${{ runner.temp }}/dcf-go-cache/mod/cache/vcs/**
-          key: dcf-go-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.go-cache.outputs.goos }}-${{ steps.go-cache.outputs.goarch }}-${{ steps.go-cache.outputs.goversion }}-${{ steps.go-cache.outputs.go_sum_hash }}
+          key: dcf-go-public-v2-${{ runner.os }}-${{ runner.arch }}-${{ steps.go-cache.outputs.goos }}-${{ steps.go-cache.outputs.goarch }}-${{ steps.go-cache.outputs.goversion }}-${{ steps.go-cache.outputs.go_sum_hash }}
 
       # Full release validation: init (deps/submodules/vendor) -> generate -> api-fix
       # -> build -> test -> ci, exactly as the repo defines `all`. Does NOT bump deps;
@@ -383,9 +421,37 @@ jobs:
         # section behind even when this run minted no token.
         if: ${{ always() }}
         run: |
-          while read -r s; do
-            if [ -n "$s" ]; then git config --global --remove-section "$s" 2>/dev/null || true; fi
-          done < <(git config --global --name-only --get-regexp '^url\..*@github\.com/nics-dp' 2>/dev/null | sed -E 's/\.insteadof$//' | sort -u || true)
+          remove_private_rewrites() {
+            set +e
+            matches="$(git config --global --name-only --get-regexp '^url\..*@github\.com/nics-dp' 2>/dev/null)"
+            query_status=$?
+            set -e
+            case "$query_status" in
+              0) ;;
+              1) matches="" ;;
+              *) echo "::error::Failed to inspect private-module Git rewrites"; return 1 ;;
+            esac
+            if [ -n "$matches" ]; then
+              sections="$(printf '%s\n' "$matches" | sed -E 's/\.insteadof$//' | sort -u)"
+              while IFS= read -r section; do
+                [ -z "$section" ] && continue
+                if ! git config --global --remove-section "$section" 2>/dev/null; then
+                  echo "::error::Failed to remove a private-module Git rewrite"
+                  return 1
+                fi
+              done <<< "$sections"
+            fi
+            set +e
+            git config --global --name-only --get-regexp '^url\..*@github\.com/nics-dp' >/dev/null 2>&1
+            query_status=$?
+            set -e
+            case "$query_status" in
+              1) return 0 ;;
+              0) echo "::error::A private-module Git rewrite remains after cleanup"; return 1 ;;
+              *) echo "::error::Failed to verify private-module Git rewrite cleanup"; return 1 ;;
+            esac
+          }
+          remove_private_rewrites
 
       - name: Sanitize Go cache
         id: go-cache-sanitize
@@ -443,9 +509,25 @@ jobs:
           fi
           echo "Go cache VCS sanitation complete."
 
+      - name: Check Go cache content
+        id: go-cache-content
+        if: ${{ always() && steps.go-cache.outputs.enabled == 'true' && steps.go-cache.outputs.remote_cache == 'true' }}
+        run: |
+          has_entries=false
+          for root in "$GOCACHE" "$GOMODCACHE"; do
+            if [ -d "$root" ] && [ -n "$(find "$root" -mindepth 1 -print -quit)" ]; then
+              has_entries=true
+              break
+            fi
+          done
+          echo "has_entries=$has_entries" >> "$GITHUB_OUTPUT"
+          if [ "$has_entries" != "true" ]; then
+            echo "::notice::Remote Go cache save skipped: no cache entries were produced"
+          fi
+
       - name: Save Go cache
         id: go-cache-save
-        if: ${{ success() && steps.go-cache.outputs.enabled == 'true' && steps.go-cache-restore.outputs.cache-hit != 'true' && steps.revoke.outcome == 'success' && steps.go-cache-sanitize.outcome == 'success' }}
+        if: ${{ success() && steps.go-cache.outputs.enabled == 'true' && steps.go-cache.outputs.remote_cache == 'true' && steps.go-cache-restore.outputs.cache-hit != 'true' && steps.revoke.outcome == 'success' && steps.go-cache-sanitize.outcome == 'success' && steps.go-cache-content.outcome == 'success' && steps.go-cache-content.outputs.has_entries == 'true' }}
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
@@ -659,11 +741,19 @@ jobs:
 
       - name: Summary
         if: success()
+        env:
+          REMOTE_CACHE: ${{ steps.go-cache.outputs.remote_cache }}
+          RESTORE_OUTCOME: ${{ steps.go-cache-restore.outcome }}
+          SANITIZE_OUTCOME: ${{ steps.go-cache-sanitize.outcome }}
+          CONTENT_OUTCOME: ${{ steps.go-cache-content.outcome }}
+          SAVE_OUTCOME: ${{ steps.go-cache-save.outcome }}
+          CLEANUP_OUTCOME: ${{ steps.go-cache-cleanup.outcome }}
         run: |
           {
             echo "## auto-release — ${VERSION}"
             echo
             echo "✅ Validation passed for \`${TARGET_BRANCH}\`."
+            echo "Go cache: remote=${REMOTE_CACHE:-false}, restore=$RESTORE_OUTCOME, sanitize=$SANITIZE_OUTCOME, content=$CONTENT_OUTCOME, save=$SAVE_OUTCOME, cleanup=$CLEANUP_OUTCOME."
             echo
             if [ "${DRY_RUN}" = "true" ]; then
               echo "> Dry-run: no merge, no tag, no release. main untouched, release.yml not triggered."
