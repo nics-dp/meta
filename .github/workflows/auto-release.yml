@@ -231,7 +231,7 @@ jobs:
           # mise run all's gs:clone (if any) fetches them via the insteadOf rewrite below.
 
       - name: Configure git (private module auth)
-        if: ${{ steps.ci-read.outputs.token != '' }}
+        # Always run the stale-rewrite cleanup, even when this run minted no token.
         env:
           APP_TOKEN: ${{ steps.ci-read.outputs.token }}
         run: |
@@ -273,6 +273,10 @@ jobs:
             esac
           }
           remove_private_rewrites
+          if [ -z "$APP_TOKEN" ]; then
+            echo "::notice::No ci-read token minted; stale private-module rewrites were removed"
+            exit 0
+          fi
           # insteadOf is multi-valued — the second line MUST use --add or it overwrites
           # the first, breaking https go-module fetch (could not read Username).
           git config --global url."https://x-access-token:${APP_TOKEN}@github.com/nics-dp/".insteadOf "https://github.com/nics-dp/"
@@ -290,14 +294,11 @@ jobs:
         id: go-cache
         env:
           GO_SUM_HASH: ${{ hashFiles('go.sum') }}
-          HAS_PRIVATE_MODULE_AUTH: ${{ steps.ci-read.outputs.token != '' }}
         run: |
-          remote_cache=true
-          if [ "$HAS_PRIVATE_MODULE_AUTH" = "true" ]; then
-            remote_cache=false
-            echo "::notice::Remote Go cache disabled: private module source must not cross the PR cache trust boundary"
-          fi
-          echo "remote_cache=$remote_cache" >> "$GITHUB_OUTPUT"
+          # auto-release is private-module capable and may inherit stale same-runner auth.
+          # Keep Go caches job-local; only mise-task's explicit public mode publishes remotely.
+          echo "remote_cache=false" >> "$GITHUB_OUTPUT"
+          echo "::notice::Remote Go cache disabled: auto-release keeps module data job-local"
 
           if ! command -v go >/dev/null 2>&1; then
             echo "enabled=false" >> "$GITHUB_OUTPUT"
