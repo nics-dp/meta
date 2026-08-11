@@ -301,6 +301,8 @@ jobs:
             echo "::error::Cannot capture task output: fixed path is not a regular file"
             exit 1
           fi
+          # Only this marker proves the stale path was replaced before task execution.
+          echo "output_ready=true" >> "$GITHUB_OUTPUT"
 
           set +e
           # Split TASK into an argv array so task+args are preserved
@@ -451,6 +453,7 @@ jobs:
           CACHE_HIT: ${{ steps.go-cache-restore.outputs.cache-hit }}
           CACHE_HAS_ENTRIES: ${{ steps.go-cache-content.outputs.has_entries }}
           TASK_OUTCOME: ${{ steps.check.outcome }}
+          OUTPUT_READY: ${{ steps.check.outputs.output_ready }}
           REVOKE_OUTCOME: ${{ steps.revoke.outcome }}
           RESTORE_OUTCOME: ${{ steps.go-cache-restore.outcome }}
           SANITIZE_OUTCOME: ${{ steps.go-cache-sanitize.outcome }}
@@ -501,7 +504,8 @@ jobs:
 
           capture_output=false
           output_note="_Task did not run; no output captured._"
-          if [ "$TASK_OUTCOME" = "success" ] || [ "$TASK_OUTCOME" = "failure" ]; then
+          if { [ "$TASK_OUTCOME" = "success" ] || [ "$TASK_OUTCOME" = "failure" ]; } && \
+             [ "$OUTPUT_READY" = "true" ]; then
             if [ -f "$task_output" ] && [ ! -L "$task_output" ]; then
               capture_output=true
               output_note=""
@@ -509,6 +513,9 @@ jobs:
               overall=fail
               output_note="_Task ran, but no safe job-local output file was available._"
             fi
+          elif [ "$TASK_OUTCOME" = "success" ] || [ "$TASK_OUTCOME" = "failure" ]; then
+            overall=fail
+            output_note="_Task output capture did not initialize; no output was read._"
           fi
 
           summary_status=0
