@@ -515,7 +515,7 @@ jobs:
         run: |
           has_entries=false
           for root in "$GOCACHE" "$GOMODCACHE"; do
-            if [ -d "$root" ] && [ -n "$(find "$root" -mindepth 1 -print -quit)" ]; then
+            if [ -d "$root" ] && [ -n "$(find "$root" -mindepth 1 -type f -print -quit)" ]; then
               has_entries=true
               break
             fi
