@@ -518,8 +518,7 @@ jobs:
             output_note="_Task output capture did not initialize; no output was read._"
           fi
 
-          summary_status=0
-          if ! {
+          if {
             echo "## $JOB_NAME"
             echo
             if [ "$overall" = "pass" ]; then
@@ -549,6 +548,8 @@ jobs:
             echo
             echo '</details>'
           } >> "$GITHUB_STEP_SUMMARY"; then
+            summary_status=0
+          else
             summary_status=1
           fi
           set +e
