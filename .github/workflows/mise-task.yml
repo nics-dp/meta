@@ -1,5 +1,5 @@
 # yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
-# Reusable workflow: run a single mise task on a fresh runner.
+# Reusable workflow: run a single mise task with explicit job-local isolation.
 #
 # Centralizes the checkout + jdx/mise-action setup so downstream repos pin one
 # ref (this file's @ref) instead of pinning each action SHA themselves.
@@ -270,12 +270,44 @@ jobs:
           if [ -n "${PRIVATE_GIT_CONFIG:-}" ]; then
             export GIT_CONFIG_GLOBAL="$PRIVATE_GIT_CONFIG"
           fi
+          if [ -z "$RUNNER_TEMP" ] || [[ "$RUNNER_TEMP" == *$'\r'* ]] || [[ "$RUNNER_TEMP" == *$'\n'* ]]; then
+            echo "::error::Cannot capture task output: RUNNER_TEMP must be non-empty and single-line"
+            exit 1
+          fi
+          if [[ "$RUNNER_TEMP" != /* ]] && [[ ! "$RUNNER_TEMP" =~ ^[A-Za-z]:[\\/].* ]]; then
+            echo "::error::Cannot capture task output: RUNNER_TEMP must be POSIX absolute or Windows drive-qualified"
+            exit 1
+          fi
+          runner_temp_slashes="${RUNNER_TEMP//\\//}"
+          if [[ "/${runner_temp_slashes#/}/" == */../* ]]; then
+            echo "::error::Cannot capture task output: RUNNER_TEMP must not contain a '..' path segment"
+            exit 1
+          fi
+          runner_temp_base="${RUNNER_TEMP%/}"
+          task_output="${runner_temp_base}/mise-task-output.log"
+          if [ -z "$runner_temp_base" ] || [ "$task_output" != "${RUNNER_TEMP%/}/mise-task-output.log" ] || \
+             [ "${task_output%/mise-task-output.log}" != "$runner_temp_base" ]; then
+            echo "::error::Cannot capture task output: path is not the fixed RUNNER_TEMP child"
+            exit 1
+          fi
+          rm -f -- "$task_output"
+          if [ -e "$task_output" ] || [ -L "$task_output" ]; then
+            echo "::error::Cannot capture task output: stale path remains"
+            exit 1
+          fi
+          umask 077
+          : > "$task_output"
+          if [ ! -f "$task_output" ] || [ -L "$task_output" ]; then
+            echo "::error::Cannot capture task output: fixed path is not a regular file"
+            exit 1
+          fi
+
           set +e
           # Split TASK into an argv array so task+args are preserved
           # (e.g. "ci:semgrep golang" → task + arg) WITHOUT triggering pathname
           # globbing on * / ? / [ that an unquoted $TASK would.
           read -ra task_args <<< "$TASK"
-          mise run "${task_args[@]}" 2>&1 | tee /tmp/output.log
+          mise run "${task_args[@]}" 2>&1 | tee "$task_output"
           exit "${PIPESTATUS[0]}"
         continue-on-error: true
 
@@ -426,6 +458,27 @@ jobs:
           SAVE_OUTCOME: ${{ steps.go-cache-save.outcome }}
           CLEANUP_OUTCOME: ${{ steps.go-cache-cleanup.outcome }}
         run: |
+          if [ -z "$RUNNER_TEMP" ] || [[ "$RUNNER_TEMP" == *$'\r'* ]] || [[ "$RUNNER_TEMP" == *$'\n'* ]]; then
+            echo "::error::Cannot summarize task output: RUNNER_TEMP must be non-empty and single-line"
+            exit 1
+          fi
+          if [[ "$RUNNER_TEMP" != /* ]] && [[ ! "$RUNNER_TEMP" =~ ^[A-Za-z]:[\\/].* ]]; then
+            echo "::error::Cannot summarize task output: RUNNER_TEMP must be POSIX absolute or Windows drive-qualified"
+            exit 1
+          fi
+          runner_temp_slashes="${RUNNER_TEMP//\\//}"
+          if [[ "/${runner_temp_slashes#/}/" == */../* ]]; then
+            echo "::error::Cannot summarize task output: RUNNER_TEMP must not contain a '..' path segment"
+            exit 1
+          fi
+          runner_temp_base="${RUNNER_TEMP%/}"
+          task_output="${runner_temp_base}/mise-task-output.log"
+          if [ -z "$runner_temp_base" ] || [ "$task_output" != "${RUNNER_TEMP%/}/mise-task-output.log" ] || \
+             [ "${task_output%/mise-task-output.log}" != "$runner_temp_base" ]; then
+            echo "::error::Cannot summarize task output: path is not the fixed RUNNER_TEMP child"
+            exit 1
+          fi
+
           overall=pass
           if [ "$TASK_OUTCOME" != "success" ] || [ "$REVOKE_OUTCOME" != "success" ] || \
              [ "$SANITIZE_OUTCOME" != "success" ] || [ "$CLEANUP_OUTCOME" != "success" ]; then
@@ -446,7 +499,20 @@ jobs:
             overall=fail
           fi
 
-          {
+          capture_output=false
+          output_note="_Task did not run; no output captured._"
+          if [ "$TASK_OUTCOME" = "success" ] || [ "$TASK_OUTCOME" = "failure" ]; then
+            if [ -f "$task_output" ] && [ ! -L "$task_output" ]; then
+              capture_output=true
+              output_note=""
+            else
+              overall=fail
+              output_note="_Task ran, but no safe job-local output file was available._"
+            fi
+          fi
+
+          summary_status=0
+          if ! {
             echo "## $JOB_NAME"
             echo
             if [ "$overall" = "pass" ]; then
@@ -467,11 +533,32 @@ jobs:
             echo '<details><summary>output</summary>'
             echo
             echo '```'
-            if [ -f /tmp/output.log ]; then tail -n 300 /tmp/output.log; fi
+            if [ "$capture_output" = "true" ]; then
+              tail -n 300 "$task_output"
+            else
+              echo "$output_note"
+            fi
             echo '```'
             echo
             echo '</details>'
-          } >> "$GITHUB_STEP_SUMMARY"
+          } >> "$GITHUB_STEP_SUMMARY"; then
+            summary_status=1
+          fi
+          set +e
+          rm -f -- "$task_output"
+          cleanup_status=$?
+          if [ -e "$task_output" ] || [ -L "$task_output" ]; then
+            cleanup_status=1
+          fi
+          set -e
+          if [ "$summary_status" -ne 0 ]; then
+            echo "::error::Failed to write the job summary"
+            exit "$summary_status"
+          fi
+          if [ "$cleanup_status" -ne 0 ]; then
+            echo "::error::Failed to remove the job-local task output"
+            exit "$cleanup_status"
+          fi
 
       - name: Enforce
         if: ${{ always() && (steps.check.outcome != 'success' || steps.revoke.outcome != 'success' || steps.go-cache-sanitize.outcome != 'success' || steps.go-cache-cleanup.outcome != 'success' || steps.go-cache-restore.outcome == 'failure' || steps.go-cache-content.outcome == 'failure' || steps.go-cache-save.outcome == 'failure') }}
