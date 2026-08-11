@@ -518,6 +518,7 @@ jobs:
             output_note="_Task output capture did not initialize; no output was read._"
           fi
 
+          output_read_status=0
           if {
             echo "## $JOB_NAME"
             echo
@@ -540,7 +541,10 @@ jobs:
             echo
             echo '```'
             if [ "$capture_output" = "true" ]; then
-              tail -n 300 "$task_output"
+              if ! tail -n 300 "$task_output"; then
+                output_read_status=1
+                echo "_Failed to read job-local task output._"
+              fi
             else
               echo "$output_note"
             fi
@@ -552,6 +556,9 @@ jobs:
           else
             summary_status=1
           fi
+          if [ "$output_read_status" -ne 0 ]; then
+            summary_status=1
+          fi
           set +e
           rm -f -- "$task_output"
           cleanup_status=$?
@@ -560,7 +567,7 @@ jobs:
           fi
           set -e
           if [ "$summary_status" -ne 0 ]; then
-            echo "::error::Failed to write the job summary"
+            echo "::error::Failed to write the job summary or read job-local task output"
             exit "$summary_status"
           fi
           if [ "$cleanup_status" -ne 0 ]; then
