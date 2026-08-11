@@ -293,8 +293,8 @@ jobs:
       - name: Prepare job-local Go cache
         run: |
           # auto-release may fetch private modules, so its Go caches are never published.
-          if ! command -v go >/dev/null 2>&1 || [ ! -s go.sum ]; then
-            echo "::notice::Job-local Go cache disabled: Go or root go.sum is unavailable"
+          if ! command -v go >/dev/null 2>&1; then
+            echo "::notice::Job-local Go cache disabled: Go is unavailable"
             exit 0
           fi
 
