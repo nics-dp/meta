@@ -389,6 +389,7 @@ jobs:
       - name: Remove private Go scan state
         id: go-private-cleanup
         if: always()
+        continue-on-error: true
         run: |
           case "$RUNNER_TEMP" in
             /*) ;;
