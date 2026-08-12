@@ -182,6 +182,28 @@ jobs:
           private-key: ${{ secrets.ci_read_app_private_key }}
           owner: ${{ github.repository_owner }}
 
+      - name: Configure job-local git
+        env:
+          APP_TOKEN: ${{ steps.ci-read.outputs.token }}
+        run: |
+          # Mask the reused runner's user-global Git config for checkout, mise setup,
+          # validation, and post hooks. Add only scoped nics-dp rewrites when authorized.
+          gitconfig="${RUNNER_TEMP}/auto-release-gitconfig"
+          rm -f -- "$gitconfig"
+          umask 077
+          : > "$gitconfig"
+          chmod 0600 "$gitconfig"
+          echo "GIT_CONFIG_GLOBAL=$gitconfig" >> "$GITHUB_ENV"
+
+          if [ -z "$APP_TOKEN" ]; then
+            echo "::notice::No ci-read token minted; using blank job-local Git config"
+            exit 0
+          fi
+          # insteadOf is multi-valued — the second line MUST use --add or it overwrites
+          # the first, breaking https go-module fetch (could not read Username).
+          git config --file "$gitconfig" url."https://x-access-token:${APP_TOKEN}@github.com/nics-dp/".insteadOf "https://github.com/nics-dp/"
+          git config --file "$gitconfig" --add url."https://x-access-token:${APP_TOKEN}@github.com/nics-dp/".insteadOf "git@github.com:nics-dp/"
+
       # Write token for main push + tag + release. Member of the main/dev ruleset
       # bypass_actors. Skipped on dry-run.
       - name: Mint release app token
@@ -230,74 +252,10 @@ jobs:
           # No submodules here: github.token can't read private sibling repos.
           # mise run all's gs:clone (if any) fetches them via the insteadOf rewrite below.
 
-      - name: Configure git (private module auth)
-        # Always run the stale-rewrite cleanup, even when this run minted no token.
-        env:
-          APP_TOKEN: ${{ steps.ci-read.outputs.token }}
-        run: |
-          # No git user.name/email here: this workflow never makes a local commit (the
-          # merge is server-side via the REST API), and writing them with --global would
-          # clobber a self-hosted runner's identity across jobs. Matches go-release.yml.
-          # Self-healing: drop any stale token-bearing url.*@github.com/nics-dp insteadOf
-          # rewrites left by a prior run on a self-hosted runner (global git config can
-          # persist across jobs) so we never pick up an expired token. Paired with the
-          # always() teardown step at the end. Mirrors go-release.yml.
-          remove_private_rewrites() {
-            set +e
-            matches="$(git config --global --name-only --get-regexp '^url\..*@github\.com/nics-dp' 2>/dev/null)"
-            query_status=$?
-            set -e
-            case "$query_status" in
-              0) ;;
-              1) matches="" ;;
-              *) echo "::error::Failed to inspect private-module Git rewrites"; return 1 ;;
-            esac
-            if [ -n "$matches" ]; then
-              sections="$(printf '%s\n' "$matches" | sed -E 's/\.insteadof$//' | sort -u)"
-              while IFS= read -r section; do
-                [ -z "$section" ] && continue
-                if ! git config --global --remove-section "$section" 2>/dev/null; then
-                  echo "::error::Failed to remove a private-module Git rewrite"
-                  return 1
-                fi
-              done <<< "$sections"
-            fi
-            set +e
-            git config --global --name-only --get-regexp '^url\..*@github\.com/nics-dp' >/dev/null 2>&1
-            query_status=$?
-            set -e
-            case "$query_status" in
-              1) return 0 ;;
-              0) echo "::error::A private-module Git rewrite remains after cleanup"; return 1 ;;
-              *) echo "::error::Failed to verify private-module Git rewrite cleanup"; return 1 ;;
-            esac
-          }
-          remove_private_rewrites
-          if [ -z "$APP_TOKEN" ]; then
-            echo "::notice::No ci-read token minted; stale private-module rewrites were removed"
-            exit 0
-          fi
-          # insteadOf is multi-valued — the second line MUST use --add or it overwrites
-          # the first, breaking https go-module fetch (could not read Username).
-          git config --global url."https://x-access-token:${APP_TOKEN}@github.com/nics-dp/".insteadOf "https://github.com/nics-dp/"
-          git config --global --add url."https://x-access-token:${APP_TOKEN}@github.com/nics-dp/".insteadOf "git@github.com:nics-dp/"
-
-      # Toolchain comes from the repo's mise.toml [tools] — no per-language setup step.
-      - name: Set up mise
-        uses: jdx/mise-action@9e7f7633ff6f6d6048a9418a68d48f288f50eb14 # v4.2.3
-        with:
-          version: ${{ inputs.mise_version }}
-          cache: true
-          experimental: true
-
       - name: Prepare job-local Go cache
         run: |
-          # auto-release may fetch private modules, so its Go caches are never published.
-          if ! command -v go >/dev/null 2>&1; then
-            echo "::notice::Job-local Go cache disabled: Go is unavailable"
-            exit 0
-          fi
-
+          # Always isolate Go's fixed roots before mise starts. They are harmless for
+          # non-Go repositories and auto-release never publishes their private contents.
           if [ -z "$RUNNER_TEMP" ] || [[ "$RUNNER_TEMP" == *$'\r'* ]] || [[ "$RUNNER_TEMP" == *$'\n'* ]]; then
             echo "::error::Go cache disabled: RUNNER_TEMP must be non-empty and single-line"
             exit 1
@@ -336,6 +294,14 @@ jobs:
             echo "GOMODCACHE=$cache_root/mod"
           } >> "$GITHUB_ENV"
 
+      # Toolchain comes from the repo's mise.toml [tools] — no per-language setup step.
+      - name: Set up mise
+        uses: jdx/mise-action@9e7f7633ff6f6d6048a9418a68d48f288f50eb14 # v4.2.3
+        with:
+          version: ${{ inputs.mise_version }}
+          cache: true
+          experimental: true
+
       # Full release validation: init (deps/submodules/vendor) -> generate -> api-fix
       # -> build -> test -> ci, exactly as the repo defines `all`. Does NOT bump deps;
       # trusts dev's lockfile/go.mod.
@@ -365,45 +331,19 @@ jobs:
       - name: Deep secret scan
         run: mise run ci:trufflehog
 
-      # Teardown: remove the token-bearing insteadOf rewrite before any release mutation.
-      # Paired with the setup self-heal above.
+      # Teardown: delete the token-bearing job-local file before any release mutation.
+      # Keep GIT_CONFIG_GLOBAL pointed at the now-absent file so action post hooks remain
+      # isolated from the reused runner's user-global config.
       - name: Revoke private module git config
         id: revoke
-        # Unconditional: a prior interrupted self-hosted run may have left a token-bearing
-        # section behind even when this run minted no token.
         if: ${{ always() }}
         run: |
-          remove_private_rewrites() {
-            set +e
-            matches="$(git config --global --name-only --get-regexp '^url\..*@github\.com/nics-dp' 2>/dev/null)"
-            query_status=$?
-            set -e
-            case "$query_status" in
-              0) ;;
-              1) matches="" ;;
-              *) echo "::error::Failed to inspect private-module Git rewrites"; return 1 ;;
-            esac
-            if [ -n "$matches" ]; then
-              sections="$(printf '%s\n' "$matches" | sed -E 's/\.insteadof$//' | sort -u)"
-              while IFS= read -r section; do
-                [ -z "$section" ] && continue
-                if ! git config --global --remove-section "$section" 2>/dev/null; then
-                  echo "::error::Failed to remove a private-module Git rewrite"
-                  return 1
-                fi
-              done <<< "$sections"
-            fi
-            set +e
-            git config --global --name-only --get-regexp '^url\..*@github\.com/nics-dp' >/dev/null 2>&1
-            query_status=$?
-            set -e
-            case "$query_status" in
-              1) return 0 ;;
-              0) echo "::error::A private-module Git rewrite remains after cleanup"; return 1 ;;
-              *) echo "::error::Failed to verify private-module Git rewrite cleanup"; return 1 ;;
-            esac
-          }
-          remove_private_rewrites
+          gitconfig="${RUNNER_TEMP}/auto-release-gitconfig"
+          rm -f -- "$gitconfig"
+          if [ -e "$gitconfig" ] || [ -L "$gitconfig" ]; then
+            echo "::error::Private-module Git config revoke did not remove the fixed file"
+            exit 1
+          fi
 
       - name: Cleanup Go cache
         id: go-cache-cleanup
