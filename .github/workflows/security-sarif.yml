@@ -452,34 +452,6 @@ jobs:
           fi
           exit "$failed"
 
-      - name: Enforce blocking gosec result
-        id: gosec-enforce
-        if: always() && env.EFFECTIVE_BLOCKING == 'true'
-        env:
-          VENDOR_OUTCOME: ${{ steps.vendor.outcome }}
-          GOSEC_OUTCOME: ${{ steps.gosec.outcome }}
-          STRUCTURE_OUTCOME: ${{ steps.gosec-sarif-structure.outcome }}
-          PRIVATE_CLEANUP_OUTCOME: ${{ steps.go-private-cleanup.outcome }}
-          UPLOAD_OUTCOME: ${{ steps.gosec-upload.outcome }}
-          ARTIFACT_CLEANUP_OUTCOME: ${{ steps.go-sarif-cleanup.outcome }}
-        run: |
-          failed=0
-          for outcome in \
-            "$VENDOR_OUTCOME" \
-            "$GOSEC_OUTCOME" \
-            "$STRUCTURE_OUTCOME" \
-            "$PRIVATE_CLEANUP_OUTCOME" \
-            "$UPLOAD_OUTCOME" \
-            "$ARTIFACT_CLEANUP_OUTCOME"; do
-            if [ "$outcome" != "success" ]; then
-              failed=1
-            fi
-          done
-          if [ "$failed" -ne 0 ]; then
-            echo "::error::blocking gosec failed closed; inspect preserved step outcomes"
-            exit 1
-          fi
-
       # ----------------------------------------------------------------------
       # semgrep (SAST). Mirrors .mise/tasks/ci/semgrep config selection
       # (p/ci baseline + go/python/typescript/javascript lang packs), minus
@@ -569,3 +541,31 @@ jobs:
         with:
           sarif_file: hadolint.sarif
           category: hadolint
+
+      - name: Enforce blocking gosec result
+        id: gosec-enforce
+        if: always() && env.EFFECTIVE_BLOCKING == 'true'
+        env:
+          VENDOR_OUTCOME: ${{ steps.vendor.outcome }}
+          GOSEC_OUTCOME: ${{ steps.gosec.outcome }}
+          STRUCTURE_OUTCOME: ${{ steps.gosec-sarif-structure.outcome }}
+          PRIVATE_CLEANUP_OUTCOME: ${{ steps.go-private-cleanup.outcome }}
+          UPLOAD_OUTCOME: ${{ steps.gosec-upload.outcome }}
+          ARTIFACT_CLEANUP_OUTCOME: ${{ steps.go-sarif-cleanup.outcome }}
+        run: |
+          failed=0
+          for outcome in \
+            "$VENDOR_OUTCOME" \
+            "$GOSEC_OUTCOME" \
+            "$STRUCTURE_OUTCOME" \
+            "$PRIVATE_CLEANUP_OUTCOME" \
+            "$UPLOAD_OUTCOME" \
+            "$ARTIFACT_CLEANUP_OUTCOME"; do
+            if [ "$outcome" != "success" ]; then
+              failed=1
+            fi
+          done
+          if [ "$failed" -ne 0 ]; then
+            echo "::error::blocking gosec failed closed; inspect preserved step outcomes"
+            exit 1
+          fi
