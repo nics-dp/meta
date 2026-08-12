@@ -435,19 +435,32 @@ jobs:
           sarif_file: govulncheck.sarif
           category: govulncheck
 
-      - name: Remove Go SARIF artifacts
-        id: go-sarif-cleanup
-        if: always()
+      - name: Remove gosec SARIF artifact
+        id: gosec-sarif-cleanup
+        if: always() && env.EFFECTIVE_GOSEC == 'true'
+        continue-on-error: true
         run: |
           failed=0
           if ! rm -f -- gosec.sarif; then
             failed=1
           fi
+          if [ -e gosec.sarif ] || [ -L gosec.sarif ]; then
+            echo "::error::gosec SARIF artifact remains after cleanup"
+            failed=1
+          fi
+          exit "$failed"
+
+      - name: Remove govulncheck SARIF artifact
+        id: govulncheck-sarif-cleanup
+        if: always() && env.EFFECTIVE_GOVULNCHECK == 'true'
+        continue-on-error: true
+        run: |
+          failed=0
           if ! rm -f -- govulncheck.sarif; then
             failed=1
           fi
-          if [ -e gosec.sarif ] || [ -L gosec.sarif ] || [ -e govulncheck.sarif ] || [ -L govulncheck.sarif ]; then
-            echo "::error::Go SARIF artifact remains after cleanup"
+          if [ -e govulncheck.sarif ] || [ -L govulncheck.sarif ]; then
+            echo "::error::govulncheck SARIF artifact remains after cleanup"
             failed=1
           fi
           exit "$failed"
@@ -551,7 +564,7 @@ jobs:
           STRUCTURE_OUTCOME: ${{ steps.gosec-sarif-structure.outcome }}
           PRIVATE_CLEANUP_OUTCOME: ${{ steps.go-private-cleanup.outcome }}
           UPLOAD_OUTCOME: ${{ steps.gosec-upload.outcome }}
-          ARTIFACT_CLEANUP_OUTCOME: ${{ steps.go-sarif-cleanup.outcome }}
+          ARTIFACT_CLEANUP_OUTCOME: ${{ steps.gosec-sarif-cleanup.outcome }}
         run: |
           failed=0
           for outcome in \
