@@ -1,0 +1,51 @@
+#!/usr/bin/env bash
+#MISE description="Lint every tracked mise task, helper, and scanner wrapper as Bash"
+#MISE hide=true
+#MISE raw=true
+#MISE tools={shellcheck="0.11.0"}
+
+set -euo pipefail
+# The helper path is fixed relative to this atom.
+# shellcheck disable=SC1090
+source "${BASH_SOURCE[0]%/*}/../lib/ci-isolate"
+ci_isolate
+
+shellcheck_fail() {
+  printf 'shellcheck: %s\n' "$1" >&2
+  exit 1
+}
+
+index_file="${GIT_CONFIG_GLOBAL%/*}/task-index"
+git ls-files --stage -z -- \
+  '.mise/tasks/**' \
+  '.github/scripts/github-actions-scanner.sh' >"$index_file"
+
+entries=()
+while IFS= read -r -d '' entry; do
+  entries+=("$entry")
+done <"$index_file"
+((${#entries[@]} > 0)) || shellcheck_fail 'no tracked task files found'
+
+paths=()
+for entry in "${entries[@]}"; do
+  [[ $entry == *$'\t'* ]] || shellcheck_fail 'unexpected git index record'
+  metadata=${entry%%$'\t'*}
+  path=${entry#*$'\t'}
+  read -r mode object stage extra <<<"$metadata"
+
+  [[ -n $mode && -n $object && -n $stage && -z ${extra:-} ]] ||
+    shellcheck_fail "unexpected git index metadata for $path"
+  [[ $stage == 0 ]] || shellcheck_fail "non-stage-0 index entry: $path"
+  [[ $mode == 100644 || $mode == 100755 ]] ||
+    shellcheck_fail "unsupported index mode $mode: $path"
+  [[ ($path == .mise/tasks/* && $path != .mise/tasks/) ||
+    $path == .github/scripts/github-actions-scanner.sh ]] ||
+    shellcheck_fail "unexpected shell path: $path"
+  [[ -f $path && ! -L $path ]] ||
+    shellcheck_fail "task path is not a regular non-symlink file: $path"
+  [[ -s $path ]] || shellcheck_fail "empty task file: $path"
+
+  paths+=("$path")
+done
+
+shellcheck --shell=bash --severity=warning -- "${paths[@]}"

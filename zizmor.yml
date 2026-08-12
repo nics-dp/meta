@@ -1,0 +1,31 @@
+rules:
+  github-app:
+    ignore:
+      # Existing App trust and permissions rely on job-local credential cleanup.
+      - auto-release.yml:179
+      - auto-release.yml:183
+      - auto-release.yml:212
+      - auto-release.yml:216
+      - codeql-reusable.yml:62
+      - codeql-reusable.yml:66
+      - go-dependency-submission.yml:51
+      - go-dependency-submission.yml:55
+      - go-release.yml:191
+      - go-release.yml:195
+      - image-release.yml:220
+      - image-release.yml:224
+      - mise-task.yml:105
+      - mise-task.yml:109
+      - pr-issue-check.yml:247
+      - sbom-source.yml:56
+      - sbom-source.yml:60
+      - scorecard.yml:61
+      - security-sarif.yml:137
+      - security-sarif.yml:141
+  unpinned-uses:
+    ignore:
+      # Same-repo self-consumption follows protected main as the promotion boundary.
+      - self-dependency-review.yml:19
+      - self-pr-issue-check.yml:22
+      - self-release.yml:27
+      - self-supply-chain.yml:24

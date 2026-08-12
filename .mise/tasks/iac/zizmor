@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+#MISE description="Audit local GitHub Actions definitions with Zizmor"
+#MISE hide=true
+#MISE raw=true
+#MISE tools={zizmor="1.29.0"}
+
+set -euo pipefail
+# The helper path is fixed relative to this atom.
+# shellcheck disable=SC1090
+source "${BASH_SOURCE[0]%/*}/../lib/ci-isolate"
+ci_isolate
+
+if [[ ! -f zizmor.yml || -L zizmor.yml ]]; then
+  printf '%s\n' 'zizmor: zizmor.yml must be a regular non-symlink file' >&2
+  exit 1
+fi
+
+zizmor --config=zizmor.yml --offline --strict-collection \
+  --persona=regular --min-severity=high .

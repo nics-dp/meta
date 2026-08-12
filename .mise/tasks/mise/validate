@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+#MISE description="Validate the loaded mise task graph"
+#MISE hide=true
+#MISE raw=true
+
+set -euo pipefail
+# The helper path is fixed relative to this atom.
+# shellcheck disable=SC1090
+source "${BASH_SOURCE[0]%/*}/../lib/ci-isolate"
+ci_isolate
+
+mise tasks validate --errors-only
