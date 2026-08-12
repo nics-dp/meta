@@ -182,6 +182,28 @@ jobs:
           private-key: ${{ secrets.ci_read_app_private_key }}
           owner: ${{ github.repository_owner }}
 
+      - name: Configure job-local git
+        env:
+          APP_TOKEN: ${{ steps.ci-read.outputs.token }}
+        run: |
+          # Mask the reused runner's user-global Git config for checkout, mise setup,
+          # validation, and post hooks. Add only scoped nics-dp rewrites when authorized.
+          gitconfig="${RUNNER_TEMP}/auto-release-gitconfig"
+          rm -f -- "$gitconfig"
+          umask 077
+          : > "$gitconfig"
+          chmod 0600 "$gitconfig"
+          echo "GIT_CONFIG_GLOBAL=$gitconfig" >> "$GITHUB_ENV"
+
+          if [ -z "$APP_TOKEN" ]; then
+            echo "::notice::No ci-read token minted; using blank job-local Git config"
+            exit 0
+          fi
+          # insteadOf is multi-valued — the second line MUST use --add or it overwrites
+          # the first, breaking https go-module fetch (could not read Username).
+          git config --file "$gitconfig" url."https://x-access-token:${APP_TOKEN}@github.com/nics-dp/".insteadOf "https://github.com/nics-dp/"
+          git config --file "$gitconfig" --add url."https://x-access-token:${APP_TOKEN}@github.com/nics-dp/".insteadOf "git@github.com:nics-dp/"
+
       # Write token for main push + tag + release. Member of the main/dev ruleset
       # bypass_actors. Skipped on dry-run.
       - name: Mint release app token
@@ -224,31 +246,54 @@ jobs:
           fetch-depth: ${{ inputs.fetch-depth }}
           token: ${{ github.token }}
           # Don't leave the token in .git/config — `mise run all` runs repo code after
-          # this, and private fetches use the ci-read insteadOf rewrite below, not the
-          # checkout credential. Matches the repo convention (go-release/image-release/…).
+          # this, and private fetches use the job-local ci-read insteadOf rewrite
+          # configured above, not the checkout credential. Matches the repo convention
+          # (go-release/image-release/…).
           persist-credentials: false
           # No submodules here: github.token can't read private sibling repos.
-          # mise run all's gs:clone (if any) fetches them via the insteadOf rewrite below.
+          # mise run all's gs:clone (if any) uses the job-local rewrite configured above.
 
-      - name: Configure git (private module auth)
-        if: ${{ steps.ci-read.outputs.token != '' }}
-        env:
-          APP_TOKEN: ${{ steps.ci-read.outputs.token }}
+      - name: Prepare job-local Go cache
         run: |
-          # No git user.name/email here: this workflow never makes a local commit (the
-          # merge is server-side via the REST API), and writing them with --global would
-          # clobber a self-hosted runner's identity across jobs. Matches go-release.yml.
-          # Self-healing: drop any stale token-bearing url.*@github.com/nics-dp insteadOf
-          # rewrites left by a prior run on a self-hosted runner (global git config can
-          # persist across jobs) so we never pick up an expired token. Paired with the
-          # always() teardown step at the end. Mirrors go-release.yml.
-          while read -r s; do
-            if [ -n "$s" ]; then git config --global --remove-section "$s" 2>/dev/null || true; fi
-          done < <(git config --global --name-only --get-regexp '^url\..*@github\.com/nics-dp' 2>/dev/null | sed -E 's/\.insteadof$//' | sort -u || true)
-          # insteadOf is multi-valued — the second line MUST use --add or it overwrites
-          # the first, breaking https go-module fetch (could not read Username).
-          git config --global url."https://x-access-token:${APP_TOKEN}@github.com/nics-dp/".insteadOf "https://github.com/nics-dp/"
-          git config --global --add url."https://x-access-token:${APP_TOKEN}@github.com/nics-dp/".insteadOf "git@github.com:nics-dp/"
+          # Always isolate Go's fixed roots before mise starts. They are harmless for
+          # non-Go repositories and auto-release never publishes their private contents.
+          if [ -z "$RUNNER_TEMP" ] || [[ "$RUNNER_TEMP" == *$'\r'* ]] || [[ "$RUNNER_TEMP" == *$'\n'* ]]; then
+            echo "::error::Go cache disabled: RUNNER_TEMP must be non-empty and single-line"
+            exit 1
+          fi
+          if [[ "$RUNNER_TEMP" != /* ]] && [[ ! "$RUNNER_TEMP" =~ ^[A-Za-z]:[\\/].* ]]; then
+            echo "::error::Go cache disabled: RUNNER_TEMP must be POSIX absolute or Windows drive-qualified"
+            exit 1
+          fi
+          runner_temp_slashes="${RUNNER_TEMP//\\//}"
+          if [[ "/${runner_temp_slashes#/}/" == */../* ]]; then
+            echo "::error::Go cache disabled: RUNNER_TEMP must not contain a '..' path segment"
+            exit 1
+          fi
+
+          runner_temp_base="${RUNNER_TEMP%/}"
+          cache_root="${runner_temp_base}/dcf-go-cache"
+          if [ -z "$runner_temp_base" ] || [ "$cache_root" = "$RUNNER_TEMP" ] || \
+             [ "$cache_root" != "${RUNNER_TEMP%/}/dcf-go-cache" ] || \
+             [ "${cache_root%/dcf-go-cache}" != "$runner_temp_base" ]; then
+            echo "::error::Go cache disabled: cache root is not the fixed RUNNER_TEMP child"
+            exit 1
+          fi
+          if [ -e "$cache_root" ] || [ -L "$cache_root" ]; then
+            find "$cache_root" -type d -exec chmod u+w {} +
+            rm -rf -- "$cache_root"
+          fi
+          if [ -e "$cache_root" ] || [ -L "$cache_root" ]; then
+            echo "::error::Go cache stale-root purge did not remove the fixed cache root"
+            exit 1
+          fi
+          echo "Go cache stale-root purge complete."
+          mkdir -p "$cache_root/build" "$cache_root/mod"
+          chmod 0700 "$cache_root" "$cache_root/build" "$cache_root/mod"
+          {
+            echo "GOCACHE=$cache_root/build"
+            echo "GOMODCACHE=$cache_root/mod"
+          } >> "$GITHUB_ENV"
 
       # Toolchain comes from the repo's mise.toml [tools] — no per-language setup step.
       - name: Set up mise
@@ -287,11 +332,61 @@ jobs:
       - name: Deep secret scan
         run: mise run ci:trufflehog
 
+      # Teardown: delete the token-bearing job-local file before any release mutation.
+      # Keep GIT_CONFIG_GLOBAL pointed at the now-absent file so action post hooks remain
+      # isolated from the reused runner's user-global config.
+      - name: Revoke private module git config
+        id: revoke
+        if: ${{ always() }}
+        run: |
+          gitconfig="${RUNNER_TEMP}/auto-release-gitconfig"
+          rm -f -- "$gitconfig"
+          if [ -e "$gitconfig" ] || [ -L "$gitconfig" ]; then
+            echo "::error::Private-module Git config revoke did not remove the fixed file"
+            exit 1
+          fi
+
+      - name: Cleanup Go cache
+        id: go-cache-cleanup
+        if: always()
+        run: |
+          if [ -z "$RUNNER_TEMP" ] || [[ "$RUNNER_TEMP" == *$'\r'* ]] || [[ "$RUNNER_TEMP" == *$'\n'* ]]; then
+            echo "::error::Cannot clean Go cache: RUNNER_TEMP must be non-empty and single-line"
+            exit 1
+          fi
+          if [[ "$RUNNER_TEMP" != /* ]] && [[ ! "$RUNNER_TEMP" =~ ^[A-Za-z]:[\\/].* ]]; then
+            echo "::error::Cannot clean Go cache: RUNNER_TEMP must be POSIX absolute or Windows drive-qualified"
+            exit 1
+          fi
+          runner_temp_slashes="${RUNNER_TEMP//\\//}"
+          if [[ "/${runner_temp_slashes#/}/" == */../* ]]; then
+            echo "::error::Cannot clean Go cache: RUNNER_TEMP must not contain a '..' path segment"
+            exit 1
+          fi
+
+          runner_temp_base="${RUNNER_TEMP%/}"
+          cache_root="${runner_temp_base}/dcf-go-cache"
+          if [ -z "$runner_temp_base" ] || [ "$cache_root" = "$RUNNER_TEMP" ] || \
+             [ "$cache_root" != "${RUNNER_TEMP%/}/dcf-go-cache" ] || \
+             [ "${cache_root%/dcf-go-cache}" != "$runner_temp_base" ]; then
+            echo "::error::Cannot clean Go cache: cache root is not the fixed RUNNER_TEMP child"
+            exit 1
+          fi
+          if [ -e "$cache_root" ] || [ -L "$cache_root" ]; then
+            find "$cache_root" -type d -exec chmod u+w {} +
+            rm -rf -- "$cache_root"
+          fi
+          if [ -e "$cache_root" ] || [ -L "$cache_root" ]; then
+            echo "::error::Go cache cleanup did not remove the fixed cache root"
+            exit 1
+          fi
+          echo "Go cache cleanup complete."
+
       # TOCTOU mitigation: the duplicate-tag guard ran before the (long) validation,
       # so a same-name tag/release could have appeared meanwhile. Re-check right
       # before mutating main — shrinks the race window to this tiny gap.
       - name: Re-check tag before merge
-        if: ${{ !inputs.dry_run }}
+        if: ${{ success() && !inputs.dry_run && steps.revoke.outcome == 'success' && steps.go-cache-cleanup.outcome == 'success' }}
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -455,11 +550,14 @@ jobs:
 
       - name: Summary
         if: success()
+        env:
+          CLEANUP_OUTCOME: ${{ steps.go-cache-cleanup.outcome }}
         run: |
           {
             echo "## auto-release — ${VERSION}"
             echo
             echo "✅ Validation passed for \`${TARGET_BRANCH}\`."
+            echo "Go cache: job-local only, cleanup=$CLEANUP_OUTCOME."
             echo
             if [ "${DRY_RUN}" = "true" ]; then
               echo "> Dry-run: no merge, no tag, no release. main untouched, release.yml not triggered."
@@ -476,21 +574,3 @@ jobs:
               esac
             fi
           } >> "$GITHUB_STEP_SUMMARY"
-
-      # Teardown: remove the token-bearing insteadOf rewrite so it can't persist in a
-      # self-hosted runner's global git config across jobs. always() = runs even if a
-      # step above failed. Paired with the self-healing cleanup in "Configure git".
-      - name: Revoke private module git config
-        # Unconditional (always, not gated on this run minting a token): on a self-hosted
-        # runner a prior interrupted run may have left a token-bearing section behind, and
-        # a run that mints no token would otherwise never clean it. The regex removal needs
-        # no token, so sweeping every time is safe (a no-op on ephemeral runners).
-        if: ${{ always() }}
-        run: |
-          # Remove every url.*@github.com/nics-dp insteadOf section (both the trailing-
-          # slash and no-slash variants, regardless of token) so nothing token-bearing
-          # persists in a self-hosted runner's global git config. Same matcher as the
-          # setup self-heal — more thorough than removing only the section we wrote.
-          while read -r s; do
-            if [ -n "$s" ]; then git config --global --remove-section "$s" 2>/dev/null || true; fi
-          done < <(git config --global --name-only --get-regexp '^url\..*@github\.com/nics-dp' 2>/dev/null | sed -E 's/\.insteadof$//' | sort -u || true)

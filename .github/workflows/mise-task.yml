@@ -1,5 +1,5 @@
 # yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
-# Reusable workflow: run a single mise task on a fresh runner.
+# Reusable workflow: run a single mise task with explicit job-local isolation.
 #
 # Centralizes the checkout + jdx/mise-action setup so downstream repos pin one
 # ref (this file's @ref) instead of pinning each action SHA themselves.
@@ -108,21 +108,23 @@ jobs:
           private-key: ${{ secrets.ci_read_app_private_key }}
           owner: ${{ github.repository_owner }}
 
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: ${{ inputs.fetch-depth }}
-          persist-credentials: false
-
-      - uses: jdx/mise-action@9e7f7633ff6f6d6048a9418a68d48f288f50eb14 # v4.2.3
-        with:
-          version: "2026.7.14"
-          cache: true
-
-      - name: Configure git for private modules
-        if: ${{ inputs.private-modules }}
+      - name: Configure job-local git
         env:
           GH_PAT: ${{ steps.priv-token.outputs.token }}
+          PRIVATE_MODULES: ${{ inputs.private-modules }}
         run: |
+          # Every step and action ignores the reused runner's user-global Git config.
+          # Private mode adds only the scoped nics-dp rewrite to this mode-0600 file.
+          gitconfig="${RUNNER_TEMP}/mise-task-gitconfig"
+          rm -f -- "$gitconfig"
+          umask 077
+          : > "$gitconfig"
+          chmod 0600 "$gitconfig"
+          echo "GIT_CONFIG_GLOBAL=$gitconfig" >> "$GITHUB_ENV"
+
+          if [ "$PRIVATE_MODULES" != "true" ]; then
+            exit 0
+          fi
           if [ -z "$GH_PAT" ]; then
             if [ "$HAS_CI_APP" = "true" ] && [ "$UNTRUSTED_TRIGGER" = "true" ]; then
               echo "::warning::private-modules=true but the configured ci-read App credential was withheld on an untrusted trigger"
@@ -136,15 +138,128 @@ jobs:
             exit 0
           fi
 
-          PRIV_GITCONFIG="${RUNNER_TEMP}/mise-task-gitconfig"
-          rm -f "$PRIV_GITCONFIG"
-          umask 077
-          git config --file "$PRIV_GITCONFIG" url."https://x-access-token:${GH_PAT}@github.com/nics-dp/".insteadOf "https://github.com/nics-dp/"
+          git config --file "$gitconfig" url."https://x-access-token:${GH_PAT}@github.com/nics-dp/".insteadOf "https://github.com/nics-dp/"
           {
-            echo "PRIVATE_GIT_CONFIG=$PRIV_GITCONFIG"
             echo "GOPRIVATE=github.com/nics-dp"
             echo "GONOSUMDB=github.com/nics-dp"
           } >> "$GITHUB_ENV"
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: ${{ inputs.fetch-depth }}
+          persist-credentials: false
+
+      - name: Prepare job-local Go roots
+        run: |
+          if [ -z "$RUNNER_TEMP" ] || [[ "$RUNNER_TEMP" == *$'\r'* ]] || [[ "$RUNNER_TEMP" == *$'\n'* ]]; then
+            echo "::error::Go cache disabled: RUNNER_TEMP must be non-empty and single-line"
+            exit 1
+          fi
+          if [[ "$RUNNER_TEMP" != /* ]] && [[ ! "$RUNNER_TEMP" =~ ^[A-Za-z]:[\\/].* ]]; then
+            echo "::error::Go cache disabled: RUNNER_TEMP must be POSIX absolute or Windows drive-qualified"
+            exit 1
+          fi
+          runner_temp_slashes="${RUNNER_TEMP//\\//}"
+          if [[ "/${runner_temp_slashes#/}/" == */../* ]]; then
+            echo "::error::Go cache disabled: RUNNER_TEMP must not contain a '..' path segment"
+            exit 1
+          fi
+
+          runner_temp_base="${RUNNER_TEMP%/}"
+          cache_root="${runner_temp_base}/dcf-go-cache"
+          if [ -z "$runner_temp_base" ] || [ "$cache_root" = "$RUNNER_TEMP" ] || \
+             [ "$cache_root" != "${RUNNER_TEMP%/}/dcf-go-cache" ] || \
+             [ "${cache_root%/dcf-go-cache}" != "$runner_temp_base" ]; then
+            echo "::error::Go cache disabled: cache root is not the fixed RUNNER_TEMP child"
+            exit 1
+          fi
+          if [ -e "$cache_root" ] || [ -L "$cache_root" ]; then
+            find "$cache_root" -type d -exec chmod u+w {} +
+            rm -rf -- "$cache_root"
+          fi
+          if [ -e "$cache_root" ] || [ -L "$cache_root" ]; then
+            echo "::error::Go cache stale-root purge did not remove the fixed cache root"
+            exit 1
+          fi
+          echo "Go cache stale-root purge complete."
+          mkdir -p "$cache_root/build" "$cache_root/mod"
+          chmod 0700 "$cache_root" "$cache_root/build" "$cache_root/mod"
+          {
+            echo "GOCACHE=$cache_root/build"
+            echo "GOMODCACHE=$cache_root/mod"
+          } >> "$GITHUB_ENV"
+
+      - uses: jdx/mise-action@9e7f7633ff6f6d6048a9418a68d48f288f50eb14 # v4.2.3
+        with:
+          version: "2026.7.14"
+          cache: true
+
+      - name: Resolve Go cache
+        id: go-cache
+        env:
+          GO_SUM_HASH: ${{ hashFiles('go.sum') }}
+          PRIVATE_MODULES: ${{ inputs.private-modules }}
+        run: |
+          remote_cache=true
+          if [ "$PRIVATE_MODULES" = "true" ]; then
+            remote_cache=false
+            echo "::notice::Remote Go cache disabled: private module source must not cross the PR cache trust boundary"
+          fi
+
+          if ! command -v go >/dev/null 2>&1; then
+            echo "remote_cache=false" >> "$GITHUB_OUTPUT"
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Go cache disabled: go is unavailable"
+            exit 0
+          fi
+          echo "enabled=true" >> "$GITHUB_OUTPUT"
+
+          # A root go.sum is required only for a stable public remote-cache key.
+          # Private and nested-module tasks still use the prepared job-local Go roots.
+          if [ "$remote_cache" = "true" ] && { [ ! -s go.sum ] || [ -z "$GO_SUM_HASH" ]; }; then
+            remote_cache=false
+            echo "::notice::Remote Go cache disabled: root go.sum is absent or empty"
+          fi
+
+          if [ "$remote_cache" = "true" ]; then
+            goversion="$(go env GOVERSION)"
+            goos="$(go env GOOS)"
+            goarch="$(go env GOARCH)"
+            for field in goversion goos goarch; do
+              value="${!field}"
+              if [ -z "$value" ] || [[ ! "$value" =~ ^[A-Za-z0-9._-]+$ ]]; then
+                echo "::error::Go cache identity field '$field' is empty or unsafe"
+                exit 1
+              fi
+            done
+            if [[ ! "$GO_SUM_HASH" =~ ^[A-Za-z0-9._-]+$ ]]; then
+              echo "::error::Go cache identity field 'go_sum_hash' is unsafe"
+              exit 1
+            fi
+          fi
+          echo "remote_cache=$remote_cache" >> "$GITHUB_OUTPUT"
+          if [ "$remote_cache" = "true" ]; then
+            {
+              echo "goversion=$goversion"
+              echo "goos=$goos"
+              echo "goarch=$goarch"
+              echo "go_sum_hash=$GO_SUM_HASH"
+            } >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Restore Go cache
+        id: go-cache-restore
+        # Fork PRs may read base-branch caches. Never publish or restore GOMODCACHE
+        # when private modules are in scope; it contains downloaded and extracted source.
+        if: ${{ steps.go-cache.outputs.enabled == 'true' && steps.go-cache.outputs.remote_cache == 'true' }}
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ${{ runner.temp }}/dcf-go-cache/build
+            ${{ runner.temp }}/dcf-go-cache/mod
+            !${{ runner.temp }}/dcf-go-cache/mod/cache/vcs
+            !${{ runner.temp }}/dcf-go-cache/mod/cache/vcs/**
+          key: dcf-go-public-v2-${{ runner.os }}-${{ runner.arch }}-${{ steps.go-cache.outputs.goos }}-${{ steps.go-cache.outputs.goarch }}-${{ steps.go-cache.outputs.goversion }}-${{ steps.go-cache.outputs.go_sum_hash }}
 
       - id: check
         name: Run ${{ inputs.task }}
@@ -154,44 +269,315 @@ jobs:
         env:
           TASK: ${{ inputs.task }}
         run: |
-          if [ -n "${PRIVATE_GIT_CONFIG:-}" ]; then
-            export GIT_CONFIG_GLOBAL="$PRIVATE_GIT_CONFIG"
+          if [ -z "$RUNNER_TEMP" ] || [[ "$RUNNER_TEMP" == *$'\r'* ]] || [[ "$RUNNER_TEMP" == *$'\n'* ]]; then
+            echo "::error::Cannot capture task output: RUNNER_TEMP must be non-empty and single-line"
+            exit 1
           fi
+          if [[ "$RUNNER_TEMP" != /* ]] && [[ ! "$RUNNER_TEMP" =~ ^[A-Za-z]:[\\/].* ]]; then
+            echo "::error::Cannot capture task output: RUNNER_TEMP must be POSIX absolute or Windows drive-qualified"
+            exit 1
+          fi
+          runner_temp_slashes="${RUNNER_TEMP//\\//}"
+          if [[ "/${runner_temp_slashes#/}/" == */../* ]]; then
+            echo "::error::Cannot capture task output: RUNNER_TEMP must not contain a '..' path segment"
+            exit 1
+          fi
+          runner_temp_base="${RUNNER_TEMP%/}"
+          task_output="${runner_temp_base}/mise-task-output.log"
+          if [ -z "$runner_temp_base" ] || [ "$task_output" != "${RUNNER_TEMP%/}/mise-task-output.log" ] || \
+             [ "${task_output%/mise-task-output.log}" != "$runner_temp_base" ]; then
+            echo "::error::Cannot capture task output: path is not the fixed RUNNER_TEMP child"
+            exit 1
+          fi
+          rm -f -- "$task_output"
+          if [ -e "$task_output" ] || [ -L "$task_output" ]; then
+            echo "::error::Cannot capture task output: stale path remains"
+            exit 1
+          fi
+          umask 077
+          : > "$task_output"
+          if [ ! -f "$task_output" ] || [ -L "$task_output" ]; then
+            echo "::error::Cannot capture task output: fixed path is not a regular file"
+            exit 1
+          fi
+          # Only this marker proves the stale path was replaced before task execution.
+          echo "output_ready=true" >> "$GITHUB_OUTPUT"
+
           set +e
           # Split TASK into an argv array so task+args are preserved
           # (e.g. "ci:semgrep golang" → task + arg) WITHOUT triggering pathname
           # globbing on * / ? / [ that an unquoted $TASK would.
           read -ra task_args <<< "$TASK"
-          mise run "${task_args[@]}" 2>&1 | tee /tmp/output.log
+          mise run "${task_args[@]}" 2>&1 | tee "$task_output"
           exit "${PIPESTATUS[0]}"
         continue-on-error: true
 
       - name: Revoke private-module credential
+        id: revoke
         if: always()
         run: |
-          rm -f "${RUNNER_TEMP}/mise-task-gitconfig"
-          echo "PRIVATE_GIT_CONFIG=" >> "$GITHUB_ENV"
+          gitconfig="${RUNNER_TEMP}/mise-task-gitconfig"
+          rm -f -- "$gitconfig"
+          if [ -e "$gitconfig" ] || [ -L "$gitconfig" ]; then
+            echo "::error::Private-module Git config revoke did not remove the fixed file"
+            exit 1
+          fi
+
+      - name: Sanitize Go cache
+        id: go-cache-sanitize
+        if: always()
+        run: |
+          if [ -z "$RUNNER_TEMP" ] || [[ "$RUNNER_TEMP" == *$'\r'* ]] || [[ "$RUNNER_TEMP" == *$'\n'* ]]; then
+            echo "::error::Cannot sanitize Go cache: RUNNER_TEMP must be non-empty and single-line"
+            exit 1
+          fi
+          if [[ "$RUNNER_TEMP" != /* ]] && [[ ! "$RUNNER_TEMP" =~ ^[A-Za-z]:[\\/].* ]]; then
+            echo "::error::Cannot sanitize Go cache: RUNNER_TEMP must be POSIX absolute or Windows drive-qualified"
+            exit 1
+          fi
+          runner_temp_slashes="${RUNNER_TEMP//\\//}"
+          if [[ "/${runner_temp_slashes#/}/" == */../* ]]; then
+            echo "::error::Cannot sanitize Go cache: RUNNER_TEMP must not contain a '..' path segment"
+            exit 1
+          fi
+
+          runner_temp_base="${RUNNER_TEMP%/}"
+          cache_root="${runner_temp_base}/dcf-go-cache"
+          if [ -z "$runner_temp_base" ] || [ "$cache_root" = "$RUNNER_TEMP" ] || \
+             [ "$cache_root" != "${RUNNER_TEMP%/}/dcf-go-cache" ] || \
+             [ "${cache_root%/dcf-go-cache}" != "$runner_temp_base" ]; then
+            echo "::error::Cannot sanitize Go cache: cache root is not the fixed RUNNER_TEMP child"
+            exit 1
+          fi
+
+          # This assumes a normal runner user and an unshared RUNNER_TEMP; never elevate this traversal.
+          for ancestor in "$cache_root" "$cache_root/mod" "$cache_root/mod/cache"; do
+            if [ -L "$ancestor" ]; then
+              echo "::error::Cannot sanitize Go cache: ancestor is a symlink: $ancestor"
+              exit 1
+            fi
+            if [ -e "$ancestor" ] && [ ! -d "$ancestor" ]; then
+              echo "::error::Cannot sanitize Go cache: ancestor is not a directory: $ancestor"
+              exit 1
+            fi
+          done
+
+          vcs_root="$cache_root/mod/cache/vcs"
+          if [ -L "$vcs_root" ]; then
+            rm -f -- "$vcs_root"
+          elif [ -e "$vcs_root" ]; then
+            if [ ! -d "$vcs_root" ]; then
+              echo "::error::Cannot sanitize Go cache: VCS root is not a directory: $vcs_root"
+              exit 1
+            fi
+            find "$vcs_root" -type d -exec chmod u+w {} +
+            rm -rf -- "$vcs_root"
+          fi
+          if [ -e "$vcs_root" ] || [ -L "$vcs_root" ]; then
+            echo "::error::Go cache sanitation did not remove the fixed VCS root"
+            exit 1
+          fi
+          echo "Go cache VCS sanitation complete."
+
+      - name: Check Go cache content
+        id: go-cache-content
+        if: ${{ always() && steps.go-cache.outputs.enabled == 'true' && steps.go-cache.outputs.remote_cache == 'true' }}
+        run: |
+          has_entries=false
+          for root in "$GOCACHE" "$GOMODCACHE"; do
+            if [ -d "$root" ] && [ -n "$(find "$root" -mindepth 1 -type f -print -quit)" ]; then
+              has_entries=true
+              break
+            fi
+          done
+          echo "has_entries=$has_entries" >> "$GITHUB_OUTPUT"
+          if [ "$has_entries" != "true" ]; then
+            echo "::notice::Remote Go cache save skipped: no cache entries were produced"
+          fi
+
+      - name: Save Go cache
+        id: go-cache-save
+        # Avoid letting a successful non-Go matrix task permanently claim the shared
+        # immutable key with a directory-only archive. The pinned save action is
+        # best-effort for ordinary upload failures: outcome=success confirms only that
+        # the action invocation completed; inspect action warnings for persistence errors.
+        if: ${{ always() && steps.go-cache.outputs.enabled == 'true' && steps.go-cache.outputs.remote_cache == 'true' && steps.go-cache-restore.outputs.cache-hit != 'true' && steps.check.outcome == 'success' && steps.revoke.outcome == 'success' && steps.go-cache-sanitize.outcome == 'success' && steps.go-cache-content.outcome == 'success' && steps.go-cache-content.outputs.has_entries == 'true' }}
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ${{ runner.temp }}/dcf-go-cache/build
+            ${{ runner.temp }}/dcf-go-cache/mod
+            !${{ runner.temp }}/dcf-go-cache/mod/cache/vcs
+            !${{ runner.temp }}/dcf-go-cache/mod/cache/vcs/**
+          key: ${{ steps.go-cache-restore.outputs.cache-primary-key }}
+
+      - name: Cleanup Go cache
+        id: go-cache-cleanup
+        if: always()
+        run: |
+          if [ -z "$RUNNER_TEMP" ] || [[ "$RUNNER_TEMP" == *$'\r'* ]] || [[ "$RUNNER_TEMP" == *$'\n'* ]]; then
+            echo "::error::Cannot clean Go cache: RUNNER_TEMP must be non-empty and single-line"
+            exit 1
+          fi
+          if [[ "$RUNNER_TEMP" != /* ]] && [[ ! "$RUNNER_TEMP" =~ ^[A-Za-z]:[\\/].* ]]; then
+            echo "::error::Cannot clean Go cache: RUNNER_TEMP must be POSIX absolute or Windows drive-qualified"
+            exit 1
+          fi
+          runner_temp_slashes="${RUNNER_TEMP//\\//}"
+          if [[ "/${runner_temp_slashes#/}/" == */../* ]]; then
+            echo "::error::Cannot clean Go cache: RUNNER_TEMP must not contain a '..' path segment"
+            exit 1
+          fi
+
+          runner_temp_base="${RUNNER_TEMP%/}"
+          cache_root="${runner_temp_base}/dcf-go-cache"
+          if [ -z "$runner_temp_base" ] || [ "$cache_root" = "$RUNNER_TEMP" ] || \
+             [ "$cache_root" != "${RUNNER_TEMP%/}/dcf-go-cache" ] || \
+             [ "${cache_root%/dcf-go-cache}" != "$runner_temp_base" ]; then
+            echo "::error::Cannot clean Go cache: cache root is not the fixed RUNNER_TEMP child"
+            exit 1
+          fi
+          if [ -e "$cache_root" ] || [ -L "$cache_root" ]; then
+            find "$cache_root" -type d -exec chmod u+w {} +
+            rm -rf -- "$cache_root"
+          fi
+          if [ -e "$cache_root" ] || [ -L "$cache_root" ]; then
+            echo "::error::Go cache cleanup did not remove the fixed cache root"
+            exit 1
+          fi
+          echo "Go cache cleanup complete."
 
       - name: Job summary
         if: always()
         env:
           JOB_NAME: ${{ inputs.name != '' && inputs.name || inputs.task }}
-          OUTCOME: ${{ steps.check.outcome }}
+          CACHE_ENABLED: ${{ steps.go-cache.outputs.enabled }}
+          REMOTE_CACHE: ${{ steps.go-cache.outputs.remote_cache }}
+          CACHE_HIT: ${{ steps.go-cache-restore.outputs.cache-hit }}
+          CACHE_HAS_ENTRIES: ${{ steps.go-cache-content.outputs.has_entries }}
+          TASK_OUTCOME: ${{ steps.check.outcome }}
+          OUTPUT_READY: ${{ steps.check.outputs.output_ready }}
+          REVOKE_OUTCOME: ${{ steps.revoke.outcome }}
+          RESTORE_OUTCOME: ${{ steps.go-cache-restore.outcome }}
+          SANITIZE_OUTCOME: ${{ steps.go-cache-sanitize.outcome }}
+          CONTENT_OUTCOME: ${{ steps.go-cache-content.outcome }}
+          SAVE_OUTCOME: ${{ steps.go-cache-save.outcome }}
+          CLEANUP_OUTCOME: ${{ steps.go-cache-cleanup.outcome }}
         run: |
-          {
+          if [ -z "$RUNNER_TEMP" ] || [[ "$RUNNER_TEMP" == *$'\r'* ]] || [[ "$RUNNER_TEMP" == *$'\n'* ]]; then
+            echo "::error::Cannot summarize task output: RUNNER_TEMP must be non-empty and single-line"
+            exit 1
+          fi
+          if [[ "$RUNNER_TEMP" != /* ]] && [[ ! "$RUNNER_TEMP" =~ ^[A-Za-z]:[\\/].* ]]; then
+            echo "::error::Cannot summarize task output: RUNNER_TEMP must be POSIX absolute or Windows drive-qualified"
+            exit 1
+          fi
+          runner_temp_slashes="${RUNNER_TEMP//\\//}"
+          if [[ "/${runner_temp_slashes#/}/" == */../* ]]; then
+            echo "::error::Cannot summarize task output: RUNNER_TEMP must not contain a '..' path segment"
+            exit 1
+          fi
+          runner_temp_base="${RUNNER_TEMP%/}"
+          task_output="${runner_temp_base}/mise-task-output.log"
+          if [ -z "$runner_temp_base" ] || [ "$task_output" != "${RUNNER_TEMP%/}/mise-task-output.log" ] || \
+             [ "${task_output%/mise-task-output.log}" != "$runner_temp_base" ]; then
+            echo "::error::Cannot summarize task output: path is not the fixed RUNNER_TEMP child"
+            exit 1
+          fi
+
+          overall=pass
+          if [ "$TASK_OUTCOME" != "success" ] || [ "$REVOKE_OUTCOME" != "success" ] || \
+             [ "$SANITIZE_OUTCOME" != "success" ] || [ "$CLEANUP_OUTCOME" != "success" ]; then
+            overall=fail
+          fi
+          if [ "$CACHE_ENABLED" = "true" ] && [ "$REMOTE_CACHE" = "true" ] && \
+             [ "$RESTORE_OUTCOME" != "success" ]; then
+            overall=fail
+          fi
+          if [ "$CACHE_ENABLED" = "true" ] && [ "$REMOTE_CACHE" = "true" ] && \
+             [ "$CONTENT_OUTCOME" != "success" ]; then
+            overall=fail
+          fi
+          if [ "$CACHE_ENABLED" = "true" ] && [ "$REMOTE_CACHE" = "true" ] && \
+             [ "$CACHE_HIT" != "true" ] && [ "$CACHE_HAS_ENTRIES" = "true" ] && \
+             [ "$TASK_OUTCOME" = "success" ] && [ "$REVOKE_OUTCOME" = "success" ] && \
+             [ "$SANITIZE_OUTCOME" = "success" ] && [ "$SAVE_OUTCOME" != "success" ]; then
+            overall=fail
+          fi
+
+          capture_output=false
+          output_note="_Task did not run; no output captured._"
+          if { [ "$TASK_OUTCOME" = "success" ] || [ "$TASK_OUTCOME" = "failure" ]; } && \
+             [ "$OUTPUT_READY" = "true" ]; then
+            if [ -f "$task_output" ] && [ ! -L "$task_output" ]; then
+              capture_output=true
+              output_note=""
+            else
+              overall=fail
+              output_note="_Task ran, but no safe job-local output file was available._"
+            fi
+          elif [ "$TASK_OUTCOME" = "success" ] || [ "$TASK_OUTCOME" = "failure" ]; then
+            overall=fail
+            output_note="_Task output capture did not initialize; no output was read._"
+          fi
+
+          output_read_status=0
+          if {
             echo "## $JOB_NAME"
             echo
-            if [ "$OUTCOME" = "success" ]; then echo "✅ pass"; else echo "❌ fail"; fi
+            if [ "$overall" = "pass" ]; then
+              echo "✅ pass"
+            else
+              echo "❌ fail"
+            fi
+            echo
+            echo "- task: $TASK_OUTCOME"
+            echo "- credential revoke: $REVOKE_OUTCOME"
+            echo "- remote cache allowed: ${REMOTE_CACHE:-false}"
+            echo "- cache restore: $RESTORE_OUTCOME"
+            echo "- cache sanitize: $SANITIZE_OUTCOME"
+            echo "- cache content: $CONTENT_OUTCOME (entries=${CACHE_HAS_ENTRIES:-false})"
+            echo "- cache save invocation: $SAVE_OUTCOME (best-effort; success does not confirm upload persistence—inspect action warnings)"
+            echo "- cache cleanup: $CLEANUP_OUTCOME"
             echo
             echo '<details><summary>output</summary>'
             echo
             echo '```'
-            tail -n 300 /tmp/output.log
+            if [ "$capture_output" = "true" ]; then
+              if ! tail -n 300 "$task_output"; then
+                output_read_status=1
+                echo "_Failed to read job-local task output._"
+              fi
+            else
+              echo "$output_note"
+            fi
             echo '```'
             echo
             echo '</details>'
-          } >> "$GITHUB_STEP_SUMMARY"
+          } >> "$GITHUB_STEP_SUMMARY"; then
+            summary_status=0
+          else
+            summary_status=1
+          fi
+          if [ "$output_read_status" -ne 0 ]; then
+            summary_status=1
+          fi
+          set +e
+          rm -f -- "$task_output"
+          cleanup_status=$?
+          if [ -e "$task_output" ] || [ -L "$task_output" ]; then
+            cleanup_status=1
+          fi
+          set -e
+          if [ "$summary_status" -ne 0 ]; then
+            echo "::error::Failed to write the job summary or read job-local task output"
+            exit "$summary_status"
+          fi
+          if [ "$cleanup_status" -ne 0 ]; then
+            echo "::error::Failed to remove the job-local task output"
+            exit "$cleanup_status"
+          fi
 
       - name: Enforce
-        if: steps.check.outcome == 'failure'
+        if: ${{ always() && (steps.check.outcome != 'success' || steps.revoke.outcome != 'success' || steps.go-cache-sanitize.outcome != 'success' || steps.go-cache-cleanup.outcome != 'success' || steps.go-cache-restore.outcome == 'failure' || steps.go-cache-content.outcome == 'failure' || steps.go-cache-save.outcome == 'failure') }}
         run: exit 1
