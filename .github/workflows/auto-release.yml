@@ -246,11 +246,12 @@ jobs:
           fetch-depth: ${{ inputs.fetch-depth }}
           token: ${{ github.token }}
           # Don't leave the token in .git/config — `mise run all` runs repo code after
-          # this, and private fetches use the ci-read insteadOf rewrite below, not the
-          # checkout credential. Matches the repo convention (go-release/image-release/…).
+          # this, and private fetches use the job-local ci-read insteadOf rewrite
+          # configured above, not the checkout credential. Matches the repo convention
+          # (go-release/image-release/…).
           persist-credentials: false
           # No submodules here: github.token can't read private sibling repos.
-          # mise run all's gs:clone (if any) fetches them via the insteadOf rewrite below.
+          # mise run all's gs:clone (if any) uses the job-local rewrite configured above.
 
       - name: Prepare job-local Go cache
         run: |
