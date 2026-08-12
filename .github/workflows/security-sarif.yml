@@ -258,6 +258,7 @@ jobs:
             echo "::error::failed to remove stale gosec SARIF artifact"
             exit 1
           fi
+          echo "sarif_producer_initialized=true" >> "$GITHUB_OUTPUT"
 
           expected_gobin="${RUNNER_TEMP}/security-sarif-bin"
           if [ "${GOBIN:-}" != "$expected_gobin" ]; then
@@ -295,7 +296,7 @@ jobs:
       # validity. GitHub code scanning remains the authoritative processor.
       - name: Validate gosec SARIF structure
         id: gosec-sarif-structure
-        if: always() && env.EFFECTIVE_GOSEC == 'true'
+        if: ${{ always() && env.EFFECTIVE_GOSEC == 'true' && steps.gosec.outputs.sarif_producer_initialized == 'true' && (steps.gosec.outcome == 'success' || steps.gosec.outcome == 'failure') }}
         continue-on-error: true
         run: |
           if [ ! -s gosec.sarif ] || [ ! -f gosec.sarif ] || [ -L gosec.sarif ]; then
@@ -323,6 +324,7 @@ jobs:
             echo "::error::failed to remove stale govulncheck SARIF artifact"
             exit 1
           fi
+          echo "sarif_producer_initialized=true" >> "$GITHUB_OUTPUT"
 
           expected_gobin="${RUNNER_TEMP}/security-sarif-bin"
           if [ "${GOBIN:-}" != "$expected_gobin" ]; then
@@ -429,7 +431,7 @@ jobs:
 
       - name: Upload govulncheck SARIF
         id: govulncheck-upload
-        if: ${{ always() && env.EFFECTIVE_GOVULNCHECK == 'true' && steps.go-private-cleanup.outcome == 'success' && hashFiles('govulncheck.sarif') != '' }}
+        if: ${{ always() && env.EFFECTIVE_GOVULNCHECK == 'true' && steps.govulncheck.outputs.sarif_producer_initialized == 'true' && (steps.govulncheck.outcome == 'success' || steps.govulncheck.outcome == 'failure') && steps.go-private-cleanup.outcome == 'success' && hashFiles('govulncheck.sarif') != '' }}
         continue-on-error: true
         uses: github/codeql-action/upload-sarif@e4fba868fa4b1b91e1fdab776edc8cfbe6e9fb81 # v4.37.3
         with:
@@ -438,7 +440,7 @@ jobs:
 
       - name: Remove gosec SARIF artifact
         id: gosec-sarif-cleanup
-        if: always() && env.EFFECTIVE_GOSEC == 'true'
+        if: ${{ always() && env.EFFECTIVE_GOSEC == 'true' && steps.gosec.outputs.sarif_producer_initialized == 'true' }}
         continue-on-error: true
         run: |
           failed=0
@@ -453,7 +455,7 @@ jobs:
 
       - name: Remove govulncheck SARIF artifact
         id: govulncheck-sarif-cleanup
-        if: always() && env.EFFECTIVE_GOVULNCHECK == 'true'
+        if: ${{ always() && env.EFFECTIVE_GOVULNCHECK == 'true' && steps.govulncheck.outputs.sarif_producer_initialized == 'true' }}
         continue-on-error: true
         run: |
           failed=0
