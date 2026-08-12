@@ -3,6 +3,6 @@
 #MISE hide=true
 #MISE raw=true
 #MISE depends=["go:install"]
-#MISE tools={"github:securego/gosec"="latest"}
+#MISE tools={"github:securego/gosec"="v2.28.0"}
 
 gosec -quiet ./...

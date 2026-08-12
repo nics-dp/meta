@@ -48,12 +48,14 @@
     },
     {
       "customType": "regex",
-      "description": "Update gosec version in the security-sarif workflow",
+      "description": "Update synchronized gosec pins in the SARIF workflow and local SAST task",
       "managerFilePatterns": [
-        "/^\\.github/workflows/security-sarif\\.yml$/"
+        "/^\\.github/workflows/security-sarif\\.yml$/",
+        "/^\\.mise/tasks/go/sast$/"
       ],
       "matchStrings": [
-        "go install github\\.com/securego/gosec/v2/cmd/gosec@(?<currentValue>v\\d+\\.\\d+\\.\\d+)"
+        "go install github\\.com/securego/gosec/v2/cmd/gosec@(?<currentValue>v\\d+\\.\\d+\\.\\d+)",
+        "#MISE tools=\\{\\\"github:securego/gosec\\\"=\\\"(?<currentValue>v\\d+\\.\\d+\\.\\d+)\\\"\\}"
       ],
       "depNameTemplate": "securego/gosec",
       "datasourceTemplate": "github-releases"
