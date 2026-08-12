@@ -4,9 +4,9 @@ name: Security SARIF
 
 # Runs the security / IaC scanners that historically only GATED CI (no SARIF
 # export) and uploads their findings to GitHub code scanning (Security > Code
-# scanning), each under a distinct category. NON-BLOCKING by design: a scan
-# step erroring or finding issues never fails the caller's CI — findings only
-# populate the Security tab. Callers add a job that `uses:` this workflow.
+# scanning), each under a distinct category. Scanners are informational by
+# default; callers may opt into fail-closed gosec enforcement. Callers add a
+# job that `uses:` this workflow.
 on:
   workflow_call:
     inputs:
@@ -29,7 +29,22 @@ on:
         required: false
         type: boolean
         default: true
-        description: "Run the Go scanners (gosec + govulncheck)"
+        description: "Master switch for Go scanners"
+      run_gosec:
+        required: false
+        type: boolean
+        default: true
+        description: "Run gosec when the Go scanner master switch is enabled"
+      run_govulncheck:
+        required: false
+        type: boolean
+        default: true
+        description: "Run govulncheck when the Go scanner master switch is enabled"
+      gosec_blocking:
+        required: false
+        type: boolean
+        default: false
+        description: "Fail closed on gosec findings and operational failures"
       run_dockerfile:
         required: false
         type: boolean
@@ -70,23 +85,55 @@ jobs:
       # mise-task.yml: the ci-read App is identified by the CI_READ_APP_CLIENT_ID
       # org variable (client-id) plus the ci_read_app_private_key secret.
       HAS_CI_APP: ${{ vars.CI_READ_APP_CLIENT_ID != '' && secrets.ci_read_app_private_key != '' }}
-      # Defense-in-depth against CodeQL actions/untrusted-checkout: in a reusable
-      # workflow github.event_name is the CALLER's triggering event. Every current
-      # caller runs this on `pull_request` (PR code is fork-isolated / authored by
-      # trusted org members on INTERNAL repos), but pull_request_target and
-      # workflow_run would run attacker-controllable code WITH secrets in scope.
-      # Flag those triggers so the privileged ci-read App token is never minted
-      # for them -- the Go scanners then degrade to public-module-only and stay
-      # non-blocking, rather than exposing a private-repo-read token to PR code.
-      UNTRUSTED_TRIGGER: ${{ github.event_name == 'pull_request_target' || github.event_name == 'workflow_run' }}
+      # Fixed derived predicates. run_go remains the master switch: child inputs
+      # cannot re-enable a Go scanner when it is false.
+      EFFECTIVE_GOSEC: ${{ inputs.run_go && inputs.run_gosec }}
+      EFFECTIVE_GOVULNCHECK: ${{ inputs.run_go && inputs.run_govulncheck }}
+      EFFECTIVE_ANY_GO: ${{ inputs.run_go && (inputs.run_gosec || inputs.run_govulncheck) }}
+      EFFECTIVE_BLOCKING: ${{ inputs.run_go && inputs.run_gosec && inputs.gosec_blocking }}
+      # Only these caller events may receive the ci-read App token. Reusable
+      # workflows observe the caller's event name here.
+      SUPPORTED_TOKEN_EVENT: ${{ github.event_name == 'push' || github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' }}
     steps:
-      # Mint a nics-dp-ci-read App token for private Go module access, but only
-      # when the Go scanners run and the App is configured. The PAT model was
-      # retired org-wide, so callers pass only ci_read_app_private_key and the
-      # token is minted here (mirrors mise-task.yml).
+      # Establish a blank job-local global Git config before checkout, setup-go,
+      # token minting, or any third-party action. Keep the override set after
+      # cleanup so later actions never fall back to runner-global configuration.
+      - name: Initialize isolated Git configuration
+        id: git-isolation
+        shell: bash
+        run: |
+          case "$RUNNER_TEMP" in
+            /*) ;;
+            *) echo "::error::RUNNER_TEMP must be an absolute Linux path"; exit 1 ;;
+          esac
+          case "$RUNNER_TEMP" in
+            *$'\n'*|*$'\r'*) echo "::error::RUNNER_TEMP contains a newline"; exit 1 ;;
+          esac
+          gitconfig="${RUNNER_TEMP}/security-sarif-gitconfig"
+          if [ -e "$gitconfig" ] || [ -L "$gitconfig" ]; then
+            rm -f -- "$gitconfig"
+          fi
+          if [ -e "$gitconfig" ] || [ -L "$gitconfig" ]; then
+            echo "::error::failed to remove stale isolated Git config"
+            exit 1
+          fi
+          umask 077
+          : > "$gitconfig"
+          chmod 0600 "$gitconfig"
+          if [ ! -f "$gitconfig" ] || [ -L "$gitconfig" ] || [ "$(stat -c '%a' "$gitconfig")" != "600" ]; then
+            echo "::error::isolated Git config is not a regular mode-0600 file"
+            exit 1
+          fi
+          {
+            echo "GIT_CONFIG_GLOBAL=${gitconfig}"
+            echo "GOBIN=${RUNNER_TEMP}/security-sarif-bin"
+          } >> "$GITHUB_ENV"
+
+      # Mint a nics-dp-ci-read App token only for explicitly supported caller
+      # events and only when at least one Go scanner is effective.
       - name: Mint private-module token
         id: priv-token
-        if: ${{ env.HAS_CI_APP == 'true' && inputs.run_go && env.UNTRUSTED_TRIGGER != 'true' }}
+        if: ${{ env.HAS_CI_APP == 'true' && env.EFFECTIVE_ANY_GO == 'true' && env.SUPPORTED_TOKEN_EVENT == 'true' }}
         uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
         with:
           client-id: ${{ vars.CI_READ_APP_CLIENT_ID }}
@@ -159,57 +206,42 @@ jobs:
       # token minted above.
       # ----------------------------------------------------------------------
       - name: Set up Go
-        if: inputs.run_go
+        if: env.EFFECTIVE_ANY_GO == 'true'
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: ${{ inputs.go_version }}
           cache: false
 
       - name: Configure git for private modules
-        if: inputs.run_go
+        if: env.EFFECTIVE_ANY_GO == 'true'
         env:
           GH_PAT: ${{ steps.priv-token.outputs.token }}
         run: |
+          gitconfig="${RUNNER_TEMP}/security-sarif-gitconfig"
+          if [ "${GIT_CONFIG_GLOBAL:-}" != "$gitconfig" ] || [ ! -f "$gitconfig" ] || [ -L "$gitconfig" ]; then
+            echo "::error::isolated Git configuration is unavailable"
+            exit 1
+          fi
           if [ -n "$GH_PAT" ]; then
-            # Scope the token to a short-lived git config under $RUNNER_TEMP
-            # rather than the runner's default ~/.gitconfig, so the third-party
-            # trivy-action / hadolint-action that run later in this job cannot
-            # read the credential. GIT_CONFIG_GLOBAL is exported only for the
-            # Go-scan steps and the file is deleted by the cleanup step below.
-            PRIV_GITCONFIG="${RUNNER_TEMP}/security-sarif-gitconfig"
-            : > "$PRIV_GITCONFIG"
-            # Scope the rewrite to the nics-dp org prefix so only private org
-            # modules carry the token; public github.com fetches stay anonymous.
-            git config --file "$PRIV_GITCONFIG" \
+            # Add only the approved HTTPS organization-prefix rewrite.
+            git config --file "$gitconfig" \
               url."https://x-access-token:${GH_PAT}@github.com/nics-dp/".insteadOf "https://github.com/nics-dp/"
             {
-              echo "GIT_CONFIG_GLOBAL=${PRIV_GITCONFIG}"
               echo "GOPRIVATE=github.com/nics-dp"
               echo "GONOSUMDB=github.com/nics-dp"
             } >> "$GITHUB_ENV"
-          elif [ "${HAS_CI_APP}" = "true" ] && [ "${UNTRUSTED_TRIGGER}" = "true" ]; then
-            # Token deliberately withheld: the App IS configured but the caller ran
-            # this under an untrusted trigger (pull_request_target / workflow_run --
-            # see the job env), so the privileged token is never minted for
-            # attacker-controllable code. Guard on HAS_CI_APP so an unconfigured App
-            # still falls through to the generic "unavailable" warning below rather
-            # than misreporting a deliberate withholding.
-            # gosec/govulncheck lose private-module access by design; non-blocking.
-            echo "::warning::ci-read App token withheld on ${GITHUB_EVENT_NAME} (untrusted trigger; defense-in-depth); gosec/govulncheck cannot fetch private github.com/nics-dp modules and may fail to build -- expected and non-blocking."
+          elif [ "${HAS_CI_APP}" = "true" ] && [ "${SUPPORTED_TOKEN_EVENT}" != "true" ]; then
+            echo "::warning::ci-read App token withheld on unsupported event ${GITHUB_EVENT_NAME}; gosec/govulncheck may be unable to fetch private modules."
           else
-            # No token: the ci-read App is not configured/inherited. Warn loudly
-            # rather than skip silently -- gosec/govulncheck would otherwise fail
-            # later with an opaque "cannot fetch github.com/nics-dp/... module"
-            # error (mirrors mise-task.yml's private-modules warning).
-            echo "::warning::ci-read App token unavailable (pass ci_read_app_private_key and set the CI_READ_APP_CLIENT_ID org variable); gosec/govulncheck cannot fetch private github.com/nics-dp modules and may fail to build."
+            echo "::warning::ci-read App token unavailable (pass ci_read_app_private_key and set CI_READ_APP_CLIENT_ID); gosec/govulncheck may be unable to fetch private modules."
           fi
 
       # Consumer repos may vendor (-mod=vendor). Refresh the vendor tree so
-      # gosec/govulncheck can type-check and build the module consistently;
-      # only acts when a vendor/ directory is present. continue-on-error keeps
-      # the non-blocking contract if private-module access / vendoring fails.
+      # both Go scanners can type-check consistently. Preserve its outcome for
+      # fail-closed enforcement without preventing cleanup or uploads.
       - name: Vendor Go modules
-        if: inputs.run_go
+        id: vendor
+        if: env.EFFECTIVE_ANY_GO == 'true'
         continue-on-error: true
         run: |
           if [ -d vendor ]; then
@@ -217,41 +249,107 @@ jobs:
           fi
 
       - name: Run gosec (SARIF)
-        if: inputs.run_go
+        id: gosec
+        if: env.EFFECTIVE_GOSEC == 'true'
         continue-on-error: true
         run: |
-          go install github.com/securego/gosec/v2/cmd/gosec@v2.28.0
-          # -no-fail keeps exit 0 regardless of findings; SARIF lands in gosec.sarif
-          gosec -fmt sarif -out gosec.sarif -no-fail ./...
+          rm -f -- gosec.sarif
+          if [ -e gosec.sarif ] || [ -L gosec.sarif ]; then
+            echo "::error::failed to remove stale gosec SARIF artifact"
+            exit 1
+          fi
+          echo "sarif_producer_initialized=true" >> "$GITHUB_OUTPUT"
 
-      - name: Upload gosec SARIF
-        if: always() && inputs.run_go && hashFiles('gosec.sarif') != ''
-        # non-blocking: a failed upload (API / permissions / SARIF format) must
-        # not fail the job and break the caller's CI.
+          expected_gobin="${RUNNER_TEMP}/security-sarif-bin"
+          if [ "${GOBIN:-}" != "$expected_gobin" ]; then
+            echo "::error::GOBIN is not the workflow-owned scanner path"
+            exit 1
+          fi
+          if [ -e "$GOBIN" ] || [ -L "$GOBIN" ]; then
+            rm -rf -- "$GOBIN"
+          fi
+          if [ -e "$GOBIN" ] || [ -L "$GOBIN" ]; then
+            echo "::error::failed to remove stale scanner GOBIN"
+            exit 1
+          fi
+          umask 077
+          mkdir -m 0700 -- "$GOBIN"
+          if [ ! -d "$GOBIN" ] || [ -L "$GOBIN" ] || [ "$(stat -c '%a' "$GOBIN")" != "700" ]; then
+            echo "::error::scanner GOBIN is not a regular mode-0700 directory"
+            exit 1
+          fi
+
+          go install github.com/securego/gosec/v2/cmd/gosec@v2.28.0
+          gosec_bin="${GOBIN}/gosec"
+          if [ ! -f "$gosec_bin" ] || [ -L "$gosec_bin" ] || [ ! -x "$gosec_bin" ]; then
+            echo "::error::installed gosec is not a regular non-symlink executable"
+            exit 1
+          fi
+          "$gosec_bin" -version
+          if [ "$EFFECTIVE_BLOCKING" = "true" ]; then
+            "$gosec_bin" -fmt sarif -out gosec.sarif ./...
+          else
+            "$gosec_bin" -fmt sarif -out gosec.sarif -no-fail ./...
+          fi
+
+      # This is a bounded structural precheck, not a claim of complete SARIF
+      # validity. GitHub code scanning remains the authoritative processor.
+      - name: Validate gosec SARIF structure
+        id: gosec-sarif-structure
+        if: ${{ always() && env.EFFECTIVE_GOSEC == 'true' && steps.gosec.outputs.sarif_producer_initialized == 'true' && (steps.gosec.outcome == 'success' || steps.gosec.outcome == 'failure') }}
         continue-on-error: true
-        uses: github/codeql-action/upload-sarif@e4fba868fa4b1b91e1fdab776edc8cfbe6e9fb81 # v4.37.3
-        with:
-          sarif_file: gosec.sarif
-          category: gosec
+        run: |
+          if [ ! -s gosec.sarif ] || [ ! -f gosec.sarif ] || [ -L gosec.sarif ]; then
+            echo "::error::gosec.sarif must be a non-empty regular non-symlink file"
+            exit 1
+          fi
+          jq -e '
+            type == "object" and
+            .version == "2.1.0" and
+            (.runs | type == "array" and length > 0) and
+            all(.runs[];
+              (.tool.driver.name | type == "string") and
+              ((has("results") | not) or (.results | type == "array")) and
+              all(.results[]?; type == "object")
+            )
+          ' gosec.sarif >/dev/null
 
       - name: Run govulncheck (SARIF)
-        if: inputs.run_go
+        id: govulncheck
+        if: env.EFFECTIVE_GOVULNCHECK == 'true'
         continue-on-error: true
         run: |
+          rm -f -- govulncheck.sarif
+          if [ -e govulncheck.sarif ] || [ -L govulncheck.sarif ]; then
+            echo "::error::failed to remove stale govulncheck SARIF artifact"
+            exit 1
+          fi
+          echo "sarif_producer_initialized=true" >> "$GITHUB_OUTPUT"
+
+          expected_gobin="${RUNNER_TEMP}/security-sarif-bin"
+          if [ "${GOBIN:-}" != "$expected_gobin" ]; then
+            echo "::error::GOBIN is not the workflow-owned scanner path"
+            exit 1
+          fi
+          if [ ! -e "$GOBIN" ] && [ ! -L "$GOBIN" ]; then
+            umask 077
+            mkdir -m 0700 -- "$GOBIN"
+          fi
+          if [ ! -d "$GOBIN" ] || [ -L "$GOBIN" ] || [ "$(stat -c '%a' "$GOBIN")" != "700" ]; then
+            echo "::error::scanner GOBIN is not a regular mode-0700 directory"
+            exit 1
+          fi
+
           go install golang.org/x/vuln/cmd/govulncheck@v1.6.0
-          # -format sarif makes govulncheck exit 0 regardless of findings; the
-          # || true is a guard in case the build itself errors out.
-          govulncheck -format sarif ./... > govulncheck.sarif || true
-          # Drop GO-2026-5932 (golang.org/x/crypto/openpgp is unmaintained) from the
-          # SARIF before upload. govulncheck has no native ignore flag, and this
-          # finding is non-actionable here: it fires on the transitively-present
-          # openpgp subpackage whose symbols we never call, and it has no fixed
-          # version. Scoped to this ID AND note level only: govulncheck SARIF levels
-          # are note = module is only a dependency (symbols not called), warning =
-          # vulnerable package imported, error = vulnerable symbol actually called, so
-          # dropping just "note" keeps a genuinely reachable openpgp use (warning /
-          # error) visible if a downstream repo ever calls it. Fail-safe: on any error
-          # the original SARIF is left untouched and still uploaded.
+          govulncheck_bin="${GOBIN}/govulncheck"
+          if [ ! -f "$govulncheck_bin" ] || [ -L "$govulncheck_bin" ] || [ ! -x "$govulncheck_bin" ]; then
+            echo "::error::installed govulncheck is not a regular non-symlink executable"
+            exit 1
+          fi
+          # SARIF mode reports findings without a failing exit. Keep the
+          # historical operational-error guard and fail-safe filter semantics.
+          "$govulncheck_bin" -format sarif ./... > govulncheck.sarif || true
+          # Drop GO-2026-5932 only at note level. A warning/error remains visible.
           python3 - <<'FILTER_PY'
           import json, os
           SRC = "govulncheck.sarif"
@@ -263,9 +361,6 @@ jobs:
                   rid = r.get("ruleId")
                   if rid:
                       return rid
-                  # SARIF 2.1.0: the rule-array index is the result's top-level
-                  # "ruleIndex"; "rule.index" (a reportingDescriptorReference) is the
-                  # secondary spec-valid form. Try both, preferring ruleIndex.
                   idx = r.get("ruleIndex")
                   if not isinstance(idx, int) or idx < 0:
                       idx = (r.get("rule") or {}).get("index")
@@ -290,25 +385,88 @@ jobs:
               print(f"govulncheck-filter: skipped ({e}); original SARIF kept")
           FILTER_PY
 
+      # All Go scans finish before credentials and scanner binaries are removed.
+      # The fixed GIT_CONFIG_GLOBAL override deliberately remains set to an
+      # absent file, preventing fallback to any runner-global configuration.
+      - name: Remove private Go scan state
+        id: go-private-cleanup
+        if: always()
+        continue-on-error: true
+        run: |
+          case "$RUNNER_TEMP" in
+            /*) ;;
+            *) echo "::error::RUNNER_TEMP must be an absolute Linux path"; exit 1 ;;
+          esac
+          gitconfig="${RUNNER_TEMP}/security-sarif-gitconfig"
+          scanner_gobin="${RUNNER_TEMP}/security-sarif-bin"
+          failed=0
+          if [ "${GIT_CONFIG_GLOBAL:-}" != "$gitconfig" ] || [ "${GOBIN:-}" != "$scanner_gobin" ]; then
+            echo "::error::workflow-owned cleanup overrides do not match"
+            failed=1
+          fi
+          if ! rm -f -- "$gitconfig"; then
+            failed=1
+          fi
+          if ! rm -rf -- "$scanner_gobin"; then
+            failed=1
+          fi
+          if [ -e "$gitconfig" ] || [ -L "$gitconfig" ] || [ -e "$scanner_gobin" ] || [ -L "$scanner_gobin" ]; then
+            echo "::error::private Go scan state remains after cleanup"
+            failed=1
+          fi
+          exit "$failed"
+
+      - name: Upload gosec SARIF
+        id: gosec-upload
+        if: ${{ always() && env.EFFECTIVE_GOSEC == 'true' && steps.gosec-sarif-structure.outcome == 'success' && steps.go-private-cleanup.outcome == 'success' }}
+        continue-on-error: true
+        uses: github/codeql-action/upload-sarif@e4fba868fa4b1b91e1fdab776edc8cfbe6e9fb81 # v4.37.3
+        with:
+          sarif_file: gosec.sarif
+          category: gosec
+          # In blocking mode the pinned action waits and throws on terminal
+          # processing_status=failed. Its polling API-error and max-tries paths
+          # only warn, so those cases remain best-effort rather than processed.
+          wait-for-processing: ${{ env.EFFECTIVE_BLOCKING == 'true' }}
+
       - name: Upload govulncheck SARIF
-        if: always() && inputs.run_go && hashFiles('govulncheck.sarif') != ''
-        # non-blocking: a failed upload must not fail the job (see gosec upload).
+        id: govulncheck-upload
+        if: ${{ always() && env.EFFECTIVE_GOVULNCHECK == 'true' && steps.govulncheck.outputs.sarif_producer_initialized == 'true' && (steps.govulncheck.outcome == 'success' || steps.govulncheck.outcome == 'failure') && steps.go-private-cleanup.outcome == 'success' && hashFiles('govulncheck.sarif') != '' }}
         continue-on-error: true
         uses: github/codeql-action/upload-sarif@e4fba868fa4b1b91e1fdab776edc8cfbe6e9fb81 # v4.37.3
         with:
           sarif_file: govulncheck.sarif
           category: govulncheck
 
-      # Revoke the private-module credential before any third-party action runs:
-      # delete the short-lived git config and clear GIT_CONFIG_GLOBAL so the
-      # PAT is no longer reachable by trivy-action / hadolint-action below.
-      - name: Revoke private-module credential
-        if: always() && inputs.run_go
+      - name: Remove gosec SARIF artifact
+        id: gosec-sarif-cleanup
+        if: ${{ always() && env.EFFECTIVE_GOSEC == 'true' && steps.gosec.outputs.sarif_producer_initialized == 'true' }}
+        continue-on-error: true
         run: |
-          if [ -n "${GIT_CONFIG_GLOBAL:-}" ]; then
-            rm -f "$GIT_CONFIG_GLOBAL"
+          failed=0
+          if ! rm -f -- gosec.sarif; then
+            failed=1
           fi
-          echo "GIT_CONFIG_GLOBAL=" >> "$GITHUB_ENV"
+          if [ -e gosec.sarif ] || [ -L gosec.sarif ]; then
+            echo "::error::gosec SARIF artifact remains after cleanup"
+            failed=1
+          fi
+          exit "$failed"
+
+      - name: Remove govulncheck SARIF artifact
+        id: govulncheck-sarif-cleanup
+        if: ${{ always() && env.EFFECTIVE_GOVULNCHECK == 'true' && steps.govulncheck.outputs.sarif_producer_initialized == 'true' }}
+        continue-on-error: true
+        run: |
+          failed=0
+          if ! rm -f -- govulncheck.sarif; then
+            failed=1
+          fi
+          if [ -e govulncheck.sarif ] || [ -L govulncheck.sarif ]; then
+            echo "::error::govulncheck SARIF artifact remains after cleanup"
+            failed=1
+          fi
+          exit "$failed"
 
       # ----------------------------------------------------------------------
       # semgrep (SAST). Mirrors .mise/tasks/ci/semgrep config selection
@@ -399,3 +557,31 @@ jobs:
         with:
           sarif_file: hadolint.sarif
           category: hadolint
+
+      - name: Enforce blocking gosec result
+        id: gosec-enforce
+        if: always() && env.EFFECTIVE_BLOCKING == 'true'
+        env:
+          VENDOR_OUTCOME: ${{ steps.vendor.outcome }}
+          GOSEC_OUTCOME: ${{ steps.gosec.outcome }}
+          STRUCTURE_OUTCOME: ${{ steps.gosec-sarif-structure.outcome }}
+          PRIVATE_CLEANUP_OUTCOME: ${{ steps.go-private-cleanup.outcome }}
+          UPLOAD_OUTCOME: ${{ steps.gosec-upload.outcome }}
+          ARTIFACT_CLEANUP_OUTCOME: ${{ steps.gosec-sarif-cleanup.outcome }}
+        run: |
+          failed=0
+          for outcome in \
+            "$VENDOR_OUTCOME" \
+            "$GOSEC_OUTCOME" \
+            "$STRUCTURE_OUTCOME" \
+            "$PRIVATE_CLEANUP_OUTCOME" \
+            "$UPLOAD_OUTCOME" \
+            "$ARTIFACT_CLEANUP_OUTCOME"; do
+            if [ "$outcome" != "success" ]; then
+              failed=1
+            fi
+          done
+          if [ "$failed" -ne 0 ]; then
+            echo "::error::blocking gosec failed closed; inspect preserved step outcomes"
+            exit 1
+          fi
