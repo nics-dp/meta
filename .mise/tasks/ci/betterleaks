@@ -9,7 +9,7 @@
 # issuer and serial number" (jdx/mise#10680 — the artifact itself is fine; an
 # earlier note here wrongly blamed betterleaks 1.6.0 for it). The version pin
 # below is Renovate-managed and safe to bump normally.
-#MISE tools={"github:betterleaks/betterleaks"="1.7.0"}
+#MISE tools={"github:betterleaks/betterleaks"="1.7.3"}
 set -euo pipefail
 
 # betterleaks: fast, configurable secret scanner from the Gitleaks authors. Used
