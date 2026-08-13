@@ -177,7 +177,7 @@ for index in "${!RULES[@]}"; do
     scanner_fail 'per-rule result path was not fresh'
 
   scanner_status=0
-  GITHUB_TOKEN=$scanner_token node "$scanner_source/index.mjs" \
+  LOG_LEVEL=warn GITHUB_TOKEN=$scanner_token node "$scanner_source/index.mjs" \
     --env /dev/null \
     --scan-rules "$rule" \
     --output "$output" \
