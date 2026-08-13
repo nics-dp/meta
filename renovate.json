@@ -90,7 +90,7 @@
       ],
       "matchStrings": [
         "#MISE tools=\\{zizmor=\\\"(?<currentValue>\\d+\\.\\d+\\.\\d+)\\\"\\}",
-        "version:\\s*(?<currentValue>\\d+\\.\\d+\\.\\d+)\\n\\s+token:\\s*\\\"\\\""
+        "uses:\\s*zizmorcore/zizmor-action@[0-9a-f]{40}[^\\n]*\\n\\s+with:[\\s\\S]*?\\n\\s+version:\\s*(?<currentValue>\\d+\\.\\d+\\.\\d+)"
       ],
       "depNameTemplate": "zizmorcore/zizmor",
       "datasourceTemplate": "github-releases",
