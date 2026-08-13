@@ -27,13 +27,14 @@ depends = [
 
 # Full validation gate. Entry point for the auto-release driver (`mise run all`)
 # so meta can dogfood its own reusable release workflow. Config repo has no
-# build/test — validation is actionlint (workflow YAML) + the ci scans. All
-# steps are read-only (no working-tree drift), so they run in parallel.
-# Secret/license scans (betterleaks/trufflehog/trivy-license) are run separately
-# by the driver itself, so they are not duplicated here.
+# build/test — validation covers the mise graph, task shell, workflow YAML, and
+# high-severity Zizmor findings plus the ci scans. All steps are read-only (no
+# working-tree drift), so they run in parallel. Secret/license scans
+# (betterleaks/trufflehog/trivy-license) are run separately by the driver itself,
+# so they are not duplicated here.
 [tasks.all]
-description = "Validation gate: actionlint + ci scans (auto-release driver entry point)"
-depends = ["iac:actionlint", "ci"]
+description = "Validation gate: task/workflow definitions + ci scans (auto-release driver entry point)"
+depends = ["mise:validate", "iac:actionlint", "iac:shellcheck", "iac:zizmor", "ci"]
 
 # ==============================================================================
 #  SBOM Tasks

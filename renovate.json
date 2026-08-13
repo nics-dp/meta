@@ -8,6 +8,28 @@
       ".github/workflows/**"
     ]
   },
+  "packageRules": [
+    {
+      "description": "Review Zizmor action, CLI, and image support together",
+      "groupName": "zizmor security gate",
+      "matchPackageNames": [
+        "zizmorcore/zizmor-action",
+        "zizmorcore/zizmor"
+      ],
+      "automerge": false,
+      "minimumReleaseAge": "7 days"
+    },
+    {
+      "description": "Review Anchore scan action and Grype together",
+      "groupName": "grype path security gate",
+      "matchPackageNames": [
+        "anchore/scan-action",
+        "anchore/grype"
+      ],
+      "automerge": false,
+      "minimumReleaseAge": "7 days"
+    }
+  ],
   "customManagers": [
     {
       "customType": "regex",
@@ -45,6 +67,46 @@
       "depNameTemplate": "jdx/mise",
       "datasourceTemplate": "github-releases",
       "extractVersionTemplate": "^v(?<version>.+)$"
+    },
+    {
+      "customType": "regex",
+      "description": "Update the ShellCheck pin in the mise task lint atom",
+      "managerFilePatterns": [
+        "/^\\.mise/tasks/iac/shellcheck$/"
+      ],
+      "matchStrings": [
+        "#MISE tools=\\{shellcheck=\\\"(?<currentValue>\\d+\\.\\d+\\.\\d+)\\\"\\}"
+      ],
+      "depNameTemplate": "koalaman/shellcheck",
+      "datasourceTemplate": "github-releases",
+      "extractVersionTemplate": "^v(?<version>.+)$"
+    },
+    {
+      "customType": "regex",
+      "description": "Update synchronized Zizmor CLI pins in the audit atom and official action input",
+      "managerFilePatterns": [
+        "/^\\.mise/tasks/iac/zizmor$/",
+        "/^\\.github/workflows/ci\\.yml$/"
+      ],
+      "matchStrings": [
+        "#MISE tools=\\{zizmor=\\\"(?<currentValue>\\d+\\.\\d+\\.\\d+)\\\"\\}",
+        "uses:[ \\t]*zizmorcore/zizmor-action@[0-9a-f]{40}[^\\n]*\\n        with:\\n(?:          [^\\n]*\\n)*?          version:[ \\t]*(?<currentValue>\\d+\\.\\d+\\.\\d+)"
+      ],
+      "depNameTemplate": "zizmorcore/zizmor",
+      "datasourceTemplate": "github-releases",
+      "extractVersionTemplate": "^v(?<version>.+)$"
+    },
+    {
+      "customType": "regex",
+      "description": "Update the Grype version in the blocking path scan",
+      "managerFilePatterns": [
+        "/^\\.github/workflows/ci\\.yml$/"
+      ],
+      "matchStrings": [
+        "grype-version:\\s*(?<currentValue>v\\d+\\.\\d+\\.\\d+)"
+      ],
+      "depNameTemplate": "anchore/grype",
+      "datasourceTemplate": "github-releases"
     },
     {
       "customType": "regex",

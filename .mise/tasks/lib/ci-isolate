@@ -1,0 +1,31 @@
+ci_isolate_cleanup() {
+  rm -rf -- "$__ci_isolate_dir"
+}
+
+ci_isolate() {
+  local ci_isolate_dir ci_isolate_old_umask
+
+  export GIT_CONFIG_GLOBAL=/dev/null
+  export GIT_CONFIG_NOSYSTEM=1
+  unset GH_TOKEN GITHUB_TOKEN ZIZMOR_GITHUB_TOKEN MISE_GITHUB_TOKEN APP_TOKEN
+  unset GOPRIVATE GONOSUMDB GONOPROXY
+
+  ci_isolate_old_umask="$(umask)"
+  umask 077
+  ci_isolate_dir="$(mktemp -d "${TMPDIR:-/tmp}/meta-ci-isolate.XXXXXXXX")" || {
+    umask "$ci_isolate_old_umask"
+    return 1
+  }
+  __ci_isolate_dir=$ci_isolate_dir
+  readonly __ci_isolate_dir
+  trap ci_isolate_cleanup EXIT
+
+  if ! chmod 700 "$ci_isolate_dir" ||
+    ! : >"$ci_isolate_dir/gitconfig" ||
+    ! chmod 600 "$ci_isolate_dir/gitconfig"; then
+    umask "$ci_isolate_old_umask"
+    return 1
+  fi
+  umask "$ci_isolate_old_umask"
+  export GIT_CONFIG_GLOBAL="$ci_isolate_dir/gitconfig"
+}

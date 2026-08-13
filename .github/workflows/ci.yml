@@ -24,10 +24,428 @@ jobs:
       matrix:
         include:
           - { name: "Actionlint", task: "iac:actionlint" }
+          - { name: "Mise Tasks", task: "mise:validate" }
+          - { name: "ShellCheck", task: "iac:shellcheck" }
     uses: ./.github/workflows/mise-task.yml
     with:
       name: ${{ matrix.name }}
       task: ${{ matrix.task }}
+
+  zizmor-action:
+    name: Zizmor Action
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Prepare fixed Zizmor path
+        id: zizmor-preflight
+        run: |
+          set -euo pipefail
+          runner_temp=${RUNNER_TEMP%/}
+          [[ -n "$runner_temp" && "$runner_temp" == /* && "$runner_temp" != / ]]
+          [[ "$runner_temp" != *$'\n'* && "$runner_temp" != *$'\r'* ]]
+          case "/${runner_temp#/}/" in
+            */../* | */./*) exit 1 ;;
+          esac
+          binary="$runner_temp/zizmor"
+          [[ "$binary" == "$RUNNER_TEMP/zizmor" ]]
+          if [[ -L "$binary" || -f "$binary" ]]; then
+            rm -f -- "$binary"
+          elif [[ -e "$binary" ]]; then
+            exit 1
+          fi
+          [[ ! -e "$binary" && ! -L "$binary" ]]
+
+      - name: Audit GitHub Actions with Zizmor
+        id: zizmor
+        continue-on-error: true
+        uses: zizmorcore/zizmor-action@3dc1ecc9bcb9e94e9b2c709687979e1298497054 # v0.6.2
+        with:
+          inputs: .
+          collect: default
+          online-audits: false
+          # v0.6.2 requires a fixed public compatibility value even with online audits disabled.
+          # This is not a credential and has no permissions; do not use the GitHub token or a secret.
+          token: "offline-placeholder"
+          persona: regular
+          min-severity: high
+          version: 1.29.0
+          advanced-security: false
+          annotations: false
+          color: false
+          config: zizmor.yml
+          fail-on-no-inputs: true
+
+      - name: Remove Zizmor binary
+        id: zizmor-cleanup
+        if: always()
+        run: |
+          set -euo pipefail
+          binary="${RUNNER_TEMP%/}/zizmor"
+          [[ "$binary" == "$RUNNER_TEMP/zizmor" ]]
+          if [[ -L "$binary" || -f "$binary" ]]; then
+            rm -f -- "$binary"
+          elif [[ -e "$binary" ]]; then
+            exit 1
+          fi
+          [[ ! -e "$binary" && ! -L "$binary" ]]
+
+      - name: Enforce Zizmor action and cleanup
+        if: always()
+        env:
+          PREFLIGHT_OUTCOME: ${{ steps.zizmor-preflight.outcome }}
+          ZIZMOR_OUTCOME: ${{ steps.zizmor.outcome }}
+          CLEANUP_OUTCOME: ${{ steps.zizmor-cleanup.outcome }}
+        run: |
+          set -euo pipefail
+          [[ "$PREFLIGHT_OUTCOME" == success ]]
+          [[ "$ZIZMOR_OUTCOME" == success ]]
+          [[ "$CLEANUP_OUTCOME" == success ]]
+
+  github-actions-scanner:
+    name: GitHub Actions Scanner (experimental)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Check out exact scan target
+        id: scanner-target
+        continue-on-error: true
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ github.repository }}
+          ref: ${{ github.sha }}
+          path: target
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Check out signed scanner source
+        id: scanner-source
+        continue-on-error: true
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: snyk-labs/github-actions-scanner
+          ref: 1a269c9c77f9291880dd90c2e154fb2185978a3a
+          path: github-actions-scanner-source
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Verify scanner source
+        id: scanner-verify
+        continue-on-error: true
+        working-directory: github-actions-scanner-source
+        run: |
+          set -euo pipefail
+          readonly expected_sha='1a269c9c77f9291880dd90c2e154fb2185978a3a'
+          readonly expected_lock='d1b010e10f4269745c1e89dd80fbb03d0d1e0948d3a0348af3b5421924de3570'
+          actual_sha=$(git rev-parse HEAD)
+          lock_digest=$(sha256sum package-lock.json)
+          lock_digest=${lock_digest%% *}
+          [[ "$actual_sha" == "$expected_sha" ]]
+          [[ "$lock_digest" == "$expected_lock" ]]
+
+      - name: Set up Node.js
+        id: scanner-node
+        continue-on-error: true
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "22"
+
+      - name: Install scanner dependencies without lifecycle scripts
+        id: scanner-install
+        continue-on-error: true
+        working-directory: github-actions-scanner-source
+        env:
+          npm_config_cache: ${{ runner.temp }}/github-actions-scanner-npm-cache
+          npm_config_userconfig: /dev/null
+        run: |
+          set -euo pipefail
+          unset GH_TOKEN GITHUB_TOKEN NODE_AUTH_TOKEN NPM_TOKEN npm_config_token
+          cache=$npm_config_cache
+          [[ "$cache" == "$RUNNER_TEMP/github-actions-scanner-npm-cache" ]]
+          [[ ! -L "$cache" && (! -e "$cache" || -d "$cache") ]]
+          umask 077
+          mkdir -p "$cache"
+          chmod 700 "$cache"
+          npm ci --ignore-scripts --omit=dev --no-audit --no-fund
+
+      - name: Scan fixed rules
+        id: github-actions-scan
+        if: always()
+        continue-on-error: true
+        env:
+          GITHUB_TOKEN: ${{ github.actor != 'dependabot[bot]' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.user.login != 'dependabot[bot]' && contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.pull_request.author_association))) && github.token || '' }}
+          TARGET_REPOSITORY: ${{ github.repository }}
+          TARGET_SHA: ${{ github.sha }}
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_ACTOR: ${{ github.actor }}
+          PR_HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
+          PR_USER: ${{ github.event.pull_request.user.login }}
+          PR_AUTHOR_ASSOCIATION: ${{ github.event.pull_request.author_association }}
+        run: |
+          set -euo pipefail
+          [[ "$TARGET_REPOSITORY" == */* ]]
+          owner=${TARGET_REPOSITORY%%/*}
+          repository=${TARGET_REPOSITORY#*/}
+          wrapper="$GITHUB_WORKSPACE/target/.github/scripts/github-actions-scanner.sh"
+          [[ -f "$wrapper" && ! -L "$wrapper" ]]
+          exec "$wrapper" "$owner" "$repository" "$TARGET_SHA" \
+            "$EVENT_NAME" "$EVENT_ACTOR" "$PR_HEAD_REPOSITORY" "$PR_USER" \
+            "$PR_AUTHOR_ASSOCIATION"
+
+      - name: Classify scanner result
+        id: scanner-classification
+        if: always()
+        env:
+          TARGET_OUTCOME: ${{ steps.scanner-target.outcome }}
+          SOURCE_OUTCOME: ${{ steps.scanner-source.outcome }}
+          VERIFY_OUTCOME: ${{ steps.scanner-verify.outcome }}
+          NODE_OUTCOME: ${{ steps.scanner-node.outcome }}
+          INSTALL_OUTCOME: ${{ steps.scanner-install.outcome }}
+          SCAN_OUTCOME: ${{ steps.github-actions-scan.outcome }}
+        run: |
+          set -euo pipefail
+          state_file="$RUNNER_TEMP/github-actions-scanner-state.tsv"
+          rules=(CMD_EXEC CODE_INJECT PWN_REQUEST REPOJACKABLE UNPINNED_ACTION UNSAFE_INPUT_ASSIGN WORKFLOW_RUN)
+          declare -A states=() counts=()
+          valid=true
+          if [[ -f "$state_file" && ! -L "$state_file" ]]; then
+            while IFS=$'\t' read -r rule state count extra; do
+              if [[ -n "${extra:-}" ||
+                ! "$rule" =~ ^(CMD_EXEC|CODE_INJECT|PWN_REQUEST|REPOJACKABLE|UNPINNED_ACTION|UNSAFE_INPUT_ASSIGN|WORKFLOW_RUN)$ ||
+                ! "$state" =~ ^(clean|findings|incomplete)$ || ! "$count" =~ ^[0-9]+$ ]]; then
+                valid=false
+                continue
+              fi
+              if [[ -n "${states[$rule]+set}" ]]; then
+                valid=false
+                continue
+              fi
+              if [[ ("$state" == clean || "$state" == incomplete) && "$count" != 0 ]]; then
+                valid=false
+                continue
+              fi
+              if [[ "$state" == findings && "$count" == 0 ]]; then
+                valid=false
+                continue
+              fi
+              states[$rule]=$state
+              counts[$rule]=$count
+            done <"$state_file"
+          else
+            valid=false
+          fi
+
+          for outcome in "$TARGET_OUTCOME" "$SOURCE_OUTCOME" "$VERIFY_OUTCOME" \
+            "$NODE_OUTCOME" "$INSTALL_OUTCOME" "$SCAN_OUTCOME"; do
+            [[ "$outcome" == success ]] || valid=false
+          done
+          for rule in "${rules[@]}"; do
+            [[ -n "${states[$rule]+set}" ]] || valid=false
+          done
+          if [[ "$valid" != true ]]; then
+            for rule in "${rules[@]}"; do
+              states[$rule]=incomplete
+              counts[$rule]=0
+            done
+          fi
+
+          result=clean
+          for rule in "${rules[@]}"; do
+            if [[ "${states[$rule]}" == incomplete ]]; then
+              result=incomplete
+              break
+            fi
+            if [[ "${states[$rule]}" == findings ]]; then
+              result=findings
+            fi
+          done
+
+          {
+            printf '%s\n' '### GitHub Actions Scanner (experimental)'
+            printf '%s\n' '' "- Result: $result" '' '| Rule | State | Count |' '| --- | --- | ---: |'
+            for rule in "${rules[@]}"; do
+              printf "| \`%s\` | %s | %d |\n" "$rule" "${states[$rule]}" "${counts[$rule]}"
+            done
+            printf '%s\n' '' 'Findings and incomplete scans are informational; incomplete is never reported as clean.'
+          } >>"$GITHUB_STEP_SUMMARY"
+
+      - name: Clean scanner state
+        id: scanner-cleanup
+        if: always()
+        run: |
+          set -euo pipefail
+          roots=(
+            "$RUNNER_TEMP/github-actions-scanner-results"
+            "$RUNNER_TEMP/github-actions-scanner-npm-cache"
+            "$GITHUB_WORKSPACE/github-actions-scanner-source"
+          )
+          files=("$RUNNER_TEMP/github-actions-scanner-state.tsv")
+          for root in "${roots[@]}"; do
+            [[ ! -L "$root" ]]
+            [[ ! -e "$root" || -d "$root" ]]
+            rm -rf -- "$root"
+            [[ ! -e "$root" && ! -L "$root" ]]
+          done
+          for file in "${files[@]}"; do
+            [[ ! -L "$file" ]]
+            [[ ! -e "$file" || -f "$file" ]]
+            rm -f -- "$file"
+            [[ ! -e "$file" && ! -L "$file" ]]
+          done
+
+      - name: Enforce scanner classification and cleanup
+        if: always()
+        env:
+          CLASSIFICATION_OUTCOME: ${{ steps.scanner-classification.outcome }}
+          CLEANUP_OUTCOME: ${{ steps.scanner-cleanup.outcome }}
+        run: |
+          set -euo pipefail
+          [[ "$CLASSIFICATION_OUTCOME" == success ]]
+          [[ "$CLEANUP_OUTCOME" == success ]]
+
+  grype-path:
+    name: Grype Path (high, fixed)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Check out exact scan target
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ github.repository }}
+          ref: ${{ github.sha }}
+          path: target
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Validate target and create trusted Grype config
+        id: grype-preflight
+        run: |
+          set -euo pipefail
+          target="$GITHUB_WORKSPACE/target"
+          config="$RUNNER_TEMP/meta-grype-config.yaml"
+          output="$RUNNER_TEMP/meta-grype-results.json"
+          index="$RUNNER_TEMP/meta-grype-index"
+          [[ -d "$target" && ! -L "$target" ]]
+          for file in "$config" "$output" "$index"; do
+            [[ ! -L "$file" ]]
+            [[ ! -e "$file" || -f "$file" ]]
+            rm -f -- "$file"
+          done
+
+          git -C "$target" ls-files --stage -z >"$index"
+          entries=0
+          while IFS= read -r -d '' entry; do
+            [[ "$entry" == *$'\t'* ]]
+            metadata=${entry%%$'\t'*}
+            path=${entry#*$'\t'}
+            read -r mode object stage extra <<<"$metadata"
+            [[ -n "$mode" && -n "$object" && "$stage" == 0 && -z "${extra:-}" ]]
+            [[ "$mode" == 100644 || "$mode" == 100755 ]]
+            [[ -f "$target/$path" && ! -L "$target/$path" ]]
+            ((entries += 1))
+          done <"$index"
+          ((entries > 0))
+          if find "$target" -type l -print -quit | grep -q .; then
+            echo '::error::Grype target contains a worktree symlink'
+            exit 1
+          fi
+
+          umask 077
+          printf '%s\n' 'check-for-app-update: false' >"$config"
+          chmod 600 "$config"
+          [[ $(stat -c '%a' "$config") == 600 ]]
+
+      - name: Scan repository path with Grype
+        id: grype
+        continue-on-error: true
+        uses: anchore/scan-action@e1165082ffb1fe366ebaf02d8526e7c4989ea9d2 # v7.4.0
+        with:
+          path: target
+          config: ${{ runner.temp }}/meta-grype-config.yaml
+          output-format: json
+          output-file: ${{ runner.temp }}/meta-grype-results.json
+          fail-build: true
+          severity-cutoff: high
+          only-fixed: true
+          cache-db: false
+          grype-version: v0.110.0
+
+      - name: Summarize and clean Grype results
+        id: grype-summary
+        if: always()
+        env:
+          GRYPE_OUTCOME: ${{ steps.grype.outcome }}
+        run: |
+          set -euo pipefail
+          output="$RUNNER_TEMP/meta-grype-results.json"
+          config="$RUNNER_TEMP/meta-grype-config.yaml"
+          index="$RUNNER_TEMP/meta-grype-index"
+          state=incomplete
+          total=0
+          critical=0
+          high=0
+          medium=0
+          version=unknown
+          db_schema=unknown
+          db_built=unknown
+
+          if [[ -f "$output" && ! -L "$output" ]] &&
+            jq -e 'type == "object" and (.matches | type == "array")' "$output" >/dev/null; then
+            total=$(jq -r '.matches | length' "$output")
+            critical=$(jq -r '[.matches[] | select((.vulnerability.severity // "") == "Critical")] | length' "$output")
+            high=$(jq -r '[.matches[] | select((.vulnerability.severity // "") == "High")] | length' "$output")
+            medium=$(jq -r '[.matches[] | select((.vulnerability.severity // "") == "Medium")] | length' "$output")
+            version=$(jq -r '.descriptor.version // "unknown" | tostring' "$output")
+            db_schema=$(jq -r '.descriptor.db.schemaVersion // "unknown" | tostring' "$output")
+            db_built=$(jq -r '.descriptor.db.built // "unknown" | tostring' "$output")
+            [[ "$version" =~ ^[0-9A-Za-z._+-]{1,64}$ ]] || version=unknown
+            [[ "$db_schema" =~ ^[0-9A-Za-z._+-]{1,64}$ ]] || db_schema=unknown
+            [[ "$db_built" =~ ^[0-9TZ:._+\ -]{1,64}$ ]] || db_built=unknown
+            if ((critical + high > 0)); then
+              state=findings
+            elif [[ "$GRYPE_OUTCOME" == success ]]; then
+              state=clean
+            fi
+          fi
+
+          {
+            printf '%s\n' '### Grype Path (high, fixed)'
+            printf '%s\n' '' "- State: $state" "- Findings: $total total; $critical critical; $high high; $medium medium"
+            printf '%s\n' "- Grype: $version" "- Database schema: $db_schema" "- Database built: $db_built"
+          } >>"$GITHUB_STEP_SUMMARY"
+
+          cleanup_failed=0
+          for file in "$output" "$config" "$index"; do
+            if [[ -L "$file" || (-e "$file" && ! -f "$file") ]]; then
+              cleanup_failed=1
+              continue
+            fi
+            rm -f -- "$file" || cleanup_failed=1
+            [[ ! -e "$file" && ! -L "$file" ]] || cleanup_failed=1
+          done
+          ((cleanup_failed == 0))
+
+      - name: Enforce Grype action and cleanup
+        if: always()
+        env:
+          PREFLIGHT_OUTCOME: ${{ steps.grype-preflight.outcome }}
+          GRYPE_OUTCOME: ${{ steps.grype.outcome }}
+          SUMMARY_OUTCOME: ${{ steps.grype-summary.outcome }}
+        run: |
+          set -euo pipefail
+          [[ "$PREFLIGHT_OUTCOME" == success ]]
+          [[ "$GRYPE_OUTCOME" == success ]]
+          [[ "$SUMMARY_OUTCOME" == success ]]
 
   # --- Secret scanning ---
   # betterleaks PR gate. On a pull_request the task scopes the scan to the
