@@ -20,8 +20,8 @@ rules:
       - sbom-source.yml:56
       - sbom-source.yml:60
       - scorecard.yml:61
-      - security-sarif.yml:137
-      - security-sarif.yml:141
+      - security-sarif.yml:140
+      - security-sarif.yml:144
   unpinned-uses:
     ignore:
       # Same-repo self-consumption follows protected main as the promotion boundary.
