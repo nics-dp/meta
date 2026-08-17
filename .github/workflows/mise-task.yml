@@ -75,8 +75,9 @@ jobs:
     # injection. "0" requires mise >= 2026.6.3 (older mise rejects it as an
     # invalid duration), and the self-hosted pool reuses cached mise binaries
     # of mixed versions, so the action below pins an exact mise version --
-    # currently 2026.7.0, kept in lockstep with auto-release.yml's
-    # mise_version default and self-release.yml's explicit pass. >= 2026.7.0
+    # see its `version:` input, kept in lockstep with auto-release.yml's
+    # mise_version default and self-release.yml's explicit pass (all three are
+    # bumped together by the jdx/mise custom manager in renovate.json). >= 2026.7.0
     # is required: older builds embed a Sigstore trust root predating
     # GitHub's 2026-06-12 TSA cert rotation and fail artifact-attestation
     # verification on tool installs (jdx/mise#10680).
