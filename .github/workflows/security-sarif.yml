@@ -208,21 +208,11 @@ jobs:
       # set up Go and configure git to fetch private modules via the ci-read App
       # token minted above.
       # ----------------------------------------------------------------------
-      # The toolchain must be the caller's own, not the newest release. gosec and
-      # govulncheck report against the Go they run on, so scanning on "stable"
-      # answers "is this code safe once you upgrade" while the question is "is
-      # what we ship safe now" — every stdlib advisory the caller has not yet
-      # adopted disappears from the SARIF. go-version-file takes the toolchain
-      # go.mod declares (setup-go reads the `toolchain` directive first and falls
-      # back to `go`), which is the same version the caller builds with.
-      #
-      # The path is the repository root, NOT scan_path: that input scopes only
-      # trivy config and semgrep, while the Go steps — vendoring, gosec and
-      # govulncheck — all run against the root module with no working-directory.
-      # Deriving the version file from scan_path would break a legitimate
-      # `scan_path: infra` caller here while still scanning the root module.
-      #
-      # An explicit go_version still wins; empty go-version-file is ignored.
+      # Empty go_version scans on the toolchain the caller's own go.mod declares.
+      # The version file is the repository ROOT go.mod, never scan_path: that
+      # input scopes only trivy config and semgrep, while the Go steps here all
+      # run against the root module with no working-directory. An explicit
+      # go_version still wins. Rationale: CLAUDE.md, nics-dp/meta#327.
       - name: Set up Go
         if: env.EFFECTIVE_ANY_GO == 'true'
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
