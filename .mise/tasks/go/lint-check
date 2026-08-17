@@ -1,8 +1,27 @@
 #!/usr/bin/env bash
-#MISE description="Lint Go (read-only)"
+#MISE description="Lint Go (read-only): formatter drift + linters"
 #MISE hide=true
 #MISE raw=true
 #MISE depends=["go:install"]
 #MISE tools={"aqua:golangci/golangci-lint"="2.12.2"}
 
-golangci-lint run ./...
+set -uo pipefail
+
+# `run` does reach formatting, but only where the repo declares formatters in
+# .golangci.yml AND the file is not a test file (`run.tests: false`). That
+# leaves two gaps, and TMDs#825's nine drifted files landed entirely inside
+# them: six in a repo with no `formatters:` section, three under test/. Not one
+# was a non-test file in a repo that configures formatters — the single
+# combination `run` already covered. The local `go:lint-fix` only warns.
+#
+# `fmt --diff` closes both: it is read-only (prints a diff, exits non-zero,
+# rewrites nothing) and is not bound by `run.tests`. It applies whatever
+# formatters the repo configures, so a repo with no `formatters:` section still
+# only gets standard gofmt here — widening that is a per-repo config change.
+#
+# Both stages run before the exit code is decided, deliberately not fail-fast,
+# so a PR carrying both kinds of problem sees both in one CI round.
+rc=0
+golangci-lint fmt --diff ./... || rc=1
+golangci-lint run ./... || rc=1
+exit "$rc"
