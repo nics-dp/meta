@@ -75,8 +75,9 @@ jobs:
     # injection. "0" requires mise >= 2026.6.3 (older mise rejects it as an
     # invalid duration), and the self-hosted pool reuses cached mise binaries
     # of mixed versions, so the action below pins an exact mise version --
-    # currently 2026.7.0, kept in lockstep with auto-release.yml's
-    # mise_version default and self-release.yml's explicit pass. >= 2026.7.0
+    # see its `version:` input, kept in lockstep with auto-release.yml's
+    # mise_version default and self-release.yml's explicit pass (all three are
+    # bumped together by the jdx/mise custom manager in renovate.json). >= 2026.7.0
     # is required: older builds embed a Sigstore trust root predating
     # GitHub's 2026-06-12 TSA cert rotation and fail artifact-attestation
     # verification on tool installs (jdx/mise#10680).
@@ -189,9 +190,9 @@ jobs:
             echo "GOMODCACHE=$cache_root/mod"
           } >> "$GITHUB_ENV"
 
-      - uses: jdx/mise-action@9e7f7633ff6f6d6048a9418a68d48f288f50eb14 # v4.2.3
+      - uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
         with:
-          version: "2026.7.14"
+          version: "2026.8.3"
           cache: true
 
       - name: Resolve Go cache
