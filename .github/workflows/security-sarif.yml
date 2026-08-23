@@ -18,8 +18,11 @@ on:
       go_version:
         required: false
         type: string
-        default: "stable"
-        description: "Go toolchain version for gosec/govulncheck"
+        default: ""
+        description: >-
+          Go toolchain for gosec/govulncheck. Empty (default) reads the caller's
+          own go.mod so the scan matches what that repo builds with; a literal
+          version overrides it. See the Set up Go step for why not "stable".
       scan_path:
         required: false
         type: string
@@ -205,11 +208,17 @@ jobs:
       # set up Go and configure git to fetch private modules via the ci-read App
       # token minted above.
       # ----------------------------------------------------------------------
+      # Empty go_version scans on the toolchain the caller's own go.mod declares.
+      # The version file is the repository ROOT go.mod, never scan_path: that
+      # input scopes only trivy config and semgrep, while the Go steps here all
+      # run against the root module with no working-directory. An explicit
+      # go_version still wins. Rationale: CLAUDE.md, nics-dp/meta#327.
       - name: Set up Go
         if: env.EFFECTIVE_ANY_GO == 'true'
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: ${{ inputs.go_version }}
+          go-version-file: ${{ inputs.go_version == '' && 'go.mod' || '' }}
           cache: false
 
       - name: Configure git for private modules
@@ -420,7 +429,7 @@ jobs:
         id: gosec-upload
         if: ${{ always() && env.EFFECTIVE_GOSEC == 'true' && steps.gosec-sarif-structure.outcome == 'success' && steps.go-private-cleanup.outcome == 'success' }}
         continue-on-error: true
-        uses: github/codeql-action/upload-sarif@e4fba868fa4b1b91e1fdab776edc8cfbe6e9fb81 # v4.37.3
+        uses: github/codeql-action/upload-sarif@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd # v4.37.7
         with:
           sarif_file: gosec.sarif
           category: gosec
@@ -433,7 +442,7 @@ jobs:
         id: govulncheck-upload
         if: ${{ always() && env.EFFECTIVE_GOVULNCHECK == 'true' && steps.govulncheck.outputs.sarif_producer_initialized == 'true' && (steps.govulncheck.outcome == 'success' || steps.govulncheck.outcome == 'failure') && steps.go-private-cleanup.outcome == 'success' && hashFiles('govulncheck.sarif') != '' }}
         continue-on-error: true
-        uses: github/codeql-action/upload-sarif@e4fba868fa4b1b91e1fdab776edc8cfbe6e9fb81 # v4.37.3
+        uses: github/codeql-action/upload-sarif@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd # v4.37.7
         with:
           sarif_file: govulncheck.sarif
           category: govulncheck
@@ -506,7 +515,7 @@ jobs:
         if: always() && inputs.run_semgrep && hashFiles('semgrep.sarif') != ''
         # non-blocking: a failed upload must not fail the job (see gosec upload).
         continue-on-error: true
-        uses: github/codeql-action/upload-sarif@e4fba868fa4b1b91e1fdab776edc8cfbe6e9fb81 # v4.37.3
+        uses: github/codeql-action/upload-sarif@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd # v4.37.7
         with:
           sarif_file: semgrep.sarif
           category: semgrep
@@ -533,7 +542,7 @@ jobs:
         if: always() && inputs.run_dockerfile && hashFiles('trivy-config.sarif') != ''
         # non-blocking: a failed upload must not fail the job (see gosec upload).
         continue-on-error: true
-        uses: github/codeql-action/upload-sarif@e4fba868fa4b1b91e1fdab776edc8cfbe6e9fb81 # v4.37.3
+        uses: github/codeql-action/upload-sarif@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd # v4.37.7
         with:
           sarif_file: trivy-config.sarif
           category: trivy-config
@@ -541,7 +550,7 @@ jobs:
       - name: Run hadolint (SARIF)
         if: inputs.run_dockerfile
         continue-on-error: true
-        uses: hadolint/hadolint-action@2332a7b74a6de0dda2e2221d575162eba76ba5e5 # v3.3.0
+        uses: hadolint/hadolint-action@2a66e89f53d0771bb131a7fa31f3136336094aa6 # v3.4.0
         with:
           dockerfile: Dockerfile*
           recursive: true
@@ -553,7 +562,7 @@ jobs:
         if: always() && inputs.run_dockerfile && hashFiles('hadolint.sarif') != ''
         # non-blocking: a failed upload must not fail the job (see gosec upload).
         continue-on-error: true
-        uses: github/codeql-action/upload-sarif@e4fba868fa4b1b91e1fdab776edc8cfbe6e9fb81 # v4.37.3
+        uses: github/codeql-action/upload-sarif@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd # v4.37.7
         with:
           sarif_file: hadolint.sarif
           category: hadolint

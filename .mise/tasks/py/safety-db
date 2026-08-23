@@ -10,5 +10,9 @@ set -euo pipefail
 if [ -n "${SAFETY_API_KEY:-}" ]; then
   uvx safety scan --output text
 else
-  uvx --with 'setuptools<81' 'safety<3' check --output text
+  # safety v2 `check` defaults to scanning the env it runs in — the uvx ephemeral
+  # env, not the project venv. Feed the project deps via --stdin instead, so the
+  # tool's own pinned setuptools<81 (kept for pkg_resources) is not scanned
+  # (the DB flags setuptools<83, e.g. CVE-2026-59890 — a catch-22 otherwise).
+  uv pip freeze | uvx --with 'setuptools<81' 'safety<3' check --stdin --output text
 fi
