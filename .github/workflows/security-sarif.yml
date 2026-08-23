@@ -349,7 +349,7 @@ jobs:
             exit 1
           fi
 
-          go install golang.org/x/vuln/cmd/govulncheck@v1.6.0
+          go install golang.org/x/vuln/cmd/govulncheck@v1.7.0
           govulncheck_bin="${GOBIN}/govulncheck"
           if [ ! -f "$govulncheck_bin" ] || [ -L "$govulncheck_bin" ] || [ ! -x "$govulncheck_bin" ]; then
             echo "::error::installed govulncheck is not a regular non-symlink executable"
