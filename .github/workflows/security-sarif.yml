@@ -429,7 +429,7 @@ jobs:
         id: gosec-upload
         if: ${{ always() && env.EFFECTIVE_GOSEC == 'true' && steps.gosec-sarif-structure.outcome == 'success' && steps.go-private-cleanup.outcome == 'success' }}
         continue-on-error: true
-        uses: github/codeql-action/upload-sarif@5595ccaf912efad79be6eef63a5619ff05969be3 # v4.37.6
+        uses: github/codeql-action/upload-sarif@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd # v4.37.7
         with:
           sarif_file: gosec.sarif
           category: gosec
@@ -442,7 +442,7 @@ jobs:
         id: govulncheck-upload
         if: ${{ always() && env.EFFECTIVE_GOVULNCHECK == 'true' && steps.govulncheck.outputs.sarif_producer_initialized == 'true' && (steps.govulncheck.outcome == 'success' || steps.govulncheck.outcome == 'failure') && steps.go-private-cleanup.outcome == 'success' && hashFiles('govulncheck.sarif') != '' }}
         continue-on-error: true
-        uses: github/codeql-action/upload-sarif@5595ccaf912efad79be6eef63a5619ff05969be3 # v4.37.6
+        uses: github/codeql-action/upload-sarif@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd # v4.37.7
         with:
           sarif_file: govulncheck.sarif
           category: govulncheck
@@ -515,7 +515,7 @@ jobs:
         if: always() && inputs.run_semgrep && hashFiles('semgrep.sarif') != ''
         # non-blocking: a failed upload must not fail the job (see gosec upload).
         continue-on-error: true
-        uses: github/codeql-action/upload-sarif@5595ccaf912efad79be6eef63a5619ff05969be3 # v4.37.6
+        uses: github/codeql-action/upload-sarif@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd # v4.37.7
         with:
           sarif_file: semgrep.sarif
           category: semgrep
@@ -542,7 +542,7 @@ jobs:
         if: always() && inputs.run_dockerfile && hashFiles('trivy-config.sarif') != ''
         # non-blocking: a failed upload must not fail the job (see gosec upload).
         continue-on-error: true
-        uses: github/codeql-action/upload-sarif@5595ccaf912efad79be6eef63a5619ff05969be3 # v4.37.6
+        uses: github/codeql-action/upload-sarif@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd # v4.37.7
         with:
           sarif_file: trivy-config.sarif
           category: trivy-config
@@ -562,7 +562,7 @@ jobs:
         if: always() && inputs.run_dockerfile && hashFiles('hadolint.sarif') != ''
         # non-blocking: a failed upload must not fail the job (see gosec upload).
         continue-on-error: true
-        uses: github/codeql-action/upload-sarif@5595ccaf912efad79be6eef63a5619ff05969be3 # v4.37.6
+        uses: github/codeql-action/upload-sarif@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd # v4.37.7
         with:
           sarif_file: hadolint.sarif
           category: hadolint
