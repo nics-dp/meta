@@ -2,7 +2,7 @@
 #MISE description="Check JS/TS formatting (oxfmt; native binary, no Node)"
 #MISE hide=true
 #MISE raw=true
-#MISE tools={bun="1.3.14"}
+#MISE tools={bun="1.4.0"}
 #MISE depends=["node:install"]
 
 # oxfmt (OXC) — native single-binary formatter, run through bun so no Node
