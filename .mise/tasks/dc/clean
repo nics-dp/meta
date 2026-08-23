@@ -2,7 +2,7 @@
 #MISE description="Clean Docker Compose resources"
 #MISE hide=true
 #MISE raw=true
-#MISE tools={"aqua:charmbracelet/gum"="0.17.0", "aqua:jqlang/jq"="1.8.2"}
+#MISE tools={"aqua:charmbracelet/gum"="2.0.0", "aqua:jqlang/jq"="1.8.2"}
 #USAGE arg "[target]" help="Resource to clean: vol, img, net, all" {
 #USAGE   choices "vol" "img" "net" "all"
 #USAGE }
