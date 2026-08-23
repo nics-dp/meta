@@ -33,7 +33,7 @@ jobs:
       # effect after the NEXT promotion -- passing it here lets the promotion
       # that carries the bump release itself. Keep in lockstep with
       # mise-task.yml.
-      mise_version: "2026.8.3"
+      mise_version: "2026.8.6"
     secrets:
       ci_read_app_private_key:     ${{ secrets.CI_READ_APP_PRIVATE_KEY }}
       pre_release_app_private_key: ${{ secrets.PRE_RELEASE_APP_PRIVATE_KEY }}
