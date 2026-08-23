@@ -378,7 +378,7 @@ jobs:
           severity-cutoff: high
           only-fixed: true
           cache-db: false
-          grype-version: v0.110.0
+          grype-version: v0.117.0
 
       - name: Summarize and clean Grype results
         id: grype-summary
