@@ -2,7 +2,7 @@
 #MISE description="Run Lighthouse CI on built dist/ (repo-local lighthouserc wins; else meta default)"
 #MISE hide=true
 #MISE raw=true
-#MISE tools={bun="1.3.14"}
+#MISE tools={bun="1.4.0"}
 #MISE depends=["node:build"]
 
 set -euo pipefail

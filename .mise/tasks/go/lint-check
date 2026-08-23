@@ -3,7 +3,7 @@
 #MISE hide=true
 #MISE raw=true
 #MISE depends=["go:install"]
-#MISE tools={"aqua:golangci/golangci-lint"="2.12.2"}
+#MISE tools={"aqua:golangci/golangci-lint"="2.13.1"}
 
 set -uo pipefail
 
