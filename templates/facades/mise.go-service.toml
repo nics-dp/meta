@@ -8,7 +8,7 @@ task.output = "keep-order"
 # ------------------------------------------------------------------------------
 [tools]
 # Go toolchain
-go = "1.26.6"
+go = "1.27.0"
 
 [env]
 # Override meta config base if forking nics-dp/meta
