@@ -30,7 +30,7 @@ on:
       go_env:
         required: false
         type: string
-        default: "GOEXPERIMENT=jsonv2,simd,runtimesecret,goroutineleakprofile"
+        default: "GOEXPERIMENT=jsonv2,simd,runtimesecret"
         description: "Extra env vars for build, one per line (e.g., GOEXPERIMENT=jsonv2)"
       ldflags:
         required: false
