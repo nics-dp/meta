@@ -34,11 +34,12 @@ set -euo pipefail
 # findings that the path rules do not already cover, and delete it once they
 # do. The categories: known
 # local-dev placeholder credentials (dev-stack compose/mise/deploy defaults),
-# code identifiers the generic rules mistake for values, the user:pass@host
-# doc-example URI in the CLI clients, and pure zh-TW UI copy. Two narrow
-# exceptions remain -- one historical dcf-platform seed-default admin password,
-# scoped with condition = "AND" to the two commits that introduced it (outside
-# git history that condition fails closed and the finding resurfaces), and the
+# code identifiers the generic rules mistake for values, and pure zh-TW UI
+# copy. Three narrow exceptions remain -- one historical dcf-platform
+# seed-default admin password, scoped with condition = "AND" to the two
+# commits that introduced it (outside git history that condition fails closed
+# and the finding resurfaces); the user:pass@host doc-example URI in the CLI
+# clients, scoped with condition = "AND" to pkg/api/client.go; and the
 # GHAS-dismissed dev-only placeholder token in dcf-platform-cli.
 #
 # The config is written to a temp file and passed via --config; it cannot sit as
@@ -89,6 +90,13 @@ regexTarget = "secret"
 regexes = [ '''^adminPass@nics\.dcf$''' ]
 
 [[allowlists]]
+description = "user:pass@host doc-example URI in the CLI clients (access-cli, platform-cli). condition=AND: the value is only allowlisted inside pkg/api/client.go"
+condition = "AND"
+paths = [ '''(^|/)pkg/api/client\.go$''' ]
+regexTarget = "secret"
+regexes = [ '''^pass$''' ]
+
+[[allowlists]]
 description = "Known local-dev placeholder credentials (compose/mise/deploy dev-stack defaults). Anchored value filters with no path predicate: each silences its literal org-wide -- consciously accepted (a real stg/prod password equal to one of these is a password-policy problem, not a detection gap). Compensating control: ci:trufflehog's full-history --results=verified sweep does not consume this config, though it only catches live-verifiable credentials"
 regexTarget = "secret"
 regexes = [
@@ -106,10 +114,10 @@ regexes = [
 ]
 
 [[allowlists]]
-description = "Identifier, doc-example, and zh-TW UI-copy false positives ('pass' covers the user:pass@host doc URI in the CLI clients; the CJK entry matches pure display copy only)"
+description = "Identifier and zh-TW UI-copy false positives (the CJK entry matches pure display copy only; any ASCII letter in the value defeats it)"
 regexTarget = "secret"
 regexes = [
-  '''^(wrong|secret|pass|newPassword|adminPassword|change_password|reset_password)$''',
+  '''^(wrong|newPassword|adminPassword|change_password|reset_password)$''',
   '''^(openResetPasswordDialog|resetConfirmPassword|resetNewPassword|submitResetPassword)$''',
   '''^(newPassword|password)\.value$''',
   '''^d\.cfg\.DCFUserAdminPassword$''',
