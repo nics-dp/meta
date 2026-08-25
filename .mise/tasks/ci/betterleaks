@@ -26,12 +26,28 @@ set -euo pipefail
 # alone fetches only the checked-out ref, even at fetch-depth: 0).
 #
 # Org-wide allowlist: extend the default rule set and only *subtract* well
-# understood false positives -- vendored third-party code, Go test/mock fixtures,
-# and the GHAS-dismissed dev-only placeholder token in dcf-platform-cli. The
-# config is written to a temp file and passed via --config; it cannot live as a
-# sibling .toml under .mise/tasks/ because mise would mis-parse it as a task
-# definition. Keep the path/value entries narrow -- never allowlist a path that
-# holds real application secrets.
+# understood false positives. Two path rules cover vendored third-party code and
+# test fixtures (Go test/mock/testdata; vitest .test/.spec and __tests__).
+# Everything else is subtracted by *anchored secret-value* regexes, not by
+# path, so an entry can only ever silence the one literal it names: known
+# local-dev placeholder credentials (dev-stack compose/mise/deploy defaults),
+# code identifiers the generic rules mistake for values, the user:pass@host
+# doc-example URI in the CLI clients, and pure zh-TW UI copy. Two narrow
+# exceptions remain -- one historical dcf-platform seed-default admin password,
+# scoped with condition = "AND" to the two commits that introduced it (outside
+# git history that condition fails closed and the finding resurfaces), and the
+# GHAS-dismissed dev-only placeholder token in dcf-platform-cli.
+#
+# The config is written to a temp file and passed via --config; it cannot sit as
+# a sibling .toml under .mise/tasks/ because mise would mis-parse it as a task
+# definition. Keep every entry narrow -- never allowlist a path that holds real
+# application secrets. Keep the regexes free of tera delimiters ({{, {%, {#):
+# this file is a task script, so mise never templates the heredoc body and they
+# are inert here today, but the same text in a mise-templated context would be
+# rendered rather than matched.
+#
+# See nics-dp/meta#347 for why the 1.8.1 generic-password and
+# generic-credential-uri rules required this expansion (2026-08-25).
 config="$(mktemp)"
 trap 'rm -f "$config"' EXIT
 cat > "$config" <<'BLCFG'
@@ -48,9 +64,57 @@ paths = [
 ]
 
 [[allowlists]]
+description = "Frontend unit-test fixtures (vitest)"
+paths = [
+  '''\.(test|spec)\.[cm]?[jt]sx?$''',
+  '''(^|/)__tests__/''',
+]
+
+[[allowlists]]
 description = "dcf-platform-cli dev-only defaultAccessToken (GHAS-dismissed)"
 regexTarget = "match"
 regexes = [ '''ds-RVNFZVlGT2hhZlNtT2JOVg''' ]
+
+[[allowlists]]
+description = "dcf-platform 2026-03 seed-default admin password, removed since; scoped to the two introducing commits. condition=AND is load-bearing: outside git history (dir mode, rewritten SHAs) it fails closed and the finding resurfaces"
+condition = "AND"
+commits = [
+  "ead693679cdfc45d62ed79c170f48c093fd6d269",
+  "2d25cce034f2624c50ce2560b2f5dbac416bd4e5",
+]
+regexTarget = "secret"
+regexes = [ '''^adminPass@nics\.dcf$''' ]
+
+[[allowlists]]
+description = "Known local-dev placeholder credentials (compose/mise/deploy dev-stack defaults; never used beyond dev)"
+regexTarget = "secret"
+regexes = [
+  '''^password123$''',
+  '''^postgres123$''',
+  '''^app_pass_123$''',
+  '''^-app_pass_123\}$''',
+  '''^rep_pass_123$''',
+  '''^dcf_secure_password$''',
+  '''^P@ssw0rd!(234)?$''',
+  '''^New123X!$''',
+  '''^AdminPass1234$''',
+  '''^StrongPass123!$''',
+  '''^test-admin-password$''',
+  '''^CHANGE_ME$''',
+  '''^(new|old)-pass$''',
+]
+
+[[allowlists]]
+description = "Identifier, doc-example, and zh-TW UI-copy false positives ('pass' covers the user:pass@host doc URI in the CLI clients; the CJK entry matches pure display copy only)"
+regexTarget = "secret"
+regexes = [
+  '''^(wrong|secret|pass|newPassword|adminPassword|change_password|reset_password)$''',
+  '''^(openResetPasswordDialog|resetConfirmPassword|resetNewPassword|submitResetPassword)$''',
+  '''^(newPassword|password)\.value$''',
+  '''^d\.cfg\.DCFUserAdminPassword$''',
+  '''^dcf_app_password$''',
+  '''^[\s\d，、。：；（）「」]*\p{Han}[\p{Han}\s\d，、。：；（）「」]*$''',
+]
 BLCFG
 common=(git . --redact --no-banner --config "$config")
 
