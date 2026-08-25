@@ -29,7 +29,10 @@ set -euo pipefail
 # understood false positives. Two path rules cover vendored third-party code and
 # test fixtures (Go test/mock/testdata; vitest .test/.spec and __tests__).
 # Everything else is subtracted by *anchored secret-value* regexes, not by
-# path, so an entry can only ever silence the one literal it names: known
+# path, so an entry can only ever silence the one literal it names -- but it
+# silences that literal org-wide, in any path; keep each entry backed by
+# findings that the path rules do not already cover, and delete it once they
+# do. The categories: known
 # local-dev placeholder credentials (dev-stack compose/mise/deploy defaults),
 # code identifiers the generic rules mistake for values, the user:pass@host
 # doc-example URI in the CLI clients, and pure zh-TW UI copy. Two narrow
@@ -86,7 +89,7 @@ regexTarget = "secret"
 regexes = [ '''^adminPass@nics\.dcf$''' ]
 
 [[allowlists]]
-description = "Known local-dev placeholder credentials (compose/mise/deploy dev-stack defaults; never used beyond dev)"
+description = "Known local-dev placeholder credentials (compose/mise/deploy dev-stack defaults). Anchored value filters with no path predicate: each silences its literal org-wide -- consciously accepted (a real stg/prod password equal to one of these is a password-policy problem, not a detection gap). Compensating control: ci:trufflehog's full-history --results=verified sweep does not consume this config, though it only catches live-verifiable credentials"
 regexTarget = "secret"
 regexes = [
   '''^password123$''',
@@ -95,8 +98,6 @@ regexes = [
   '''^-app_pass_123\}$''',
   '''^rep_pass_123$''',
   '''^dcf_secure_password$''',
-  '''^P@ssw0rd!(234)?$''',
-  '''^New123X!$''',
   '''^AdminPass1234$''',
   '''^StrongPass123!$''',
   '''^test-admin-password$''',
