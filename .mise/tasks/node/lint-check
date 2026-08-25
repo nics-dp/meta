@@ -2,7 +2,7 @@
 #MISE description="Lint JS/TS (read-only)"
 #MISE hide=true
 #MISE raw=true
-#MISE tools={bun="1.3.14"}
+#MISE tools={bun="1.4.0"}
 #MISE depends=["node:install"]
 
 # Repo-local eslint.config.js wins; else fetched with retry + fail-loud (see lib/fetch-config).
