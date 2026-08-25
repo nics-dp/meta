@@ -110,7 +110,6 @@ regexes = [
   '''^StrongPass123!$''',
   '''^test-admin-password$''',
   '''^CHANGE_ME$''',
-  '''^(new|old)-pass$''',
 ]
 
 [[allowlists]]
