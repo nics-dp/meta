@@ -33,14 +33,19 @@ set -euo pipefail
 # silences that literal org-wide, in any path; keep each entry backed by
 # findings that the path rules do not already cover, and delete it once they
 # do. The categories: known
-# local-dev placeholder credentials (dev-stack compose/mise/deploy defaults),
-# code identifiers the generic rules mistake for values, and pure zh-TW UI
-# copy. Three narrow exceptions remain -- one historical dcf-platform
+# local-dev placeholder credentials (dev-stack compose/mise/deploy defaults,
+# dcf-local-env's committed config/values/local.env.example throwaway values,
+# and a policy-check fixture), code identifiers and psql :variable / URI
+# placeholders the generic rules mistake for values, and pure zh-TW UI
+# copy. Four narrow exceptions remain -- one historical dcf-platform
 # seed-default admin password, scoped with condition = "AND" to the two
 # commits that introduced it (outside git history that condition fails closed
-# and the finding resurfaces); the user:pass@host doc-example URI in the CLI
-# clients, scoped with condition = "AND" to pkg/api/client.go; and the
-# GHAS-dismissed dev-only placeholder token in dcf-platform-cli.
+# and the finding resurfaces); the retired dcf-local-env root .env.example
+# admin/admin123 defaults, scoped with condition = "AND" to the two commits
+# that introduced them, with the same fail-closed property; the user:pass@host
+# doc-example URI in the CLI clients, scoped with condition = "AND" to
+# pkg/api/client.go; and the GHAS-dismissed dev-only placeholder token in
+# dcf-platform-cli.
 #
 # The config is written to a temp file and passed via --config; it cannot sit as
 # a sibling .toml under .mise/tasks/ because mise would mis-parse it as a task
@@ -50,8 +55,8 @@ set -euo pipefail
 # are inert here today, but the same text in a mise-templated context would be
 # rendered rather than matched.
 #
-# See nics-dp/meta#347 for why the 1.8.1 generic-password and
-# generic-credential-uri rules required this expansion (2026-08-25).
+# See nics-dp/meta#347 and nics-dp/meta#352 for why the 1.8.1 generic-password
+# and generic-credential-uri rules required these expansions (2026-08-25/26).
 config="$(mktemp)"
 trap 'rm -f "$config"' EXIT
 cat > "$config" <<'BLCFG'
