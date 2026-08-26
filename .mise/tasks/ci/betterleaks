@@ -97,7 +97,7 @@ regexTarget = "secret"
 regexes = [ '''^pass$''' ]
 
 [[allowlists]]
-description = "Known local-dev placeholder credentials (compose/mise/deploy dev-stack defaults). Anchored value filters with no path predicate: each silences its literal org-wide -- consciously accepted (a real stg/prod password equal to one of these is a password-policy problem, not a detection gap). Compensating control: ci:trufflehog's full-history --results=verified sweep does not consume this config, though it only catches live-verifiable credentials"
+description = "Known local-dev placeholder credentials (compose/mise/deploy dev-stack defaults; several are live values in dcf-local-env's committed config/values/local.env.example, which holds throwaway local-only secrets by design). Anchored value filters with no path predicate: each silences its literal org-wide -- consciously accepted (a real stg/prod password equal to one of these is a password-policy problem, not a detection gap). Compensating control: ci:trufflehog's full-history --results=verified sweep does not consume this config, though it only catches live-verifiable credentials"
 regexTarget = "secret"
 regexes = [
   '''^password123$''',
@@ -110,10 +110,25 @@ regexes = [
   '''^StrongPass123!$''',
   '''^test-admin-password$''',
   '''^CHANGE_ME$''',
+  '''^(postgres|replicator|haproxy|pgadmin|grafana|admin|patroni_api)_local$''',
+  '''^AdminLocal2026x0$''',
+  '''^lldapAdminLocal2026$''',
+  '''^-adminpass\}$''',
+  '''^FixtureAdmin123$''',
 ]
 
 [[allowlists]]
-description = "Identifier and zh-TW UI-copy false positives (the CJK entry matches pure display copy only; any ASCII letter in the value defeats it)"
+description = "Retired dcf-local-env root .env.example dev defaults (admin/admin123). condition=AND is load-bearing: scoped to the two introducing commits, so outside git history (dir mode, rewritten SHAs) it fails closed and the findings resurface"
+condition = "AND"
+commits = [
+  "30294186a69508b2528624f83f51686d32dcb321",
+  "b488ce71ad4cbc980abf91321d0cc1f2fbe570bd",
+]
+regexTarget = "secret"
+regexes = [ '''^admin$''', '''^admin123$''' ]
+
+[[allowlists]]
+description = "Identifier, psql :variable / URI-placeholder, and zh-TW UI-copy false positives (the CJK entry matches pure display copy only; any ASCII letter in the value defeats it)"
 regexTarget = "secret"
 regexes = [
   '''^(wrong|newPassword|adminPassword|change_password|reset_password)$''',
@@ -122,6 +137,8 @@ regexes = [
   '''^d\.cfg\.DCFUserAdminPassword$''',
   '''^dcf_app_password$''',
   '''^[\s\d，、。：；（）「」]*\p{Han}[\p{Han}\s\d，、。：；（）「」]*$''',
+  '''^DCF_DB_PSWD$''',
+  '''^(pw|app_pw|su_pw|rep_pw)$''',
 ]
 BLCFG
 common=(git . --redact --no-banner --config "$config")
