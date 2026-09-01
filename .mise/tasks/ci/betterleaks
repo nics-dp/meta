@@ -144,6 +144,7 @@ regexes = [
   '''^[\s\d，、。：；（）「」]*\p{Han}[\p{Han}\s\d，、。：；（）「」]*$''',
   '''^DCF_DB_PSWD$''',
   '''^(pw|app_pw|su_pw|rep_pw)$''',
+  '''^password$''',
 ]
 BLCFG
 common=(git . --redact --no-banner --config "$config")
