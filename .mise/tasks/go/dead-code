@@ -3,7 +3,10 @@
 #MISE hide=true
 #MISE raw=true
 #MISE depends=["go:install"]
-#MISE tools={"go:golang.org/x/tools/cmd/deadcode"="latest"}
+# Pinned to an x/tools master pseudo-version, not "latest": v0.49.0 (latest tag) SIGSEGVs in
+# go/callgraph/rta on Go 1.27 generic methods (e.g. math/rand/v2 (*Rand).N), fixed upstream in
+# 2be720651f1d. Return to "latest" once x/tools >= v0.50.0 is tagged. (nics-dp/meta#356)
+#MISE tools={"go:golang.org/x/tools/cmd/deadcode"="0.49.1-0.20260901183718-2be720651f1d"}
 #USAGE arg "[entry]" help="Entry package(s) (default: ./... — roots at every main package, commonly cmd/*)"
 #USAGE flag "--filter <regex>" help="Only report functions matching regex"
 #USAGE flag "--whole-program" help="Also analyze test code (compiles files tagged with GO_TEST_TAGS [default: test] and roots tests via -test)"
