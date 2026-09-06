@@ -3,7 +3,7 @@
 #MISE hide=true
 #MISE raw=true
 #MISE silent="stdout"
-#MISE tools={"aqua:golangci/golangci-lint"="2.13.1"}
+#MISE tools={"aqua:golangci/golangci-lint"="2.13.2"}
 
 golangci-lint fmt ./...
 
