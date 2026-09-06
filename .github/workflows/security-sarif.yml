@@ -288,7 +288,7 @@ jobs:
             exit 1
           fi
 
-          go install github.com/securego/gosec/v2/cmd/gosec@v2.28.0
+          go install github.com/securego/gosec/v2/cmd/gosec@v2.29.0
           gosec_bin="${GOBIN}/gosec"
           if [ ! -f "$gosec_bin" ] || [ -L "$gosec_bin" ] || [ ! -x "$gosec_bin" ]; then
             echo "::error::installed gosec is not a regular non-symlink executable"
