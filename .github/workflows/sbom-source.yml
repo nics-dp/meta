@@ -95,7 +95,11 @@ jobs:
         uses: anchore/sbom-action@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26 # v0.24.2
         with:
           path: ${{ inputs.scan_path }}
-          format: cyclonedx-json
+          # Pin the spec version: syft >= 1.51 defaults cyclonedx-json to 1.7,
+          # which trivy 0.70 / grype 0.110 cannot decode ("invalid specification
+          # version" / "sbom format not recognized"). Drop the pin once both
+          # scanners read 1.7.
+          format: cyclonedx-json@1.6
           output-file: sbom-source.cdx.json
           upload-artifact: false
           dependency-snapshot: ${{ !inputs.snapshot }}
