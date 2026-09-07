@@ -500,7 +500,9 @@ jobs:
           pipx install --force semgrep
           # --enable-nosem honours in-repo `nosem` suppression comments, mirroring
           # .mise/tasks/ci/semgrep (this differs only by dropping --error so
-          # findings populate the Security tab without failing the job).
+          # findings populate the Security tab without failing the job). It only
+          # affects the exit code: the SARIF still carries the suppressed findings,
+          # which the next step drops before upload.
           semgrep scan \
             --enable-nosem \
             --config p/ci \
@@ -510,6 +512,36 @@ jobs:
             --config p/javascript \
             --sarif --output semgrep.sarif \
             -- "$SCAN_PATH"
+
+      # semgrep honours `nosemgrep` for its exit code but still writes the
+      # suppressed findings into the SARIF with `suppressions: [{"state":"accepted"}]`.
+      # GitHub code scanning does not act on that property -- the alert is created
+      # and stays open (dcf-platform#176 sat open for weeks with the suppression in
+      # every uploaded SARIF) -- so drop suppressed results before upload. Fail-safe
+      # like the govulncheck filter above: on any error the original SARIF is kept.
+      - name: Drop nosemgrep-suppressed results from semgrep SARIF
+        if: always() && inputs.run_semgrep && hashFiles('semgrep.sarif') != ''
+        run: |
+          python3 - <<'FILTER_PY'
+          import json, os
+          SRC = "semgrep.sarif"
+          try:
+              with open(SRC, encoding="utf-8") as fh:
+                  data = json.load(fh)
+              removed = 0
+              for run in data.get("runs", []) or []:
+                  before = run.get("results", []) or []
+                  after = [r for r in before if not (r.get("suppressions") or [])]
+                  removed += len(before) - len(after)
+                  run["results"] = after
+              tmp = SRC + ".tmp"
+              with open(tmp, "w", encoding="utf-8") as fh:
+                  json.dump(data, fh)
+              os.replace(tmp, SRC)
+              print(f"semgrep-filter: removed {removed} nosemgrep-suppressed result(s)")
+          except Exception as e:
+              print(f"semgrep-filter: skipped ({e}); original SARIF kept")
+          FILTER_PY
 
       - name: Upload semgrep SARIF
         if: always() && inputs.run_semgrep && hashFiles('semgrep.sarif') != ''
