@@ -80,6 +80,18 @@ jobs:
           build-mode: ${{ matrix.build-mode }}
           dependency-caching: true
           queries: security-extended,security-and-quality
+          # actions/unpinned-tag flags every `uses: nics-dp/meta/.github/workflows/*.yml@main`
+          # in every consumer (246 open alerts across 21 repos on 2026-09-07). Pinning our
+          # own meta by branch is a deliberate org policy (see the Scorecard dismissals:
+          # "intentional @main pins"); third-party actions are digest-pinned by Renovate
+          # (renovate-preset.json pinDigests), so the query adds nothing here. Excluded
+          # via query-filters rather than dismissed per repo, which would recur on every
+          # new workflow. `queries:` above stays; it overrides only a `queries:` key in
+          # this config, which deliberately has none.
+          config: |
+            query-filters:
+              - exclude:
+                  id: actions/unpinned-tag
           external-repository-token: ${{ steps.priv-token.outputs.token }}
 
       - name: Configure access to private Go modules
