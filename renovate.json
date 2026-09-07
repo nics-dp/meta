@@ -35,7 +35,8 @@
       "matchPackageNames": [
         "jdx/mise"
       ],
-      "automerge": false
+      "automerge": false,
+      "minimumReleaseAge": "7 days"
     }
   ],
   "customManagers": [
