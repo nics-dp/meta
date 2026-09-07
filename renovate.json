@@ -28,6 +28,14 @@
       ],
       "automerge": false,
       "minimumReleaseAge": "7 days"
+    },
+    {
+      "description": "Keep synchronized mise pins in one update",
+      "groupName": "mise version pins",
+      "matchPackageNames": [
+        "jdx/mise"
+      ],
+      "automerge": false
     }
   ],
   "customManagers": [
