@@ -40,6 +40,14 @@ jobs:
           build-mode: none
           dependency-caching: true
           queries: security-extended,security-and-quality
+          # Mirror of the query-filters block in codeql-reusable.yml (#367): this workflow
+          # calls codeql-action directly instead of going through the reusable, so the
+          # exclusion has to be restated here or meta's own self-*.yml `@main` pins keep
+          # raising actions/unpinned-tag (#369). Keep the two blocks identical.
+          config: |
+            query-filters:
+              - exclude:
+                  id: actions/unpinned-tag
 
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4.37.9
