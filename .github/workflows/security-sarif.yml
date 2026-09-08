@@ -513,25 +513,32 @@ jobs:
             --sarif --output semgrep.sarif \
             -- "$SCAN_PATH"
 
-      # semgrep honours `nosemgrep` for its exit code but still writes the
-      # suppressed findings into the SARIF with `suppressions: [{"state":"accepted"}]`.
-      # GitHub code scanning does not act on that property -- the alert is created
-      # and stays open (dcf-platform#176 sat open for weeks with the suppression in
-      # every uploaded SARIF) -- so drop suppressed results before upload. Fail-safe
-      # like the govulncheck filter above: on any error the original SARIF is kept.
+      # Raw Semgrep SARIF marks nosemgrep with kind=inSource and no status.
+      # Drop only unambiguous in-source suppressions before upload (meta#366).
+      # Keep rejected, underReview, malformed, and unknown suppression formats.
+      # The historical GitHub API export uses state, not this raw input format.
+      # Like the govulncheck filter above, any error keeps the original SARIF.
       - name: Drop nosemgrep-suppressed results from semgrep SARIF
         if: always() && inputs.run_semgrep && hashFiles('semgrep.sarif') != ''
         run: |
           python3 - <<'FILTER_PY'
           import json, os
           SRC = "semgrep.sarif"
+          def is_nosemgrep(suppressions):
+              return isinstance(suppressions, list) and bool(suppressions) and all(
+                  isinstance(s, dict)
+                  and s.get("kind") == "inSource"
+                  and s.get("status", "accepted") == "accepted"
+                  and "state" not in s
+                  for s in suppressions
+              )
           try:
               with open(SRC, encoding="utf-8") as fh:
                   data = json.load(fh)
               removed = 0
               for run in data.get("runs", []) or []:
                   before = run.get("results", []) or []
-                  after = [r for r in before if not (r.get("suppressions") or [])]
+                  after = [r for r in before if not is_nosemgrep(r.get("suppressions"))]
                   removed += len(before) - len(after)
                   run["results"] = after
               tmp = SRC + ".tmp"

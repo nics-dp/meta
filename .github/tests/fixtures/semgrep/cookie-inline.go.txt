@@ -1,0 +1,24 @@
+package fixture
+
+import "net/http"
+
+// secure is caller-selected so plain-HTTP localhost can omit Secure.
+func suppressedCookie(secure bool) *http.Cookie {
+	return &http.Cookie{ // nosemgrep: go.lang.security.audit.net.cookie-missing-secure.cookie-missing-secure
+		Name:     "session",
+		Value:    "synthetic",
+		Secure:   secure,
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+	}
+}
+
+func unsuppressedCookie(secure bool) *http.Cookie {
+	return &http.Cookie{
+		Name:     "session",
+		Value:    "synthetic",
+		Secure:   secure,
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+	}
+}
