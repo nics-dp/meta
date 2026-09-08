@@ -41,11 +41,46 @@ The public rule is pinned to
 The only rule change was expanding its ID from `cookie-missing-secure` to
 `go.lang.security.audit.net.cookie-missing-secure.cookie-missing-secure`.
 
+To recreate `rule.yaml`, run the following from the repository root. It downloads
+the pinned public rule into a new temporary directory, checks the upstream bytes,
+replaces exactly one ID line without reformatting YAML, and checks the resulting
+local-rule SHA256 before writing it. Keep this shell open for the scan below.
+
+```sh
+set -eu
+fixture_dir="$PWD/.github/tests/fixtures/semgrep"
+repro_dir="$(mktemp -d "${TMPDIR:-/tmp}/semgrep-fixture.XXXXXXXX")"
+cp "$fixture_dir/cookie-inline.go.txt" "$repro_dir/cookie-inline.go"
+cd "$repro_dir"
+curl -q --fail --silent --show-error --location --max-time 60 \
+  --proto '=https' --proto-redir '=https' \
+  'https://raw.githubusercontent.com/semgrep/semgrep-rules/40b8c63f75dc7c22c8a77482d73bfb864b146f7e/go/lang/security/audit/net/cookie-missing-secure.yaml' \
+  --output rule.upstream.yaml
+python3 - <<'PY'
+import hashlib
+from pathlib import Path
+
+upstream = Path("rule.upstream.yaml").read_bytes()
+if hashlib.sha256(upstream).hexdigest() != "1b94d28f69c35ef81b92b0a8a845dbb8c26cd1174ab627d8abcd7e292a5d4d0e":
+    raise SystemExit("upstream rule SHA256 mismatch")
+old = b"- id: cookie-missing-secure\n"
+new = b"- id: go.lang.security.audit.net.cookie-missing-secure.cookie-missing-secure\n"
+if upstream.count(old) != 1:
+    raise SystemExit("expected exactly one upstream rule ID line")
+local = upstream.replace(old, new, 1)
+digest = hashlib.sha256(local).hexdigest()
+if digest != "3b0df223535ee9912a0febfef7e57a799fe664596417d9363c5573bef9b0e584":
+    raise SystemExit("local rule SHA256 mismatch")
+Path("rule.yaml").write_bytes(local)
+print(f"rule.yaml SHA256: {digest}")
+PY
+```
+
 Each version was installed into a separate temporary virtual environment. Scans
 used an empty inherited environment, isolated HOME/cache, and a macOS sandbox
 denying network access and reads under the user's home directory. From the
-fixture directory, with `$semgrep` pointing to that version's executable and
-`$output` to a new local output file:
+reproduction directory above, with `$semgrep` pointing to that version's executable
+by absolute path and `$output` to a new local output file:
 
 ```sh
 "$semgrep" scan --enable-nosem --config rule.yaml \
@@ -57,8 +92,11 @@ Both scans succeeded: CLI findings = 1, raw SARIF results = 2, exactly one
 `suppressions: [{"kind":"inSource"}]`, no `status` or `state`. The original filter
 and the corrected filter both remove that result and preserve the ordinary
 finding and all other SARIF data unchanged. The `.txt` suffix keeps the synthetic
-Go source out of normal repository language scans; rename it in an isolated
-fixture directory when reproducing the scanner output.
+Go source out of normal repository language scans; the preparation block copies
+it to `cookie-inline.go` only in the temporary reproduction directory.
+
+After inspecting the output, return with `cd "$fixture_dir"` and remove only the
+temporary directory named by `$repro_dir`.
 
 | File | SHA256 |
 | --- | --- |
