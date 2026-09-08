@@ -56,9 +56,10 @@ description: Review pull requests in this repository for concrete defects and re
    (`get_file_contents` takes a commit as `sha`; `ref` is a branch or tag).
    `search_code` searches only the default branch, so use it to find paths,
    then read the file at the branch or commit you need. Cite the path
-   returned by the tool. If the tool is unavailable or returns nothing,
-   label the finding "needs cross-repo verification" instead of asserting
-   it.
+   returned by the tool. If the tool is unavailable or returns nothing, do not
+   report it as a finding: raise the point as a non-blocking note that names
+   the repository and file to check and states that the cross-repo evidence was
+   not obtained.
 4. Report a finding only when it identifies a concrete defect or contract
    violation on a changed line, explains the observable failure or risk, and
    gives an actionable correction. Verify claims about external APIs or tools
