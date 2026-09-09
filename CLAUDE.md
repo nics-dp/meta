@@ -1,139 +1,314 @@
-# meta
+# Project: meta (nics-dp shared CI/CD configuration)
 
-Guidance for Claude Code working in this repository.
+The meta-configuration repository of the `nics-dp` organization. There is no
+buildable code here, only what many nics-dp repositories consume: shared
+mise task atoms (`.mise/tasks/`), reusable GitHub Actions workflows
+(`.github/workflows/`, called via `workflow_call`), facade templates
+(`templates/facades/`), shared tool configs fetched at atom runtime (`configs/`)
+and the org Renovate preset (`renovate-preset.json`). Stack: bash atoms under
+mise · GitHub Actions YAML · Renovate JSON.
 
-## Repository Purpose
+This file is an index, not a description. The code is the source of truth; each
+entry below says where to look and which invariants are intentional. GitHub
+Copilot code review reads this file too. Long-form rationale lives in
+`docs/design-notes/`; `README.md` (zh-TW) carries the per-atom and per-workflow
+tables and the consumer setup steps. Because this repository is upstream of its
+consumers, an entry here is a contract, and how a change reaches them depends on
+the contract: an atom on the consumer's next `mise run` after `meta:bump` or a
+cache expiry, a `configs/` file on the next atom run unless the consumer keeps a
+repo-local copy, a reusable workflow on its own callers' next run, the Renovate
+preset on Renovate's next evaluation, a facade template never (see the Gotchas
+and the polyrepo map before judging blast radius).
 
-Meta-configuration repository for the nics-dp organization. There is **no buildable code** here — only CI/CD infrastructure and shared configuration:
+## Where things are
 
-- **Reusable GitHub Actions workflows** (`.github/workflows/`) — called via `workflow_call`. `mise-task.yml` is the core (checkout + `jdx/mise-action` + mise atom + step summary). Release / SBOM / CodeQL / security / utility workflows live here too.
-- **Shared mise atomic tasks** (`.mise/tasks/`) — consumed by other repos via `git::` remote include. All atoms hidden (`#MISE hide=true`).
-- **Facade templates** (`templates/facades/mise.<archetype>.toml`) — `go-service`, `go-lib`, `frontend`, `python`, `image`. Consumer repos copy one as their `mise.toml`.
-- **Shared configs** (`configs/`) — fetched at atom runtime, never committed into consumers.
-- **Renovate preset** (`renovate-preset.json`) — org-level config. `configs/renovate.json` is the consumer-side stub that extends it.
+- `.mise/tasks/<category>/<name>` — one executable bash file per atom under
+  `ci/`, `iac/`, `go/`, `node/`, `py/`, `sbom/`, `gs/`, `dc/`, `meta/`, `mise/`.
+  Each is hidden (`#MISE hide=true`); an atom that needs a tool beyond bash
+  and the consumer's own toolchain declares it inline in `#MISE tools=`.
+  `lib/` holds sourced helpers, not tasks (`ci-isolate`,
+  `fetch-config`, `go-env`, `go-version`, `logs`, `py-env`).
+- `.github/workflows/` — the reusable workflows: `mise-task.yml` (the runner
+  every consumer CI matrix calls), `auto-release.yml`, `go-release.yml`,
+  `image-release.yml`, `sbom-source.yml`, `sbom-image.yml`,
+  `codeql-reusable.yml`, `security-sarif.yml`, `dependency-review.yml`,
+  `scorecard.yml`, `go-dependency-submission.yml`,
+  `node-dependency-submission.yml`, `artifacts-comment.yml`,
+  `pr-issue-check.yml`. Meta's own: `ci.yml`, `codeql.yml` and the `self-*.yml`
+  callers that dogfood the reusables. `.github/scripts/github-actions-scanner.sh`
+  is the wrapper `ci.yml`'s scanner job execs. Inputs, secrets, outputs and
+  defaults are the `workflow_call` declarations at the top of each file.
+- `templates/facades/mise.<archetype>.toml` — `go-service`, `go-lib`,
+  `frontend`, `python`, `image`. Facade vocabulary (`init`, `test`, `ci`,
+  `release-check`, `all`, …) lives only here; a consumer copies one as its
+  `mise.toml` and extends it.
+- `configs/` — `eslint.config.js`, `.prettierrc.json`, `.prettierignore`,
+  `.oxfmtrc.json`, `lighthouserc.json` / `.yml`, `playwright.config.ts`
+  (env-driven via `PW_*`), and `renovate.json` (the consumer-side stub that
+  extends the preset).
+- `renovate-preset.json` — the org preset consumers extend. `renovate.json` —
+  meta's own config: extends the preset and adds the custom managers for pins
+  that exist only in this repository's workflows and atoms.
+- `zizmor.yml` — Zizmor dispositions keyed by `file:line`.
+- `mise.toml` — meta's own facade (`ci`, `all`, `sbom`) over the local
+  `.mise/tasks`; `[tools]` holds only project-level tools (`act`) because atoms
+  declare theirs inline.
+- `docs/design-notes/` — rationale moved out of this file.
 
-## How Configs Are Consumed
+## Commands
 
-**GitHub Actions workflows** — consumer repos call the reusables:
+`mise tasks` lists the facades; `mise tasks ls --hidden` lists the atoms.
 
-```yaml
-jobs:
-  checks:
-    name: ${{ matrix.name }}
-    strategy:
-      matrix:
-        include:
-          - { name: "Go Lint", task: "go:lint-check" }
-          - { name: "Go Test", task: "go:test --race --coverage" }
-    uses: nics-dp/meta/.github/workflows/mise-task.yml@main
-    with:
-      name: ${{ matrix.name }}
-      task: ${{ matrix.task }}
-```
+- `mise run all` is the whole validation gate and the entry point
+  `auto-release.yml` runs: `mise:validate`, `iac:actionlint`, `iac:shellcheck`,
+  `iac:zizmor` and `ci` (`iac:trivy` + `ci:semgrep`), all read-only and in
+  parallel. There is no build or test task. The release driver fails when
+  `mise run all` leaves the working tree modified, so every step of `all` must
+  stay read-only. → the `[tasks.all]` comment in `mise.toml`, the "Run mise
+  run all" step in `auto-release.yml`.
+- `mise run ci` is `iac:trivy` + `ci:semgrep` alone. `iac:trivy` runs with
+  `--exit-code 0`, so findings do not fail the gate; a Trivy operational
+  error (bad config, scan or DB failure) still exits non-zero and does.
+- Single workflow file: `mise exec -- actionlint <file>`; then `mise run all`
+  before committing a workflow change.
+- Secret scans are not in `all`: `ci.yml` runs `ci:betterleaks` on every PR and
+  `ci:trufflehog` only on PRs whose base is `main` or `release/**`;
+  `auto-release.yml` runs `ci:trivy-license`, `ci:betterleaks` and
+  `ci:trufflehog` as separate steps after `all`.
+- Consumers refresh `?ref=main` atoms with `mise run meta:bump`
+  (`mise cache clear` + `mise install`); each facade template chains it into
+  `init` and `update`, except `mise.image.toml`, whose `init` is a no-op and
+  which chains it into `update` alone.
 
-**Mise task sharing** — `git::` remote include in the consumer's `mise.toml`:
+## Intentional conventions — do not "fix"
 
-```toml
-[task_config]
-includes = ["git::https://github.com/nics-dp/meta.git//.mise/tasks?ref=main"]
-```
+Rule, why it is intentional, where it is pinned. Read the named file or comment
+before changing any of these; the mechanism is in the code, the history in
+`docs/design-notes/`.
 
-**Renovate** — consumer `renovate.json`: `{"extends": ["github>nics-dp/meta:renovate-preset"]}`
+**Atoms**
 
-**Shared configs** — `lib/fetch-config` resolves each file in order: (1) repo-local file present → use verbatim, never fetch, never delete (a repo can pin its own); (2) otherwise `curl` from `$META_CONFIG_BASE` (default `raw.githubusercontent.com/nics-dp/meta/main/configs`) with retries, registered for cleanup on EXIT; (3) still failing → **fail loud**, never fall through to the tool's built-in defaults (a `--check` would then flag every file, a `--fix` would rewrite the tree in the wrong style). Some configs are deliberately **not** shared:
+- Every atom is hidden (`#MISE hide=true`) and declares inline any tool it
+  needs beyond bash (`#MISE tools={…}`), so a consumer's `mise tasks ls`
+  shows only its own facade and tool pins travel with the atom. Facade
+  vocabulary never goes into an atom. → any file under `.mise/tasks/`,
+  `templates/facades/`.
+- Atoms and helpers are tracked as stage-0 regular files with mode `100644` or
+  `100755`; `iac:shellcheck` enumerates them from the git index and fails
+  closed on anything else (symlink, empty file, unexpected path).
+  → `.mise/tasks/iac/shellcheck`.
+- The definition checks `mise:validate`, `iac:shellcheck` and `iac:zizmor`
+  source `lib/ci-isolate` first: it points `GIT_CONFIG_GLOBAL` at an empty
+  mode-0600 file and unsets the `GH_TOKEN` / `GITHUB_TOKEN` and `GOPRIVATE`
+  families so an external tool cannot read the runner's credentials.
+  → `.mise/tasks/lib/ci-isolate`.
+- `go:lint-check` runs `golangci-lint fmt --diff` and `golangci-lint run`, both
+  before the exit code is decided (not fail-fast): `run` reaches formatting only
+  where a repo declares `formatters:` and never for test files. → the header
+  comment in `.mise/tasks/go/lint-check`.
+- `go:sast` pins gosec in its `#MISE tools=` header; `security-sarif.yml` pins
+  the same tool in its `go install` line, and the "synchronized gosec pins"
+  custom manager in `renovate.json` moves both together. Do not bump one alone.
+- `meta:bump` is `mise cache clear` + `mise install` and nothing else; it is
+  unconditional — pinning a tag instead of `?ref=main` bounds which revision
+  the include resolves to, it does not make the task a no-op.
+  → `.mise/tasks/meta/bump`.
+- File-mutating lint / format atoms are named `*-fix` and paired with a
+  `*-check`; the facade templates define `release-check` as `ci` minus the
+  `*-fix` atoms on that basis. → `templates/facades/*.toml`.
 
-- `.golangci.yml` — per-repo committed; gofumpt needs a per-module `module-path`, so `go:lint-check` / `go:lint-fix` read the consumer's own file. `go:lint-check` runs `golangci-lint fmt --diff` **and** `run`, both before the exit code is decided (not fail-fast), because `run` only reaches formatting where the repo declares a `formatters:` section and `run.tests: false` excludes test files.
-- `vitest.config.ts` / `knip.json` — per-repo committed; `node:test` / `node:knip` / `node:bench-compare` error out when missing.
-- `node:lighthouse` prefers any repo-local rc, else fetches `configs/lighthouserc.json` (or `.yml` via `META_LIGHTHOUSE_DEFAULT`).
+**Shared configs** → `docs/design-notes/shared-config-resolution.md`
 
-**Auth (GitHub Apps + DockerHub)**
+- `lib/fetch-config` resolves each file as repo-local first (used verbatim,
+  never fetched, never deleted), else fetched from `META_CONFIG_BASE` with
+  retries and removed on EXIT, else fail loud. It never falls back to the tool's
+  built-in defaults and never logs the expanded base URL (it may carry a
+  credential). Detection is by file presence, not git status. → the header
+  comment of `.mise/tasks/lib/fetch-config`; callers are the `node:lint-*`,
+  `node:format-*`, `node:oxfmt-*` and `node:e2e` atoms.
+- `node:lighthouse` applies the same repo-local-wins rule on its own, then
+  fetches `lighthouserc.json` (or `.yml` via `META_LIGHTHOUSE_DEFAULT`).
+  → `.mise/tasks/node/lighthouse`.
+- Deliberately not shared: `.golangci.yml` (gofumpt needs a per-module
+  `module-path`; `go:lint-check` / `go:lint-fix` read the consumer's file) and
+  the vitest / knip configs (`node:test`, `node:bench-compare`, `node:knip` fail
+  when the repo-local file is missing instead of running on tool defaults).
+  → the guard blocks in those atoms.
 
-- **nics-dp-ci-read** App — private module access, CodeQL on private repos, release/snapshot builds, `mise-task.yml` private-modules flag. Client-id from org **variable** `CI_READ_APP_CLIENT_ID` (auto-available to reusables via `vars`); private key from org **secret** `CI_READ_APP_PRIVATE_KEY`, passed by callers as `ci_read_app_private_key`. No PAT. The legacy `ci_read_app_id` input is gone — do not pass it.
-- **nics-dp-scorecard** App — `scorecard.yml` ONLY. Org var `SCORECARD_APP_CLIENT_ID` + secret `scorecard_app_private_key`, minted into a short-lived `repo_token` so Scorecard's API queries (Branch-Protection needs `Administration: Read`) score correctly on private repos. Without it Scorecard falls back to `GITHUB_TOKEN`, queries fail, and the run stays non-blocking.
-- `DOCKERHUB_USERNAME` / `DOCKERHUB_TOKEN` — `image-release.yml` push.
+**`mise-task.yml`** → `docs/design-notes/mise-task-invariants.md`
 
-## Key Files
+- `MISE_MINIMUM_RELEASE_AGE: "0"` stays; `jdx/mise-action` pins an exact mise
+  version, not `latest`; `MISE_USE_VERSIONS_HOST` is left at the mise default.
+  The version pin is carried in `mise-task.yml`, `auto-release.yml`'s
+  `mise_version` default and `self-release.yml`, and the "synchronized mise
+  pins" custom manager in `renovate.json` bumps them together. → the `env:`
+  comment on the `run` job.
+- `inputs.task` reaches the shell through an env variable and `read -ra`, never
+  an inline `${{ }}` (semgrep run-shell-injection). → the "Run" step comment.
+- The private-module App token is minted only when `private-modules` is set and
+  the trigger is not `pull_request_target` / `workflow_run`
+  (`UNTRUSTED_TRIGGER`); the job-local gitconfig lives in `RUNNER_TEMP` and is
+  revoked under `always()`; the remote Go cache is disabled whenever private
+  modules are in scope. → `HAS_CI_APP`, "Revoke private-module credential",
+  "Resolve Go cache".
+- The step summary reads only the job-local output file the "Run" step created
+  (`output_ready`), never runner leftovers. → "Job summary".
 
-- `.mise/tasks/{ci,iac,go,node,py,sbom,gs,meta,mise,lib,dc}/` — atomic tasks, all hidden. `mise:validate`, `iac:shellcheck`, `iac:zizmor`, `iac:actionlint` validate task/workflow definitions. `lib/*` are sourced helpers, not tasks (`ci-isolate`, `fetch-config`, `go-env`, `go-version`, `py-env`, `logs`). `dc/` = Docker Compose lifecycle.
-- `mise.toml` — tool versions + meta's own aggregates: `ci` = `iac:trivy` + `ci:semgrep`; `all` = `mise:validate` + `iac:actionlint` + `iac:shellcheck` + `iac:zizmor` + `ci` (the auto-release driver's entry point; secret/license scans run separately in the driver).
-- `configs/` — `eslint.config.js` (+ eslint-plugin-security), `.prettierrc.json` / `.prettierignore`, `.oxfmtrc.json`, `lighthouserc.json` / `lighthouserc.yml`, `playwright.config.ts` (env-driven via `PW_*`), `renovate.json`.
-- `zizmor.yml` — ignore dispositions keyed by **`file:line`**. See the Meta CI note below before editing any workflow.
-- `renovate-preset.json` — org preset (replaces Dependabot).
+**Reusable workflows** → `docs/design-notes/security-and-supply-chain-workflows.md`,
+`docs/design-notes/pr-issue-check.md`
 
-## Workflow Architecture
+- `security-sarif.yml` is informational by default; fail-closed enforcement
+  exists only under `run_go && run_gosec && gosec_blocking`
+  (`EFFECTIVE_BLOCKING`), and caller-configuration checks such as `scan_path`
+  validation fail independently of it. The Go scanners run on the toolchain of
+  the repository root `go.mod` unless `go_version` is set. → the input
+  descriptions and the "Set up Go" step.
+- `GO-2026-5932` (`golang.org/x/crypto/openpgp`, unmaintained, no fix) is
+  filtered per scanner with the narrowest scope each SARIF can express:
+  govulncheck drops it at `note` level only, the Trivy SARIF in
+  `sbom-source.yml` / `sbom-image.yml` drops it by rule id, `scorecard.yml`
+  drops a `VulnerabilitiesID` finding whose sole vuln is that id; Grype needs no
+  filter because `only-fixed: true` already excludes it. Each filter keeps the
+  original SARIF on error. → the filter steps naming that id.
+- `scorecard.yml` never publishes to the public OpenSSF API:
+  `publish_results: false` is hardcoded and the `publish` input is kept only for
+  caller compatibility. The posture-noise filter writes `results.filtered.sarif`
+  and uploads under `category: scorecard`. → the header comment and the filter
+  step.
+- `pr-issue-check.yml` enforces only PRs whose base equals `enforce_base`
+  (default `dev`); other bases, fork PRs and Bot-authored PRs
+  (`pull_request.user.type == "Bot"`) pass with a skip summary — closing
+  keywords register only on the default branch, forks cannot mint the App
+  token, and automation PRs have no human issue behind them. The
+  closing-reference lookup uses `GITHUB_TOKEN`; the Project field lookup uses
+  the ci-read App token. → the header comment, the "Guard" step.
+- `dependency-review.yml` must be called from a `pull_request`- or
+  `pull_request_target`-triggered workflow (the action needs the PR base/head
+  refs); `node-dependency-submission.yml` exists apart from the Go one
+  because GitHub's dependency graph does not parse `bun.lock`. → the header
+  comments.
+- `auto-release.yml` runs `mise run all` and fails if the tree changed; the
+  secret / license scans run as separate steps after it. → "Run mise run all".
 
-### Core
+**GitHub Apps and secrets** → `docs/design-notes/github-apps-and-secrets.md`
 
-**`mise-task.yml`** — Inputs: `task`, `name`, `runs_on` (JSON via `fromJSON()`), `fetch-depth`, `private-modules`. Secret: `ci_read_app_private_key` (client-id via the `CI_READ_APP_CLIENT_ID` org var; the legacy `ci_read_app_id` input is gone). Encapsulates SHA-pinned checkout + `jdx/mise-action` + optional private-module git config + atom run + step summary + enforce.
+- Client ids come from org variables (`CI_READ_APP_CLIENT_ID`,
+  `SCORECARD_APP_CLIENT_ID`, `PRE_RELEASE_APP_CLIENT_ID`), auto-available to
+  reusables via `vars`; private keys are passed by the caller as
+  `workflow_call` secrets (`ci_read_app_private_key`,
+  `scorecard_app_private_key`, `pre_release_app_private_key`). No PAT anywhere.
+  The legacy `ci_read_app_id` input no longer exists. → each workflow's
+  `secrets:` declaration.
+- The scorecard App is used by `scorecard.yml` only; the release App only by
+  `auto-release.yml` for non-dry-run releases; DockerHub credentials only by
+  `image-release.yml` (`dockerhub_username` / `dockerhub_token`).
 
-Implementation invariants (do **not** "simplify" these away):
+**Renovate**
 
-1. `MISE_MINIMUM_RELEASE_AGE: "0"` disables mise's supply-chain release-age control. Left enabled it injects a pip-only `--uploaded-prior-to=` flag that the uv-backed pipx installer rejects (breaks semgrep et al.). `"0"` requires mise ≥ 2026.6.3.
-2. `jdx/mise-action` pins an **exact** mise version, not `latest`, because the self-hosted pool reuses cached mise binaries of mixed versions. Read the current value from its `version:` input; `auto-release.yml`'s `mise_version` default and `self-release.yml`'s explicit pass carry the same version, and the `jdx/mise` custom manager in `renovate.json` bumps all three together. Floor is ≥ 2026.7.0: older builds embed a Sigstore trust root predating GitHub's 2026-06-12 TSA cert rotation and fail artifact-attestation verification on tool installs (jdx/mise#10680).
-3. `MISE_USE_VERSIONS_HOST` stays **enabled** (mise default). `mise-versions.jdx.dev` occasionally 403s, but mise then falls back source-direct — cosmetic noise. Setting it `false` to silence the noise removed the cache/fallback layer, and a transient GitHub 504 hard-failed `latest` tool installs (e.g. trivy).
+- The org preset leaves `github-actions` unpinned by digest on purpose so the
+  mutable `nics-dp/meta/...@main` reusables keep working; Dockerfile and
+  compose images do get `pinDigests`. Internal `github.com/nics-dp/**` Go
+  modules are disabled (they move through `go:lib-remote`). → the
+  `description` fields of those `packageRules` in `renovate-preset.json`.
+- Pins that exist only in this repository's workflows and atoms (quill, parlay,
+  gosec, govulncheck, air, shellcheck, zizmor, grype, the mise version) are
+  tracked by the custom managers in meta's own `renovate.json`, not the preset.
+  Zizmor action + CLI, Anchore action + Grype and the mise pins are grouped and
+  never automerge. → `renovate.json`.
 
-### Release & Build
+**Meta's own CI** → `docs/design-notes/meta-self-ci.md`
 
-- **`auto-release.yml`** — Snapshot/release driver; runs `mise run all` plus the secret/license scans, and takes `mise_version` (see invariant 2).
-- **`go-release.yml`** — Multi-arch Go binary release (cosign, macOS notarize via quill, GitHub Release).
-- **`image-release.yml`** — Docker image to DockerHub + GHCR + attestations + cosign keyless. Outputs `digest` for `sbom-image.yml`.
-- **`sbom-image.yml`** — Container CycloneDX 1.6 SBOM (anchore/sbom-action + parlay enrich) + Trivy + Grype scan → Release + Security tab. Its Trivy SARIF (`category: trivy-image`) drops `GO-2026-5932` (`golang.org/x/crypto/openpgp` unmaintained) by rule id unconditionally — Trivy SARIF carries no reachability level (jq, fail-safe: keeps the original on error). The unfixed advisory still ships in the Trivy JSON release asset. Grype needs no filter (`only-fixed: true` already excludes a no-fix advisory).
-- **`sbom-source.yml`** — Filesystem SBOM; input `project_name` for artifact naming; same `GO-2026-5932` filter (`category: trivy-source`).
-- **`self-release.yml`** — meta dogfooding `auto-release.yml`.
+- The check names in `ci.yml` (`Actionlint`, `Mise Tasks`, `ShellCheck`,
+  `Zizmor Action`, `Grype Path (high, fixed)`,
+  `GitHub Actions Scanner (experimental)`, `Secret Scan`, `Deep Secret Scan`)
+  are what an org-ruleset required-check policy references; `Zizmor Action`
+  replaced the old matrix `Zizmor` name, so rename together with the ruleset,
+  not before.
+- `Zizmor Action` passes `token: "offline-placeholder"`: the action requires a
+  value even with online audits disabled, and it is deliberately not
+  `github.token` or a secret. → the comment above that input in `ci.yml`.
+- `GitHub Actions Scanner (experimental)` is informational: findings and
+  failures are reported as `findings` / `incomplete`, never as a false `clean`,
+  and the repo token reaches the scanner only on trusted triggers.
+  → the `GITHUB_TOKEN` expression and "Classify scanner result" in `ci.yml`.
+- `Grype Path (high, fixed)` blocks fixed High/Critical findings only
+  (`only-fixed: true`, `severity-cutoff: high`) and fails on any cleanup
+  failure; Medium and unfixed findings are outside its policy. → the
+  `grype-path` job in `ci.yml`.
 
-### CodeQL
+## Gotchas the code does not show
 
-- **`codeql-reusable.yml`** — CodeQL Advanced (configurable language matrix + Go build).
-- **`codeql.yml`** — meta's own (workflow YAML scan only).
+- `?ref=main` is mutable: an atom change is live for every consumer on its next
+  `mise run` after `meta:bump` or a cache expiry, and a `configs/` change is
+  live immediately (raw URL fetched at runtime) except where a consumer commits
+  a repo-local copy. There is no sync workflow.
+- An atom signature change is a breaking API change for every consumer in the
+  polyrepo map. The intended escape is a tag (`git tag -a v1 …`) and moving
+  consumers from `?ref=main` to `?ref=v1`.
+- Inserting or removing workflow lines shifts `zizmor.yml`'s `file:line`
+  dispositions. The symptom is a `dangerous use of GitHub App tokens` finding
+  (`iac:zizmor` exit 14) that looks like a new security problem but is only an
+  offset; re-point the entries.
+- `lib/fetch-config` and `node:lighthouse` detect a repo-local config by file
+  presence, so a fetched file left behind by a hard-killed run is treated as
+  repo-local until removed.
+- `ci_read_app_id` is not a declared input any more; GitHub rejects a call that
+  still passes it.
+- `mise-task.yml` and the definition-check atoms assume a bash-capable runner
+  and a `RUNNER_TEMP` that is absolute and single-line; the steps refuse to run
+  otherwise rather than fall back.
+- `security-sarif.yml`'s `scan_path` scopes only trivy config and semgrep; the
+  Go scanners always build the root module.
 
-### Security
+## Testing and style
 
-**`security-sarif.yml`** — Runs the gate-only scanners (gosec, govulncheck, semgrep, trivy config, hadolint) and uploads each under its own code-scanning SARIF category. Findings are informational by default.
+- There is no general test task. Validation is `mise run all`; run it (and
+  `mise exec -- actionlint <file>` for a single workflow) before committing.
+  Regression suites live under `.github/tests/`; a change to the semgrep
+  suppression filter in `security-sarif.yml` must run
+  `test_semgrep_suppression.py`. → the command in
+  `.github/tests/fixtures/semgrep/README.md`.
+- New atom: `.mise/tasks/<category>/<name>`, first lines `#!/usr/bin/env bash`,
+  `#MISE description=…`, `#MISE hide=true`, tools in `#MISE tools={…}` when
+  the atom needs any, mode `100755`. Bash only; ShellCheck runs at
+  `--shell=bash --severity=warning`.
+- Workflows: every `uses:` of an external action is SHA-pinned with a version
+  comment. Reusable workflows are the deliberate exception: `ci.yml` calls
+  `mise-task.yml` by local path and the `self-*.yml` callers use `@main`, the
+  same mutable ref every consumer uses. Workflow inputs cross into `run:`
+  through `env:`, not inline expressions. Private job state — the gitconfigs
+  that carry App tokens, `security-sarif.yml`'s `GOBIN`, `mise-task.yml`'s
+  job-local Go cache roots — lives under `RUNNER_TEMP` and is removed under
+  `always()`; scanner outputs meant for upload (`results.filtered.sarif`,
+  `semgrep.sarif`) stay in the workspace. → each workflow's cleanup steps.
+- No hard-coded counts, line numbers or duplicated version literals in
+  `CLAUDE.md` / `docs/design-notes/`; point at the file that holds the pin.
 
-- Switches: `run_go` master (default `true`), with `run_gosec` / `run_govulncheck` selecting the Go scanners independently (both default `true`).
-- **`go_version` defaults to empty → the Go scanners run on the toolchain the caller's own `go.mod` declares** (`go-version-file: go.mod`), not the newest release. gosec and govulncheck report against the Go they execute on, so the old `"stable"` default answered "is this safe once you upgrade" while the question is "is what we ship safe now": every stdlib advisory the caller had not yet adopted was absent from the SARIF, the check stayed green, and code scanning stayed empty with no other signal (measurement in nics-dp/meta#327). An explicit `go_version` from the caller still wins.
-  - The version file is the repository **root** `go.mod`, deliberately not `scan_path`: that input scopes only trivy config and semgrep, while vendoring, gosec and govulncheck all build the root module with no `working-directory`. Deriving it from `scan_path` would break a legitimate `scan_path: infra` caller at Set up Go while still scanning the root module.
-  - `go.mod` rather than `mise.toml` because `setup-go` parses it natively (no second copy of the version to drift) and this org keeps the two equal. setup-go reads the `toolchain` directive first and falls back to `go`; no repo in this org declares `toolchain` today, so `go` is what is in play.
-  - `sbom-source.yml` / `sbom-image.yml` still hardcode `stable` and are deliberately unconverted.
-- `gosec_blocking` defaults to `false`. Fail-closed enforcement is active only when `run_go && run_gosec && gosec_blocking`, covering vendor preparation, gosec findings or operational failure, the local SARIF structural precheck, private Go state cleanup, upload-action or terminal processing failure, and SARIF artifact cleanup. In that mode `wait-for-processing: true` treats terminal `failed` as an upload failure, while a polling API error or timeout only warns and leaves processing unknown. govulncheck, semgrep, trivy config and hadolint stay informational — but invalid caller configuration and safety checks such as `scan_path` validation fail independently, so never describe the workflow as unable to fail.
-- Secret `ci_read_app_private_key` mints a ci-read App token for private Go module access during gosec/govulncheck.
-- The govulncheck step post-filters `GO-2026-5932` out of its SARIF (no native ignore flag; the advisory is transitively-present, never-called, no fixed version). Scoped to that ID **at `note` level only** (govulncheck levels: note = module-only dependency, warning = package imported, error = symbol called), so a genuinely reachable openpgp use still surfaces. Fail-safe.
-- Local `go:sast` stays blocking with gosec pinned to `v2.28.0`; a Renovate custom manager keeps that pin and the workflow pin in sync.
+## Polyrepo map
 
-**`dependency-review.yml`** — PR-time `actions/dependency-review-action` over the GitHub dependency graph (Go `go.mod` natively supported). **Blocks** PRs introducing dependencies with known vulnerabilities (≥ `fail_on_severity`, default `high`) or disallowed licenses, and posts a summary comment (`comment_summary_in_pr`, default `on-failure`). Optional `allow_licenses` / `deny_licenses` SPDX lists. `runs-on: ubuntu-latest` (no runner input). Callers MUST invoke it from a `pull_request`-triggered workflow.
+Everything in this repository is a contract consumed elsewhere; there is no
+vendored copy of a consumer here. The consumers below were read from each
+repository's `origin/dev` on 2026-09-08; re-verify there before asserting how a
+consumer uses a contract.
 
-### Supply Chain
+| Contract (owned here)                                                                                               | Consumers                                                                                                                                                                                                                                                                                                                                         |
+| ------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `.mise/tasks` atoms via `task_config.includes = ["git::https://github.com/nics-dp/meta.git//.mise/tasks?ref=main"]` | libdcf, ZenQuery, dcf-platform, dcf-platform-web, dcf-platform-cli, dcf-proxy, dcf-access, dcf-access-web, dcf-access-cli, dcf-catalog (root, `web/` and `vecsea/`), dcf-service, dcf-synth (root and `synth-core/`), dcf-mcp, otel-bundle, dcf-local-env, dcf-smoke, dcf-autoCICD, patroni; dcf-cloud-env includes the same path without `?ref=` |
+| `templates/facades/*` (copied, then extended per repo: `release-check`, `lib:local`, …)                             | every consumer above owns its own `mise.toml`; a template change does not propagate                                                                                                                                                                                                                                                               |
+| `mise-task.yml`                                                                                                     | every consumer above except dcf-autoCICD and dcf-cloud-env                                                                                                                                                                                                                                                                                        |
+| `pr-issue-check.yml`                                                                                                | every consumer above except dcf-cloud-env, plus dcf-db-cfg and dcf-cfg-templates                                                                                                                                                                                                                                                                  |
+| `auto-release.yml`                                                                                                  | libdcf, ZenQuery, dcf-platform, dcf-platform-web, dcf-platform-cli, dcf-proxy, dcf-access, dcf-access-web, dcf-access-cli, dcf-catalog, dcf-service, dcf-synth, dcf-mcp, otel-bundle, patroni                                                                                                                                                     |
+| `sbom-source.yml` / `codeql-reusable.yml`                                                                           | the `auto-release.yml` set without patroni for `sbom-source.yml`; the `auto-release.yml` set plus dcf-local-env for `codeql-reusable.yml`                                                                                                                                                                                                         |
+| `go-release.yml` / `artifacts-comment.yml`                                                                          | dcf-platform, dcf-platform-cli, dcf-proxy, dcf-access, dcf-access-cli, dcf-catalog, dcf-service, dcf-synth, dcf-mcp, otel-bundle                                                                                                                                                                                                                  |
+| `image-release.yml` + `sbom-image.yml`                                                                              | dcf-platform, dcf-proxy, dcf-access, dcf-catalog, dcf-service, dcf-synth, dcf-mcp, otel-bundle, patroni                                                                                                                                                                                                                                           |
+| `security-sarif.yml` / `scorecard.yml`                                                                              | libdcf, ZenQuery, dcf-platform, dcf-platform-web, dcf-platform-cli, dcf-proxy, dcf-access, dcf-access-web, dcf-access-cli, dcf-service, dcf-synth, otel-bundle, dcf-local-env, dcf-smoke, patroni (not dcf-catalog or dcf-mcp)                                                                                                                    |
+| `dependency-review.yml`                                                                                             | libdcf, ZenQuery, dcf-platform, dcf-platform-web, dcf-platform-cli, dcf-proxy, dcf-access, dcf-access-web, dcf-access-cli, dcf-service, dcf-synth, otel-bundle                                                                                                                                                                                    |
+| `go-dependency-submission.yml` / `node-dependency-submission.yml`                                                   | Go: libdcf, ZenQuery, dcf-platform, dcf-platform-cli, dcf-proxy, dcf-access, dcf-access-cli, dcf-service, dcf-synth, otel-bundle. Node: dcf-platform-web, dcf-access-web                                                                                                                                                                          |
+| `configs/*` fetched at atom runtime (`META_CONFIG_BASE`)                                                            | dcf-platform-web and dcf-catalog `web/` set `META_CONFIG_BASE` explicitly to the default; dcf-access-web relies on the default; dcf-platform-web, dcf-access-web and dcf-catalog `web/` commit the vitest / vite config and knip config that `node:test` / `node:knip` require                                                                    |
+| `renovate-preset.json` via `github>nics-dp/meta:renovate-preset`                                                    | every consumer above except dcf-mcp, dcf-autoCICD and dcf-cfg-templates, which had no `renovate.json` on `origin/dev`; plus dcf-claude-plugins, which consumes the preset only (no `mise.toml`, no workflow calls)                                                                                                                                |
+| Org variable / secret names (`CI_READ_APP_CLIENT_ID`, `ci_read_app_private_key`, …) and the `README.md` setup steps | callers of the reusable workflows whose `workflow_call` block declares them (read the file; `dependency-review.yml`, `artifacts-comment.yml`, `node-dependency-submission.yml` and `sbom-image.yml` declare none)                                                                                                                                 |
 
-- **`scorecard.yml`** — The only Scorecard variant. Runs `ossf/scorecard-action`, filters posture noise (job-level `TokenPermissionsID`, `nics-dp/` `PinnedDependenciesID`, and `VulnerabilitiesID` findings whose sole vuln is `GO-2026-5932`), uploads `results.filtered.sarif` (`category: scorecard`, non-blocking). Hardcodes `publish_results: false` — the `publish` input is retained for caller compatibility but **ignored**; this never publishes to the public OpenSSF API. Uses the nics-dp-scorecard App to score private repos. Job perms: `contents: read`, `security-events: write`, `actions: read`.
-- **`go-dependency-submission.yml`** — Submits the resolved Go dependency graph (`actions/go-dependency-submission`). Inputs: `go_mod_path` (default `go.mod`), `go_build_target` (empty omits the input so the action's own `all` default applies — split across two `if:`-gated steps). `ci_read_app_private_key` mints a token for an org-scoped (`github.com/nics-dp/` only) private-module git rewrite in a short-lived `$RUNNER_TEMP` gitconfig via `GIT_CONFIG_GLOBAL` + `GOPRIVATE`. Perms: `contents: write`.
-- **`node-dependency-submission.yml`** — Separate from the Go one because GitHub's dependency graph does **not** parse `bun.lock` (it sees only `package.json` direct deps). Runs `bun install --frozen-lockfile`, then Syft (`anchore/sbom-action`, `dependency-snapshot: true`) catalogs `node_modules` for the full transitive npm graph. Inputs: `working_directory` (default `.`), `bun_version` (default `latest`). All deps public — no token. Perms: `contents: write`.
+## Design notes
 
-### Utility
-
-- **`artifacts-comment.yml`** — Sticky PR comment listing artifacts (nightly.link URLs).
-- **`pr-issue-check.yml`** — PR-time policy gate backing an org-ruleset **required status check**: fails unless the PR has ≥1 linked issue (`closingIssuesReferences`) AND every linked issue has the `version` field set on its org Projects v2 item. Inputs: `enforce_base` (default `dev`), `project_number` (default `3`), `version_field` (default `version`). Only enforces PRs whose base == `enforce_base` — closing keywords only register on the default branch and manual Development links have no API, so other bases and fork PRs succeed with a skip summary. Linked-issue lookup uses `GITHUB_TOKEN` (`pull-requests: read` + `issues: read`), so only token-readable (in practice same-repo) closing references are verified; unreadable cross-repo references fail or warn explicitly, never pass silently. The Project lookup mints a ci-read token (App needs Organization Projects: Read + org-wide Issues: Read). Callers should trigger on `pull_request` types `[opened, edited, reopened, synchronize]` — `edited` re-runs when `Closes #N` is added; setting the Project field emits no PR event, so that needs a manual re-run.
-
-## Meta CI (meta self-consuming its own reusables)
-
-**`ci.yml`** — meta's own CI:
-
-- Matrix checks via `mise-task.yml`: Actionlint, Mise Tasks, ShellCheck. Plus Secret Scan (`ci:betterleaks`) and Deep Secret Scan (`ci:trufflehog`), and the three hosted self-validation jobs below. The local gate `mise run all` additionally covers `iac:zizmor`, `iac:trivy` and `ci:semgrep`.
-- ShellCheck is fail-closed: it enumerates every tracked task/helper plus `.github/scripts/github-actions-scanner.sh` and accepts only stage-0 regular non-symlinks with mode 100644/100755 before analysis.
-- **`Zizmor Action`** — pins the official action v0.6.3 and the reviewed Zizmor 1.29.0 image mapping; online audits / Advanced Security / SARIF / annotations disabled. The action hands the Zizmor process a fixed public compatibility placeholder that is **not** a credential and carries no permissions; no GitHub credential reaches that process. Checkout uses the job's `contents: read` token with `persist-credentials: false`. This early-development gate is **not** fully offline or network-isolated — residual container egress and raw CLI log output are accepted, with final PR CI as runtime proof. It replaced the old matrix `Zizmor` **check name** but not the local gate: coordinate any org-ruleset required-check rename with `Zizmor Action`.
-- **`Grype Path (high, fixed)`** — pins scan-action v7.4.2 + Grype v0.117.0, uses a nested exact-SHA target and a trusted mode-0600 config, blocks fixed High/Critical findings and operational/cleanup failures, and does not cache or upload SARIF. Medium and unfixed findings are outside policy.
-- **`GitHub Actions Scanner (experimental)`** — pins a Snyk Labs commit + lock digest, installs tokenlessly with lifecycle scripts disabled, runs only seven production rules. Findings and failures are informational (`findings` / `incomplete`, never a false `clean`); fork, Dependabot, untrusted-association and unsupported-event paths are tokenless `incomplete` with no SHA fallback. Only non-Dependabot push/`workflow_dispatch`, or same-repo OWNER/MEMBER/COLLABORATOR PRs, may pass the current-repo token to the exact Node child. Raw output and the token are never summarized; source/cache/result cleanup failure blocks the job. Snyk source updates are manual source/support/lock/baseline reviews.
-- Renovate groups Zizmor action+CLI and Anchore action+Grype; neither automerges.
-
-**`self-supply-chain.yml`** — meta consumes its own `scorecard.yml` (filtered, `publish: false`). No dependency-submission job: meta has no compiled-language manifests.
-
-**`self-dependency-review.yml`** / **`self-pr-issue-check.yml`** — meta consuming its own `dependency-review.yml` / `pr-issue-check.yml` reusables.
-
-## Editing Guidelines
-
-- **New mise atom**: add `.mise/tasks/<category>/<name>`, prepend `#MISE description=…` and `#MISE hide=true`, make it executable.
-- **New facade vocabulary task**: edit `templates/facades/mise.<archetype>.toml` only — facade vocabulary does not belong in atoms.
-- **`configs/` change**: takes effect immediately for consumers (raw URL fetched at atom runtime, no sync workflow).
-- **`renovate-preset.json` change**: applies to all consumer repos automatically.
-- **Workflow YAML change**: validate with `mise exec -- actionlint <file>`, then `mise run all`, before commit.
-- **Inserting or removing workflow lines shifts `zizmor.yml`'s `file:line` dispositions.** The symptom is a `dangerous use of GitHub App tokens` finding (`iac:zizmor` exit 14) that looks like a newly introduced security problem but is only an offset. Re-point the affected entries.
-- **Atom signature change**: a breaking change needs a coordinated bump in every consumer repo whose `mise.toml` includes this repo, once `?ref=` is tagged. Until a tag is cut, `?ref=main` is mutable and `meta:bump` clears the mise cache. To cut one: `git tag -a v1 -m "Release v1" && git push origin v1`, then move consumers from `?ref=main` to `?ref=v1`.
+`docs/design-notes/` holds the long-form rationale moved out of this file. Code
+and workflow files win over them; prune rather than extend.
