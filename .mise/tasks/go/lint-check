@@ -7,17 +7,11 @@
 
 set -uo pipefail
 
-# `run` does reach formatting, but only where the repo declares formatters in
-# .golangci.yml AND the file is not a test file (`run.tests: false`). That
-# leaves two gaps, and TMDs#825's nine drifted files landed entirely inside
-# them: six in a repo with no `formatters:` section, three under test/. Not one
-# was a non-test file in a repo that configures formatters — the single
-# combination `run` already covered. The local `go:lint-fix` only warns.
-#
-# `fmt --diff` closes both: it is read-only (prints a diff, exits non-zero,
-# rewrites nothing) and is not bound by `run.tests`. It applies whatever
-# formatters the repo configures, so a repo with no `formatters:` section still
-# only gets standard gofmt here — widening that is a per-repo config change.
+# `run` checks configured formatters within its `run.tests` scope.
+# `fmt --diff` also checks excluded test files, falls back to gofmt when no
+# formatters are configured, and fails on drift without rewriting files.
+# Widening formatter coverage is a per-repo config change.
+# The local `go:lint-fix` only warns.
 #
 # Both stages run before the exit code is decided, deliberately not fail-fast,
 # so a PR carrying both kinds of problem sees both in one CI round.
