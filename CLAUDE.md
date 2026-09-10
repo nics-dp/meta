@@ -104,8 +104,8 @@ before changing any of these; the mechanism is in the code, the history in
   → `.mise/tasks/lib/ci-isolate`.
 - `go:lint-check` runs `golangci-lint fmt --diff` and `golangci-lint run`, both
   before the exit code is decided (not fail-fast): `run` reaches formatting only
-  where a repo declares `formatters:` and never for test files. → the header
-  comment in `.mise/tasks/go/lint-check`.
+  where a repo declares `formatters:`, with test scope controlled by `run.tests`.
+  → the header comment in `.mise/tasks/go/lint-check`.
 - `go:sast` pins gosec in its `#MISE tools=` header; `security-sarif.yml` pins
   the same tool in its `go install` line, and the "synchronized gosec pins"
   custom manager in `renovate.json` moves both together. Do not bump one alone.
