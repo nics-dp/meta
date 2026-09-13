@@ -2,7 +2,7 @@
 #MISE description="Audit local GitHub Actions definitions with Zizmor"
 #MISE hide=true
 #MISE raw=true
-#MISE tools={zizmor="1.29.0"}
+#MISE tools={zizmor="1.30.0"}
 
 set -euo pipefail
 # The helper path is fixed relative to this atom.
