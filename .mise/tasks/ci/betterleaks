@@ -42,7 +42,7 @@ set -euo pipefail
 # seed-default admin password, scoped with condition = "AND" to the two
 # commits that introduced it (outside git history that condition fails closed
 # and the finding resurfaces); the retired dcf-local-env root .env.example
-# admin/admin123 defaults, scoped with condition = "AND" to the two commits
+# admin/admin123 defaults, scoped with condition = "AND" to the commits
 # that introduced them, with the same fail-closed property; the user:pass@host
 # doc-example URI in the CLI clients, scoped with condition = "AND" to
 # pkg/api/client.go; and the GHAS-dismissed dev-only placeholder token in

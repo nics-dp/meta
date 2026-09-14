@@ -307,7 +307,7 @@ Consumer repo 之 `renovate.json` 引用 org preset：
    - org **secret** `CI_READ_APP_PRIVATE_KEY`（caller 以 `secrets:` 顯式傳 `ci_read_app_private_key`：Go 私模 + CodeQL private repo + release/snapshot）
    - `DOCKERHUB_USERNAME` + `DOCKERHUB_TOKEN` (Docker image repos)
 
-驗證：`mise tasks ls` 應顯示 ~10 facade 名 + repo-specific extras（atoms hidden）；`mise run --dry-run ci test sbom` resolve 無誤。
+驗證：`mise tasks ls` 應只顯示範本內的 facade 名 + repo-specific extras（atoms hidden）；`mise run --dry-run ci test sbom` resolve 無誤。
 
 ---
 
