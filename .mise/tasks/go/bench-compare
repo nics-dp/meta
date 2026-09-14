@@ -2,12 +2,15 @@
 #MISE description="Benchmark + compare with benchstat. --save <label> to capture; no flag to diff old vs new"
 #MISE hide=true
 #MISE raw=true
-#MISE tools={"go:golang.org/x/perf/cmd/benchstat"="latest"}
+#MISE tools={"go:golang.org/x/perf/cmd/benchstat"="v0.0.0-20260908200009-22c9c6c9d4da"}
 #USAGE flag "--save <label>" help="Save bench results to bench-<label>.txt (typically 'old' or 'new')"
 #USAGE flag "--count <n>" help="Bench iterations for statistical significance" default="5"
 #USAGE flag "--pattern <regex>" help="Benchmark name pattern" default="."
 
 set -euo pipefail
+# shellcheck disable=SC1091
+source "$(dirname "$0")/../lib/require-tool"
+require_tool benchstat
 # shellcheck disable=SC1091
 source "$(dirname "$0")/../lib/go-env"
 # shellcheck disable=SC2154

@@ -3,6 +3,9 @@
 #MISE hide=true
 #MISE raw=true
 #MISE depends=["go:install"]
-#MISE tools={"go:golang.org/x/vuln/cmd/govulncheck"="latest"}
+#MISE tools={"go:golang.org/x/vuln/cmd/govulncheck"="v1.8.0"}
 
+# shellcheck disable=SC1091
+source "$(dirname "$0")/../lib/require-tool"
+require_tool govulncheck
 govulncheck ./...

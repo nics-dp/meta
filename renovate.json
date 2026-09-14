@@ -37,6 +37,47 @@
       ],
       "automerge": false,
       "minimumReleaseAge": "7 days"
+    },
+    {
+      "description": "Scanner binaries: pinned for reproducibility and supply-chain review, refreshed daily with a short release-age buffer and automerged. Detection freshness comes from the databases and rule packs the scanners fetch at run time (trivy-db, grype-db, the opengrep registry); trufflehog's detectors ship in the binary, which is why this group runs daily rather than weekly.",
+      "matchPackageNames": [
+        "aquasecurity/trivy",
+        "opengrep/opengrep",
+        "trufflesecurity/trufflehog"
+      ],
+      "groupName": "security scanners",
+      "minimumReleaseAge": "3 days",
+      "schedule": [
+        "before 5am"
+      ],
+      "automerge": true,
+      "automergeType": "pr"
+    },
+    {
+      "description": "Grype in the mise scan atoms joins the daily scanner group; the blocking `grype-path` scan in ci.yml keeps the reviewed 7-day gate above (placed after it to override for the atoms only).",
+      "matchPackageNames": [
+        "anchore/grype"
+      ],
+      "matchFileNames": [
+        ".mise/tasks/**"
+      ],
+      "groupName": "security scanners",
+      "minimumReleaseAge": "3 days",
+      "schedule": [
+        "before 5am"
+      ],
+      "automerge": true,
+      "automergeType": "pr"
+    },
+    {
+      "description": "Go analysis tools used by the go:audit / go:dead-code / go:bench-compare atoms and the SARIF workflow open as one PR; deadcode has broken on a minor x/tools bump before, so this group keeps the preset's review (no automerge).",
+      "groupName": "go analysis tools",
+      "matchPackageNames": [
+        "golang.org/x/vuln",
+        "golang.org/x/tools",
+        "golang.org/x/perf"
+      ],
+      "automerge": false
     }
   ],
   "customManagers": [
@@ -137,12 +178,14 @@
     },
     {
       "customType": "regex",
-      "description": "Update govulncheck version in the security-sarif workflow",
+      "description": "Update synchronized govulncheck pins in the security-sarif workflow and the go:audit task",
       "managerFilePatterns": [
-        "/^\\.github/workflows/security-sarif\\.yml$/"
+        "/^\\.github/workflows/security-sarif\\.yml$/",
+        "/^\\.mise/tasks/go/audit$/"
       ],
       "matchStrings": [
-        "go install golang\\.org/x/vuln/cmd/govulncheck@(?<currentValue>v\\d+\\.\\d+\\.\\d+)"
+        "go install golang\\.org/x/vuln/cmd/govulncheck@(?<currentValue>v\\d+\\.\\d+\\.\\d+)",
+        "#MISE tools=\\{\\\"go:golang\\.org/x/vuln/cmd/govulncheck\\\"=\\\"(?<currentValue>v\\d+\\.\\d+\\.\\d+)\\\"\\}"
       ],
       "depNameTemplate": "golang.org/x/vuln",
       "datasourceTemplate": "go"
@@ -159,6 +202,89 @@
       ],
       "depNameTemplate": "air-verse/air",
       "datasourceTemplate": "github-releases"
+    },
+    {
+      "customType": "regex",
+      "description": "Update the deadcode pin (golang.org/x/tools) in the go:dead-code task",
+      "managerFilePatterns": [
+        "/^\\.mise/tasks/go/dead-code$/"
+      ],
+      "matchStrings": [
+        "#MISE tools=\\{\\\"go:golang\\.org/x/tools/cmd/deadcode\\\"=\\\"(?<currentValue>v\\d+\\.\\d+\\.\\d+)\\\"\\}"
+      ],
+      "depNameTemplate": "golang.org/x/tools",
+      "datasourceTemplate": "go"
+    },
+    {
+      "customType": "regex",
+      "description": "Track the benchstat pin (golang.org/x/perf) in the go:bench-compare task; x/perf publishes pseudo-versions only, so this mostly documents the dependency",
+      "managerFilePatterns": [
+        "/^\\.mise/tasks/go/bench-compare$/"
+      ],
+      "matchStrings": [
+        "#MISE tools=\\{\\\"go:golang\\.org/x/perf/cmd/benchstat\\\"=\\\"(?<currentValue>v\\d+\\.\\d+\\.\\d+(?:-\\d{14}-[0-9a-f]{12})?)\\\"\\}"
+      ],
+      "depNameTemplate": "golang.org/x/perf",
+      "datasourceTemplate": "go"
+    },
+    {
+      "customType": "regex",
+      "description": "Update synchronized Trivy pins: the mise scan atoms and the trivy-action `version:` input in the SBOM and SARIF workflows",
+      "managerFilePatterns": [
+        "/^\\.mise/tasks/iac/trivy$/",
+        "/^\\.mise/tasks/ci/trivy-license$/",
+        "/^\\.mise/tasks/sbom/trivy$/",
+        "/^\\.mise/tasks/py/sbom-custom$/",
+        "/^\\.github/workflows/sbom-(?:source|image)\\.yml$/",
+        "/^\\.github/workflows/security-sarif\\.yml$/"
+      ],
+      "matchStrings": [
+        "trivy=\\\"(?<currentValue>\\d+\\.\\d+\\.\\d+)\\\"",
+        "uses:[ \\t]*aquasecurity/trivy-action@[0-9a-f]{40}[^\\n]*\\n        with:\\n          version:[ \\t]*v(?<currentValue>\\d+\\.\\d+\\.\\d+)"
+      ],
+      "depNameTemplate": "aquasecurity/trivy",
+      "datasourceTemplate": "github-releases",
+      "extractVersionTemplate": "^v(?<version>.+)$"
+    },
+    {
+      "customType": "regex",
+      "description": "Update the Grype pins in the mise scan atoms",
+      "managerFilePatterns": [
+        "/^\\.mise/tasks/sbom/grype$/",
+        "/^\\.mise/tasks/py/sbom-custom$/"
+      ],
+      "matchStrings": [
+        "grype=\\\"(?<currentValue>\\d+\\.\\d+\\.\\d+)\\\""
+      ],
+      "depNameTemplate": "anchore/grype",
+      "datasourceTemplate": "github-releases",
+      "extractVersionTemplate": "^v(?<version>.+)$"
+    },
+    {
+      "customType": "regex",
+      "description": "Update the OpenGrep pin in the ci:semgrep task",
+      "managerFilePatterns": [
+        "/^\\.mise/tasks/ci/semgrep$/"
+      ],
+      "matchStrings": [
+        "\\\"aqua:opengrep/opengrep\\\"=\\\"(?<currentValue>\\d+\\.\\d+\\.\\d+)\\\""
+      ],
+      "depNameTemplate": "opengrep/opengrep",
+      "datasourceTemplate": "github-releases",
+      "extractVersionTemplate": "^v(?<version>.+)$"
+    },
+    {
+      "customType": "regex",
+      "description": "Update the TruffleHog pin in the ci:trufflehog task",
+      "managerFilePatterns": [
+        "/^\\.mise/tasks/ci/trufflehog$/"
+      ],
+      "matchStrings": [
+        "\\\"aqua:trufflesecurity/trufflehog\\\"=\\\"(?<currentValue>\\d+\\.\\d+\\.\\d+)\\\""
+      ],
+      "depNameTemplate": "trufflesecurity/trufflehog",
+      "datasourceTemplate": "github-releases",
+      "extractVersionTemplate": "^v(?<version>.+)$"
     }
   ]
 }

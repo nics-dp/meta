@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+# Sourced helper. require_tool <binary>...: stop the atom before its body runs when a
+# binary declared in the atom's `#MISE tools=` header is not on PATH.
+#
+# mise resolves task-level tools before running the task, but a resolution failure
+# (for example a remote version listing that times out) is only a warning: the task
+# still runs and the shell reports "command not found" from deep inside the script.
+# Checking here turns that into one actionable error at the top. Pinned exact
+# versions never need the listing, so with pins this is a belt-and-braces check.
+require_tool() {
+  local tool missing=0
+  for tool in "$@"; do
+    if ! command -v "$tool" >/dev/null 2>&1; then
+      echo "::error::$tool is not on PATH: mise did not install the task-level tool (see #MISE tools= in this atom)" >&2
+      missing=1
+    fi
+  done
+  [ "$missing" -eq 0 ] || exit 1
+}

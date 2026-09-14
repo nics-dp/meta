@@ -141,10 +141,7 @@ jobs:
         uses: anchore/sbom-action@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26 # v0.24.2
         with:
           image: ${{ env.REGISTRY_GHCR }}/${{ env.GHCR_NAMESPACE }}/${{ inputs.image_name }}@${{ inputs.digest }}
-          # Pin the spec version: syft >= 1.51 defaults cyclonedx-json to 1.7,
-          # which trivy 0.70 / grype 0.110 cannot decode. Drop the pin once both
-          # scanners read 1.7.
-          format: cyclonedx-json@1.6
+          format: cyclonedx-json
           output-file: sbom-image.cdx.json
           upload-artifact: false
 
@@ -178,6 +175,7 @@ jobs:
         if: always()
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
+          version: v0.74.0
           scan-type: sbom
           scan-ref: enriched-image.cdx.json
           format: sarif
@@ -221,6 +219,7 @@ jobs:
       - name: Scan SBOM with Trivy (JSON)
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
+          version: v0.74.0
           scan-type: sbom
           scan-ref: enriched-image.cdx.json
           format: json
