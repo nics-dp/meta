@@ -100,8 +100,8 @@ jobs:
       # is empty -- the action then applies its own default ('all', every build
       # target including tests and tools) instead of us hardcoding it here.
       #
-      # Pinned to an UNRELEASED main commit on purpose. The latest tag (v2.0.3,
-      # 2025-03) keys its package cache by PURL name only, so two modules whose
+      # Pinned to an UNRELEASED main commit on purpose. The latest tagged release
+      # keys its package cache by PURL name only, so two modules whose
       # final path element is identical (e.g. cloud.google.com/go and
       # github.com/cncf/xds/go both -> name "go") trip an "expected no more than
       # one package in cache with namespace+name" assertion and crash -- this hit

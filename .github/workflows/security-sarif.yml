@@ -212,7 +212,7 @@ jobs:
       # The version file is the repository ROOT go.mod, never scan_path: that
       # input scopes only trivy config and semgrep, while the Go steps here all
       # run against the root module with no working-directory. An explicit
-      # go_version still wins. Rationale: CLAUDE.md, nics-dp/meta#327.
+      # go_version still wins. Rationale: CLAUDE.md.
       - name: Set up Go
         if: env.EFFECTIVE_ANY_GO == 'true'
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0

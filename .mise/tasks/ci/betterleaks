@@ -2,12 +2,11 @@
 #MISE description="Scan for leaked secrets (betterleaks; PR gate)"
 #MISE hide=true
 #MISE raw=true
-# Requires mise >= 2026.7.0. Installing this tool verifies its GitHub artifact
-# attestation; GitHub rotated its TSA cert on 2026-06-12 and older mise builds
-# ship a stale embedded Sigstore trust root, failing every post-rotation
-# attestation with "TSA timestamp verification failed: no certificate matches
-# issuer and serial number" (jdx/mise#10680 — the artifact itself is fine; an
-# earlier note here wrongly blamed betterleaks 1.6.0 for it). The version pin
+# Installing this tool verifies its GitHub artifact attestation, which needs a
+# mise build whose embedded Sigstore trust root carries GitHub's current TSA
+# cert (the mise minimum lives in mise-task.yml); older builds fail with "TSA
+# timestamp verification failed: no certificate matches issuer and serial
+# number" (jdx/mise#10680 -- the artifact itself is fine). The version pin
 # below is Renovate-managed and safe to bump normally.
 #MISE tools={"github:betterleaks/betterleaks"="1.8.1"}
 set -euo pipefail
@@ -55,10 +54,6 @@ set -euo pipefail
 # this file is a task script, so mise never templates the heredoc body and they
 # are inert here today, but the same text in a mise-templated context would be
 # rendered rather than matched.
-#
-# See nics-dp/meta#347 and nics-dp/meta#352 for why the pinned release's generic-password
-# and generic-credential-uri rules required these expansions (2026-08-25/26),
-# and nics-dp/meta#362 for the dcf-smoke lldap-fixture batch (2026-09-07).
 config="$(mktemp)"
 trap 'rm -f "$config"' EXIT
 cat > "$config" <<'BLCFG'
@@ -87,7 +82,7 @@ regexTarget = "match"
 regexes = [ '''ds-RVNFZVlGT2hhZlNtT2JOVg''' ]
 
 [[allowlists]]
-description = "dcf-platform 2026-03 seed-default admin password, removed since; scoped to the two introducing commits. condition=AND is load-bearing: outside git history (dir mode, rewritten SHAs) it fails closed and the finding resurfaces"
+description = "dcf-platform retired seed-default admin password; scoped to the introducing commits. condition=AND is load-bearing: outside git history (dir mode, rewritten SHAs) it fails closed and the finding resurfaces"
 condition = "AND"
 commits = [
   "ead693679cdfc45d62ed79c170f48c093fd6d269",

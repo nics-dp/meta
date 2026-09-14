@@ -81,7 +81,7 @@ jobs:
           dependency-caching: true
           queries: security-extended,security-and-quality
           # actions/unpinned-tag flags every `uses: nics-dp/meta/.github/workflows/*.yml@main`
-          # in every consumer (246 open alerts across 21 repos on 2026-09-07). Pinning our
+          # in every consumer. Pinning our
           # own meta by branch is a deliberate org policy (see the Scorecard dismissals:
           # "intentional @main pins"); third-party actions are digest-pinned by Renovate
           # (renovate-preset.json pinDigests), so the query adds nothing here. Excluded

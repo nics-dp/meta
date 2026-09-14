@@ -12,8 +12,6 @@
 # Drift does not fail loudly -- go:audit scans one toolchain while the release
 # is built by another -- and Renovate's per-language toolchain groups only
 # batch what a manager extracts, so a bump can still land in one file alone.
-# nics-dp/dcf-platform's test/internal/toolchain_pins_test.go was the Go-only,
-# repo-local first version of this gate; this atom is the org-wide one.
 #
 # Every pin must state the same full `X.Y.Z`: a shorter pin (`X.Y` image tag,
 # `X` setup-* input) is reported as SHORT and fails the gate even when it is

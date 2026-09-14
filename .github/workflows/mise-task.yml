@@ -77,19 +77,19 @@ jobs:
     # of mixed versions, so the action below pins an exact mise version --
     # see its `version:` input, kept in lockstep with auto-release.yml's
     # mise_version default and self-release.yml's explicit pass (all three are
-    # bumped together by the jdx/mise custom manager in renovate.json). >= 2026.7.0
-    # is required: older builds embed a Sigstore trust root predating
-    # GitHub's 2026-06-12 TSA cert rotation and fail artifact-attestation
-    # verification on tool installs (jdx/mise#10680).
+    # bumped together by the jdx/mise custom manager in renovate.json). Keep it at
+    # or above the first build whose embedded Sigstore trust root carries GitHub's
+    # current TSA cert: older builds fail artifact-attestation verification on
+    # tool installs (jdx/mise#10680).
     #
     # The mise-versions.jdx.dev host (CDN cache of version listings) is kept
     # ENABLED (mise default). It occasionally 403s, but mise falls back to
     # source-direct on a miss, so `latest` still resolves — that 403 line is
-    # cosmetic noise, not a failure. We previously set MISE_USE_VERSIONS_HOST=false
-    # to silence the noise, but that removed the cache/fallback layer: `latest`
-    # version lookups then hit GitHub/aqua APIs directly with no fallback, and a
-    # transient GitHub 504 hard-failed tool installs (e.g. trivy). Keeping the
-    # host on absorbs those transient errors via the cached listing.
+    # cosmetic noise, not a failure. Disabling it (MISE_USE_VERSIONS_HOST=false)
+    # would silence the noise but remove the cache/fallback layer: `latest`
+    # lookups would hit GitHub/aqua APIs directly with no fallback, and a
+    # transient GitHub 504 would hard-fail tool installs (e.g. trivy). Keeping
+    # the host on absorbs those transient errors via the cached listing.
     env:
       MISE_MINIMUM_RELEASE_AGE: "0"
       # secrets cannot be used in step-level if:, so bridge to env here.
