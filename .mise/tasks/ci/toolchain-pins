@@ -12,13 +12,12 @@
 # Drift does not fail loudly -- go:audit scans one toolchain while the release
 # is built by another -- and Renovate's per-language toolchain groups only
 # batch what a manager extracts, so a bump can still land in one file alone.
-# nics-dp/dcf-platform's test/internal/toolchain_pins_test.go was the Go-only,
-# repo-local first version of this gate; this atom is the org-wide one.
 #
-# Pins are compared component-wise: a shorter pin agrees with a longer one when
-# it is a prefix (Docker tag `3.14` vs mise `3.14.7`); `1.27.0` vs `1.27.1` is
-# drift. A language with a single pin cannot drift. Non-numeric values
-# (`latest`, `stable`, `${{ ... }}`) are ignored.
+# Every pin must state the same full `X.Y.Z`: a shorter pin (`X.Y` image tag,
+# `X` setup-* input) is reported as SHORT and fails the gate even when it is
+# the only pin, because it cannot be compared and lets a patch drift silently;
+# two full pins that differ are DRIFT. Non-numeric values (`latest`, `stable`,
+# `${{ ... }}`) are ignored.
 set -euo pipefail
 
 # Scan the whole repository even when invoked from a nested facade
@@ -102,7 +101,7 @@ scan_gomod() {
   done < <(grep -nE '^go[[:space:]]*[0-9]' "$f" || true)
 }
 
-# Image references (`golang:1.27.1-…`, `dhi.io/python:3.14-…`, `docker.io/oven/bun:1.4.0@…`)
+# Image references (`golang:X.Y.Z-…`, `dhi.io/python:X.Y.Z-…`, `docker.io/oven/bun:X.Y.Z@…`)
 # whose tag starts with a digit, on the lines grep hands in. `FROM ${GO_BASE}`
 # carries no literal and is skipped; the ARG that defines GO_BASE is what gets read.
 # A trailing ` # comment` is dropped first so an example image in a comment is
@@ -129,7 +128,7 @@ scan_dockerfile() {
 }
 
 # Repo-local mise task scripts: a builder image pinned in a shell variable
-# assignment (e.g. GO_BUILDER_IMAGE="golang:1.27.1-trixie") is a toolchain pin
+# assignment (e.g. GO_BUILDER_IMAGE="golang:X.Y.Z-trixie") is a toolchain pin
 # too. The org preset has no manager for these; a repo either adds its own
 # custom regex manager (dcf-local-env does) or bumps the value by hand -- this
 # gate catches it either way. Only assignment lines count -- optionally
@@ -139,8 +138,8 @@ scan_taskfile() {
   scan_imagerefs "$1" < <(grep -nE '^[[:space:]]*((export|local|readonly|declare)([[:space:]]+-[A-Za-z]+)*[[:space:]]+)?[A-Za-z_][A-Za-z0-9_]*=["'"'"']?(docker\.io/|dhi\.io/)?(library/)?(golang|python|node|oven/bun):[0-9]' "$1" || true)
 }
 
-# Workflows: reusable-workflow inputs (`go_version: "1.27.1"`) and setup-*
-# action inputs (`go-version: '1.27.1'`, `node-version: "24"`). Only a YAML
+# Workflows: reusable-workflow inputs (`go_version: "X.Y.Z"`) and setup-*
+# action inputs (`go-version: 'X.Y.Z'`, `node-version: "X.Y.Z"`). Only a YAML
 # mapping key at the start of the line (after indentation, optionally as a
 # list item) counts, and lines inside a block scalar (`run: |` / `>` bodies)
 # are skipped, so `hugo-version:`, comments and script text are not pins.
@@ -196,27 +195,26 @@ if ((${#PINS[@]} == 0)); then
   exit 0
 fi
 
-# Report every pin, then compare per language: every pin must be a component
-# prefix of the most specific pin (longest). On drift, list each distinct
-# version with the locations that state it.
+# Report every pin, then check per language: each pin must be a full X.Y.Z
+# (SHORT otherwise) and all pins must be identical (DRIFT otherwise, listing
+# each distinct version with the locations that state it).
+short=0
 drift=0
 for lang in go python node bun; do
   ref=''
-  for p in "${PINS[@]}"; do
-    IFS='|' read -r l v loc <<<"$p"
-    [[ $l == "$lang" ]] || continue
-    printf '%-48s %s=%s\n' "$loc" "$l" "$v"
-    if [[ -z $ref ]] || ((${#v} > ${#ref})); then
-      ref=$v
-    fi
-  done
-  [[ -n $ref ]] || continue
   agree=1
   for p in "${PINS[@]}"; do
     IFS='|' read -r l v loc <<<"$p"
     [[ $l == "$lang" ]] || continue
-    [[ "$ref." == "$v."* ]] || agree=0
+    printf '%-48s %s=%s\n' "$loc" "$l" "$v"
+    if [[ ! $v =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+      echo "SHORT $lang: $v at $loc (pin the full X.Y.Z)" >&2
+      short=1
+    fi
+    [[ -z $ref ]] && ref=$v
+    [[ $v == "$ref" ]] || agree=0
   done
+  [[ -n $ref ]] || continue
   ((agree)) && continue
   drift=1
   # Distinct versions in first-seen order, each with its locations.
@@ -236,8 +234,11 @@ for lang in go python node bun; do
   done
 done
 
-if ((drift)); then
-  echo "toolchain-pins: pins disagree; update every location in the same change (Renovate groups them under chore(<lang>.toolchain))" >&2
+if ((short || drift)); then
+  why=''
+  ((short)) && why='short pins (state the full X.Y.Z)'
+  ((drift)) && why="${why:+$why; }pins disagree (update every location in the same change; Renovate groups them under chore(<lang>.toolchain))"
+  echo "toolchain-pins: $why" >&2
   exit 1
 fi
 echo "toolchain-pins: all pins agree"

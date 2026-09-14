@@ -4,7 +4,7 @@
 #   PY_RUNNER         tool runner prefix          default: "uv run --group test"
 #   PY_TEST_PATHS     pytest target paths         default: tests/ if exists, else .
 #   PY_LINT_PATHS     ruff/dead-code/complexity   default: .
-#                     (typecheck no longer uses this; ty/pyrefly drive
+#                     (typecheck does not use this; ty/pyrefly drive
 #                      includes/excludes from pyproject.toml [tool.ty.src] /
 #                      [tool.pyrefly] project-excludes)
 #   PY_BANDIT_PATHS   bandit target paths         default: .

@@ -8,7 +8,7 @@
 #
 #   1. Repo-local file already present → use it verbatim, never fetch, never
 #      delete. This lets a repo pin its own config (same mechanism as the
-#      lighthouse atom, nics-dp/meta#260) and removes the runtime dependency
+#      lighthouse atom) and removes the runtime dependency
 #      on raw.githubusercontent.com entirely.
 #   2. Otherwise fetch "$META_CONFIG_BASE/<file>" with retries
 #      (raw.githubusercontent.com rate-limits shared CI runner IPs with 429).
@@ -19,8 +19,8 @@
 #      defaults: a --check would flag every file in the repo (misleading
 #      "371 files misformatted" instead of "config fetch failed"), and a
 #      --write/--fix would silently rewrite the whole tree in the wrong
-#      style. Both have bitten consumers (dcf-access-web, 2026-07-08:
-#      three consecutive 429s on CI plus one local tree pollution).
+#      style. Both have bitten consumers (consecutive 429s on CI, and a
+#      locally rewritten tree).
 #
 # Detection is by file PRESENCE (not git-tracked status), mirroring the
 # lighthouse atom: a leftover fetched file from a hard-killed prior run will
