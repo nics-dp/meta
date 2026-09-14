@@ -198,6 +198,7 @@ fi
 # Report every pin, then check per language: each pin must be a full X.Y.Z
 # (SHORT otherwise) and all pins must be identical (DRIFT otherwise, listing
 # each distinct version with the locations that state it).
+short=0
 drift=0
 for lang in go python node bun; do
   ref=''
@@ -208,7 +209,7 @@ for lang in go python node bun; do
     printf '%-48s %s=%s\n' "$loc" "$l" "$v"
     if [[ ! $v =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
       echo "SHORT $lang: $v at $loc (pin the full X.Y.Z)" >&2
-      drift=1
+      short=1
     fi
     [[ -z $ref ]] && ref=$v
     [[ $v == "$ref" ]] || agree=0
@@ -233,8 +234,11 @@ for lang in go python node bun; do
   done
 done
 
-if ((drift)); then
-  echo "toolchain-pins: pins disagree; update every location in the same change (Renovate groups them under chore(<lang>.toolchain))" >&2
+if ((short || drift)); then
+  why=''
+  ((short)) && why='short pins (state the full X.Y.Z)'
+  ((drift)) && why="${why:+$why; }pins disagree (update every location in the same change; Renovate groups them under chore(<lang>.toolchain))"
+  echo "toolchain-pins: $why" >&2
   exit 1
 fi
 echo "toolchain-pins: all pins agree"
