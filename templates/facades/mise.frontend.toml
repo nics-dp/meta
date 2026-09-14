@@ -86,6 +86,7 @@ depends = [
   "node:lighthouse",
   "ci:semgrep typescript javascript",
   "iac:trivy",
+  "ci:toolchain-pins",
 ]
 
 
@@ -104,6 +105,7 @@ depends = [
   "node:lighthouse",
   "ci:semgrep typescript javascript",
   "iac:trivy",
+  "ci:toolchain-pins",
 ]
 
 [tasks.sbom]

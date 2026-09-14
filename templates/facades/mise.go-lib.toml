@@ -7,7 +7,7 @@ task.output = "keep-order"
 # ------------------------------------------------------------------------------
 [tools]
 # Go toolchain
-go = "1.27.0"
+go = "1.27.1"
 
 [env]
 # Override meta config base if forking nics-dp/meta
@@ -64,6 +64,7 @@ depends = [
   "go:dead-code",
   # "go:deptree",
   "ci:semgrep golang",
+  "ci:toolchain-pins",
 ]
 
 
@@ -75,6 +76,7 @@ depends = [
   "go:audit",
   "go:dead-code",
   "ci:semgrep golang",
+  "ci:toolchain-pins",
 ]
 
 [tasks.all]

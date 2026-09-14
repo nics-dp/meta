@@ -3,6 +3,6 @@
 #MISE hide=true
 #MISE raw=true
 #MISE silent="stdout"
-#MISE tools={bun="1.4.0"}
+#MISE tools={bun="1.4.2"}
 
 bun update
