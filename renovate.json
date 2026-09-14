@@ -102,7 +102,7 @@
         "/^\\.mise/tasks/py/sbom-custom$/"
       ],
       "matchStrings": [
-        "go install github\\.com/snyk/parlay@(?<currentValue>v\\d+\\.\\d+\\.\\d+)",
+        "go install github\\.com/snyk/parlay@v(?<currentValue>\\d+\\.\\d+\\.\\d+)",
         "\\\"github:snyk/parlay\\\"=\\\"(?<currentValue>\\d+\\.\\d+\\.\\d+)\\\""
       ],
       "depNameTemplate": "snyk/parlay",
