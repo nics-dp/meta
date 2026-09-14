@@ -26,7 +26,7 @@
     },
     {
       "customType": "regex",
-      "description": "Update aqua:/github:-prefixed tool versions pinned in mise task headers (#MISE tools={...}). Only matches digit-leading versions so `=\"latest\"` scanners are left alone.",
+      "description": "Update aqua:/github:-prefixed tool versions pinned in mise task headers (#MISE tools={...}). Matches digit-leading versions only, so a `=\"latest\"` header is never rewritten.",
       "managerFilePatterns": [
         "/(^|/)\\.mise/tasks/.+$/"
       ],
@@ -197,7 +197,7 @@
       "extractVersion": "^bun-v(?<version>.+)$"
     },
     {
-      "description": "Group mise task-header tool pins (.mise/tasks/* #MISE tools={...}); scanners stay latest and are not pinned",
+      "description": "Group mise task-header tool pins (.mise/tasks/* #MISE tools={...}); a consuming repository may move a tool into its own rule (meta does for its scanners)",
       "matchDepNames": [
         "golangci/golangci-lint",
         "hadolint/hadolint",

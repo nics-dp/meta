@@ -42,7 +42,7 @@
       "minimumReleaseAge": "7 days"
     },
     {
-      "description": "Scanner binaries: pinned for reproducibility and supply-chain review, refreshed daily with a short release-age buffer and automerged. Detection freshness comes from the databases and rule packs the scanners fetch at run time (trivy-db, grype-db, the opengrep registry); trufflehog's detectors ship in the binary, which is why this group runs daily rather than weekly.",
+      "description": "Scanner binaries: pinned for reproducibility and supply-chain review, refreshed on this rule's schedule with a short release-age buffer and automerged. Detection freshness comes from the databases and rule packs the scanners fetch at run time (trivy-db, grype-db, the opengrep registry); trufflehog's detectors ship in the binary, which is why this group runs more often than the preset's weekly default. opengrep and trufflehog reach this rule through the org preset's mise task-header manager, trivy through meta's own.",
       "matchPackageNames": [
         "aquasecurity/trivy",
         "opengrep/opengrep",
@@ -81,6 +81,14 @@
         "golang.org/x/perf"
       ],
       "automerge": false
+    },
+    {
+      "description": "parlay is pinned in two forms — the atoms' github:snyk/parlay header (matched by the org preset) and the SBOM workflows' go install line (matched by meta's manager); one group moves both in one PR and keeps the preset's review.",
+      "matchPackageNames": [
+        "snyk/parlay"
+      ],
+      "groupName": "parlay pins",
+      "automerge": false
     }
   ],
   "customManagers": [
@@ -98,15 +106,12 @@
     },
     {
       "customType": "regex",
-      "description": "Update synchronized parlay pins: the go install in the SBOM workflows and the github:snyk/parlay tool in the sbom:enrich and py:sbom-custom atoms",
+      "description": "Update the parlay go install lines in the SBOM workflows; the atoms' github:snyk/parlay header pins are matched by the org preset's mise task-header manager, and the parlay pins package rule below groups both into one PR",
       "managerFilePatterns": [
-        "/^\\.github/workflows/sbom-(?:source|image)\\.yml$/",
-        "/^\\.mise/tasks/sbom/enrich$/",
-        "/^\\.mise/tasks/py/sbom-custom$/"
+        "/^\\.github/workflows/sbom-(?:source|image)\\.yml$/"
       ],
       "matchStrings": [
-        "go install github\\.com/snyk/parlay@v(?<currentValue>\\d+\\.\\d+\\.\\d+)",
-        "\\\"github:snyk/parlay\\\"=\\\"(?<currentValue>\\d+\\.\\d+\\.\\d+)\\\""
+        "go install github\\.com/snyk/parlay@v(?<currentValue>\\d+\\.\\d+\\.\\d+)"
       ],
       "depNameTemplate": "snyk/parlay",
       "datasourceTemplate": "github-releases",
@@ -236,7 +241,7 @@
     },
     {
       "customType": "regex",
-      "description": "Update synchronized Trivy pins: the mise scan atoms and the trivy-action `version:` input in the SBOM and SARIF workflows",
+      "description": "Update synchronized Trivy pins: the core `trivy=` tool in the mise scan atoms (the org preset's header manager only sees aqua:/github: tools) and the trivy-action `version:` input in the SBOM and SARIF workflows",
       "managerFilePatterns": [
         "/^\\.mise/tasks/iac/trivy$/",
         "/^\\.mise/tasks/ci/trivy-license$/",
@@ -255,7 +260,7 @@
     },
     {
       "customType": "regex",
-      "description": "Update the Grype pins in the mise scan atoms",
+      "description": "Update the core `grype=` tool in the mise scan atoms (not visible to the org preset's aqua:/github: header manager)",
       "managerFilePatterns": [
         "/^\\.mise/tasks/sbom/grype$/",
         "/^\\.mise/tasks/py/sbom-custom$/"
@@ -264,32 +269,6 @@
         "grype=\\\"(?<currentValue>\\d+\\.\\d+\\.\\d+)\\\""
       ],
       "depNameTemplate": "anchore/grype",
-      "datasourceTemplate": "github-releases",
-      "extractVersionTemplate": "^v(?<version>.+)$"
-    },
-    {
-      "customType": "regex",
-      "description": "Update the OpenGrep pin in the ci:semgrep task",
-      "managerFilePatterns": [
-        "/^\\.mise/tasks/ci/semgrep$/"
-      ],
-      "matchStrings": [
-        "\\\"aqua:opengrep/opengrep\\\"=\\\"(?<currentValue>\\d+\\.\\d+\\.\\d+)\\\""
-      ],
-      "depNameTemplate": "opengrep/opengrep",
-      "datasourceTemplate": "github-releases",
-      "extractVersionTemplate": "^v(?<version>.+)$"
-    },
-    {
-      "customType": "regex",
-      "description": "Update the TruffleHog pin in the ci:trufflehog task",
-      "managerFilePatterns": [
-        "/^\\.mise/tasks/ci/trufflehog$/"
-      ],
-      "matchStrings": [
-        "\\\"aqua:trufflesecurity/trufflehog\\\"=\\\"(?<currentValue>\\d+\\.\\d+\\.\\d+)\\\""
-      ],
-      "depNameTemplate": "trufflesecurity/trufflehog",
       "datasourceTemplate": "github-releases",
       "extractVersionTemplate": "^v(?<version>.+)$"
     }

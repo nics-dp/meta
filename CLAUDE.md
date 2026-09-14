@@ -210,11 +210,14 @@ before changing any of these; the mechanism is in the code, the history in
   compose images do get `pinDigests`. Internal `github.com/nics-dp/**` Go
   modules are disabled (they move through `go:lib-remote`). → the
   `description` fields of those `packageRules` in `renovate-preset.json`.
-- Pins that exist only in this repository's workflows and atoms (quill, parlay,
-  gosec, govulncheck, air, shellcheck, zizmor, grype, the mise version) are
-  tracked by the custom managers in meta's own `renovate.json`, not the preset.
-  Zizmor action + CLI, Anchore action + Grype and the mise pins are grouped and
-  never automerge. → `renovate.json`.
+- Renovate coverage of this repository's pins is split: the org preset's mise
+  task-header managers see `aqua:`/`github:`/bun pins in the atoms; meta's own
+  `renovate.json` carries custom managers for everything else (core tools such
+  as shellcheck, zizmor, trivy and grype, `go:` module tools, `go install`
+  lines and marked workflow inputs, the mise version). Its package rules decide
+  review versus automerge per group; the scanners automerge on a short
+  release-age buffer, the rest stay reviewed. → `renovate.json`,
+  `renovate-preset.json`.
 
 **Meta's own CI** → `docs/design-notes/meta-self-ci.md`
 
