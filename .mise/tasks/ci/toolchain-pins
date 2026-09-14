@@ -1,0 +1,243 @@
+#!/usr/bin/env bash
+#MISE description="Fail when a language toolchain (go/python/node/bun) is pinned to different versions across mise.toml, the go.mod go directive, Dockerfiles, .mise/tasks image refs, workflows, .python-version and .nvmrc"
+#MISE hide=true
+#MISE raw=true
+#
+# The toolchain version is stated in files nothing at runtime connects:
+# mise.toml (the toolchain CI and dev install), go.mod (the module minimum),
+# the Dockerfile builder image (what compiles the release image) and the
+# reusable workflows' `go_version` (what compiles snapshot/release binaries).
+# Documentation deliberately states no version (README says "pinned in
+# mise.toml"), so prose is out of scope here.
+# Drift does not fail loudly -- go:audit scans one toolchain while the release
+# is built by another -- and Renovate's per-language toolchain groups only
+# batch what a manager extracts, so a bump can still land in one file alone.
+# nics-dp/dcf-platform's test/internal/toolchain_pins_test.go was the Go-only,
+# repo-local first version of this gate; this atom is the org-wide one.
+#
+# Pins are compared component-wise: a shorter pin agrees with a longer one when
+# it is a prefix (Docker tag `3.14` vs mise `3.14.7`); `1.27.0` vs `1.27.1` is
+# drift. A language with a single pin cannot drift. Non-numeric values
+# (`latest`, `stable`, `${{ ... }}`) are ignored.
+set -euo pipefail
+
+# Scan the whole repository even when invoked from a nested facade
+# (e.g. a root task delegating into web/): pins in the root and in
+# sub-projects are compared together.
+if top=$(git rev-parse --show-toplevel 2>/dev/null); then
+  cd "$top"
+fi
+
+# Candidate files: tracked files inside git, every file otherwise. vendor/ can
+# be committed (-mod=vendor repos), so the excludes apply either way.
+list_files() {
+  if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    git ls-files
+  else
+    find . -type f | sed 's#^\./##'
+  fi | grep -Ev '(^|/)(vendor|node_modules|\.venv|\.git|testdata)/' || true
+}
+
+# PINS entries: "<lang>|<version>|<path:line>"
+PINS=()
+pin() { PINS+=("$1|$2|$3"); }
+
+# Leading numeric version of a value: strips an image digest and a `v` prefix,
+# keeps digits and dots. Fails (no output) for latest/stable/expressions.
+num() {
+  local v=$1
+  v=${v%%@*}
+  v=${v#v}
+  [[ $v =~ ^([0-9]+(\.[0-9]+)*) ]] || return 1
+  printf '%s' "${BASH_REMATCH[1]}"
+}
+
+# Tool / image names to a language, the same aliases the preset's toolchain
+# groups match (bare tool, mise core: backend, Docker Hub image, dhi.io image).
+lang_of() {
+  case $1 in
+    go | core:go | golang | dhi.io/golang) echo go ;;
+    python | core:python | dhi.io/python) echo python ;;
+    node | core:node | dhi.io/node) echo node ;;
+    bun | core:bun | oven/bun | docker.io/oven/bun) echo bun ;;
+    *) return 1 ;;
+  esac
+}
+
+# mise.toml: `<tool> = "<version>"`, `<tool> = ["<version>", …]` (first entry,
+# as Renovate reads it) or `<tool> = { version = "<version>", … }` inside
+# [tools] only. The key may be bare or quoted and may carry mise's `core:`
+# backend prefix; values may use TOML basic ("…") or literal ('…') strings.
+scan_mise() {
+  local f=$1 sec='' n=0 line ver
+  local key='^[[:space:]]*["'"'"']?(core:)?(go|python|node|bun)["'"'"']?[[:space:]]*=[[:space:]]*'
+  local str='["'"'"']([^"'"'"']+)["'"'"']'
+  local arr='\[[[:space:]]*["'"'"']([^"'"'"']+)["'"'"']'
+  local tbl='\{.*version[[:space:]]*=[[:space:]]*["'"'"']([^"'"'"']+)["'"'"']'
+  while IFS= read -r line || [[ -n $line ]]; do
+    n=$((n + 1))
+    if [[ $line =~ ^\[([^]]+)\] ]]; then
+      sec=${BASH_REMATCH[1]}
+      continue
+    fi
+    [[ $sec == tools ]] || continue
+    if [[ $line =~ $key$str ]] || [[ $line =~ $key$arr ]] || [[ $line =~ $key$tbl ]]; then
+      if ver=$(num "${BASH_REMATCH[3]}"); then
+        pin "${BASH_REMATCH[2]}" "$ver" "$f:$n"
+      fi
+    fi
+  done <"$f"
+}
+
+# go.mod: the `go` directive only (any run of whitespace before the version).
+# A `toolchain` directive is deliberately not a pin: it may legitimately select
+# a newer patch toolchain than the module's minimum language version.
+scan_gomod() {
+  local f=$1 n rest ver
+  while IFS=: read -r n rest; do
+    [[ $rest =~ ^go[[:space:]]*([0-9][0-9.]*) ]] || continue
+    if ver=$(num "${BASH_REMATCH[1]}"); then
+      pin go "$ver" "$f:$n"
+    fi
+  done < <(grep -nE '^go[[:space:]]*[0-9]' "$f" || true)
+}
+
+# Image references (`golang:1.27.1-…`, `dhi.io/python:3.14-…`, `docker.io/oven/bun:1.4.0@…`)
+# whose tag starts with a digit, on the lines grep hands in. `FROM ${GO_BASE}`
+# carries no literal and is skipped; the ARG that defines GO_BASE is what gets read.
+# A trailing ` # comment` is dropped first so an example image in a comment is
+# not a pin.
+IMAGE_RE='(^|[[:space:]=/"'"'"'])(docker\.io/|dhi\.io/)?(library/)?(golang|python|node|oven/bun):([0-9][^[:space:]"'"'"']*)'
+scan_imagerefs() {
+  local f=$1 n rest lang ver
+  while IFS=: read -r n rest; do
+    if [[ $rest =~ ^(.*[^[:space:]])[[:space:]]+#.*$ ]]; then
+      rest=${BASH_REMATCH[1]}
+    fi
+    [[ $rest =~ $IMAGE_RE ]] || continue
+    lang=$(lang_of "${BASH_REMATCH[4]}") || continue
+    if ver=$(num "${BASH_REMATCH[5]}"); then
+      pin "$lang" "$ver" "$f:$n"
+    fi
+  done
+}
+
+# Dockerfile: FROM / ARG directives only (case-insensitive, leading whitespace
+# allowed); comments never start with a directive so they are excluded.
+scan_dockerfile() {
+  scan_imagerefs "$1" < <(grep -niE '^[[:space:]]*(FROM|ARG)[[:space:]]' "$1" || true)
+}
+
+# Repo-local mise task scripts: a builder image pinned in a shell variable
+# assignment (e.g. GO_BUILDER_IMAGE="golang:1.27.1-trixie") is a toolchain pin
+# too. The org preset has no manager for these; a repo either adds its own
+# custom regex manager (dcf-local-env does) or bumps the value by hand -- this
+# gate catches it either way. Only assignment lines count -- optionally
+# declared with export / local / readonly / declare -- so comments and prose
+# mentioning an image are ignored.
+scan_taskfile() {
+  scan_imagerefs "$1" < <(grep -nE '^[[:space:]]*((export|local|readonly|declare)([[:space:]]+-[A-Za-z]+)*[[:space:]]+)?[A-Za-z_][A-Za-z0-9_]*=["'"'"']?(docker\.io/|dhi\.io/)?(library/)?(golang|python|node|oven/bun):[0-9]' "$1" || true)
+}
+
+# Workflows: reusable-workflow inputs (`go_version: "1.27.1"`) and setup-*
+# action inputs (`go-version: '1.27.1'`, `node-version: "24"`). Only a YAML
+# mapping key at the start of the line (after indentation, optionally as a
+# list item) counts, and lines inside a block scalar (`run: |` / `>` bodies)
+# are skipped, so `hugo-version:`, comments and script text are not pins.
+scan_workflow() {
+  local f=$1 n=0 line indent scalar_indent=-1 key val lang ver
+  local re='^[[:space:]]*(-[[:space:]]+)?(go|python|node|bun)[_-]version:[[:space:]]*["'"'"']?([0-9][^"'"'"'[:space:]]*)'
+  while IFS= read -r line || [[ -n $line ]]; do
+    n=$((n + 1))
+    [[ $line =~ ^[[:space:]]*(#.*)?$ ]] && continue
+    indent=${line%%[^[:space:]]*}
+    indent=${#indent}
+    if ((scalar_indent >= 0)); then
+      ((indent > scalar_indent)) && continue
+      scalar_indent=-1
+    fi
+    if [[ $line =~ :[[:space:]]*[\|\>][0-9+-]*[[:space:]]*(#.*)?$ ]]; then
+      scalar_indent=$indent
+      continue
+    fi
+    [[ $line =~ $re ]] || continue
+    key=${BASH_REMATCH[2]}
+    val=${BASH_REMATCH[3]}
+    lang=$(lang_of "$key") || continue
+    if ver=$(num "$val"); then
+      pin "$lang" "$ver" "$f:$n"
+    fi
+  done <"$f"
+}
+
+# Single-value version files: .python-version (pyenv / mise) and .nvmrc (nvm).
+scan_versionfile() {
+  local lang=$1 f=$2 ver
+  if ver=$(num "$(head -n 1 "$f")"); then
+    pin "$lang" "$ver" "$f:1"
+  fi
+}
+
+while IFS= read -r f; do
+  [[ -f $f ]] || continue
+  case $f in
+    mise.toml | */mise.toml | .mise.toml | */.mise.toml | .mise/config.toml | */.mise/config.toml) scan_mise "$f" ;;
+    go.mod | */go.mod) scan_gomod "$f" ;;
+    Dockerfile | */Dockerfile | Dockerfile.* | */Dockerfile.* | *.Dockerfile) scan_dockerfile "$f" ;;
+    .mise/tasks/* | */.mise/tasks/*) scan_taskfile "$f" ;;
+    .github/workflows/*.yml | .github/workflows/*.yaml) scan_workflow "$f" ;;
+    .python-version | */.python-version) scan_versionfile python "$f" ;;
+    .nvmrc | */.nvmrc) scan_versionfile node "$f" ;;
+  esac
+done < <(list_files)
+
+if ((${#PINS[@]} == 0)); then
+  echo "toolchain-pins: no toolchain pins found"
+  exit 0
+fi
+
+# Report every pin, then compare per language: every pin must be a component
+# prefix of the most specific pin (longest). On drift, list each distinct
+# version with the locations that state it.
+drift=0
+for lang in go python node bun; do
+  ref=''
+  for p in "${PINS[@]}"; do
+    IFS='|' read -r l v loc <<<"$p"
+    [[ $l == "$lang" ]] || continue
+    printf '%-48s %s=%s\n' "$loc" "$l" "$v"
+    if [[ -z $ref ]] || ((${#v} > ${#ref})); then
+      ref=$v
+    fi
+  done
+  [[ -n $ref ]] || continue
+  agree=1
+  for p in "${PINS[@]}"; do
+    IFS='|' read -r l v loc <<<"$p"
+    [[ $l == "$lang" ]] || continue
+    [[ "$ref." == "$v."* ]] || agree=0
+  done
+  ((agree)) && continue
+  drift=1
+  # Distinct versions in first-seen order, each with its locations.
+  seen=()
+  for p in "${PINS[@]}"; do
+    IFS='|' read -r l v loc <<<"$p"
+    [[ $l == "$lang" ]] || continue
+    case " ${seen[*]:-} " in *" $v "*) continue ;; esac
+    seen+=("$v")
+    locs=''
+    for q in "${PINS[@]}"; do
+      IFS='|' read -r l2 v2 loc2 <<<"$q"
+      [[ $l2 == "$lang" && $v2 == "$v" ]] || continue
+      locs+="${locs:+, }$loc2"
+    done
+    echo "DRIFT $lang: $v at $locs" >&2
+  done
+done
+
+if ((drift)); then
+  echo "toolchain-pins: pins disagree; update every location in the same change (Renovate groups them under chore(<lang>.toolchain))" >&2
+  exit 1
+fi
+echo "toolchain-pins: all pins agree"

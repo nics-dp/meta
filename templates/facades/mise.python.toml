@@ -90,6 +90,7 @@ depends = [
   # "py:deptree",
   "py:license-custom",
   "ci:semgrep python",
+  "ci:toolchain-pins",
 ]
 
 
@@ -107,6 +108,7 @@ depends = [
   "py:dead-code",
   "py:license-custom",
   "ci:semgrep python",
+  "ci:toolchain-pins",
 ]
 
 [tasks.sbom]
