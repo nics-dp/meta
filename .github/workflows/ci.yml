@@ -75,7 +75,7 @@ jobs:
           token: "offline-placeholder"
           persona: regular
           min-severity: high
-          version: 1.29.0
+          version: 1.30.0
           advanced-security: false
           annotations: false
           color: false
