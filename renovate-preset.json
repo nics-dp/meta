@@ -49,6 +49,16 @@
       ],
       "depNameTemplate": "oven-sh/bun",
       "datasourceTemplate": "github-releases"
+    },
+    {
+      "customType": "regex",
+      "description": "Toolchain versions handed to the reusable workflows (go-release / security-sarif / image-release …) as plain string inputs, e.g. `go_version: \"1.27.1\" # renovate: datasource=golang-version depName=go`. No built-in manager reads workflow inputs, so without this the CI and release toolchain silently stays behind mise.toml. A regex manager cannot see YAML structure, so the input must carry the trailing `# renovate: datasource=<ds> depName=<dep>` marker and only marked lines are managed; the marker must not be written inside a block scalar (`run: |` body), because the regex would manage that text too. The ci:toolchain-pins atom reads every structural *_version key, marked or not, skips block scalars, and fails on drift. Documentation deliberately states no toolchain version (README says 'pinned in mise.toml'), so there is no README manager to keep in step.",
+      "managerFilePatterns": [
+        "/^\\.github/workflows/[^/]+\\.ya?ml$/"
+      ],
+      "matchStrings": [
+        "(?:^|\\n)[ \\t]*(?:-[ \\t]+)?[a-z]+_version:[ \\t]*[\"']?(?<currentValue>\\d+(?:\\.\\d+)*)[\"']?[ \\t]*#[ \\t]*renovate:[ \\t]*datasource=(?<datasource>\\S+)[ \\t]+depName=(?<depName>\\S+)(?:[ \\t]+versioning=(?<versioning>\\S+))?"
+      ]
     }
   ],
   "packageRules": [
@@ -283,15 +293,31 @@
       "enabled": false
     },
     {
-      "description": "Collapse the Go toolchain's separate per-manager update PRs into one. go.mod (gomod), mise.toml (mise), the dhi.io/golang base image (dockerfile), and a downstream README copy (custom.regex) all track the same Go version but live in different manager groups, so they used to open and merge as independent PRs (e.g. nics-dp/otel-bundle#123's mise bump merged while go.mod and the image lagged). matchManagers scopes this to exactly those managers, so an unrelated dep named `go` in another ecosystem (e.g. an npm package) is not swept in — and its update policy is left untouched. dependencyDashboardApproval is off so the combined bump opens directly (overriding the gomod dashboard-only rule above for these deps); automerge is off so a human reviews the single PR. Note: groupName batches whatever updates are available in a given run — it does not wait for every member nor force identical versions across datasources, so this narrows the drift window rather than guaranteeing lockstep. Placed last to override the per-manager groups above.",
+      "description": "Renovate never proposes go-directive bumps in go.mod by default; rangeStrategy=bump opts in so go.mod rides the 'go toolchain' group below together with mise.toml, the builder image and workflow go_version, instead of silently staying behind (nics-dp/otel-bundle#137 first did this per repo).",
+      "matchManagers": [
+        "gomod"
+      ],
+      "matchDepNames": [
+        "go"
+      ],
+      "matchDepTypes": [
+        "golang"
+      ],
+      "rangeStrategy": "bump"
+    },
+    {
+      "description": "Collapse the Go toolchain's separate per-manager update PRs into one. go.mod (gomod), mise.toml (mise), the dhi.io/golang or golang builder image (dockerfile), setup-go's go-version (github-actions) and marked workflow go_version inputs (custom.regex) all track the same Go version but live in different manager groups, so they used to open and merge as independent PRs (e.g. nics-dp/otel-bundle#123's mise bump merged while go.mod and the image lagged). matchManagers scopes this to exactly those managers, so an unrelated dep named `go` in another ecosystem (e.g. an npm package) is not swept in — and its update policy is left untouched. dependencyDashboardApproval is off so the combined bump opens directly (overriding the gomod dashboard-only rule above for these deps); automerge is off so a human reviews the single PR. Note: groupName batches whatever updates are available in a given run — it does not wait for every member nor force identical versions across datasources, so this narrows the drift window rather than guaranteeing lockstep; the ci:toolchain-pins atom is the gate. Placed after the per-manager groups above to override them. mise reports a `\"core:<tool>\"` key as depName core:<tool>, hence that alias.",
       "matchManagers": [
         "gomod",
         "mise",
         "dockerfile",
+        "github-actions",
         "custom.regex"
       ],
       "matchDepNames": [
         "go",
+        "core:go",
+        "golang",
         "dhi.io/golang"
       ],
       "groupName": "go toolchain",
@@ -299,6 +325,84 @@
       "labels": [
         "dependencies",
         "go"
+      ],
+      "automerge": false,
+      "dependencyDashboardApproval": false,
+      "assignees": [
+        "charliie-dev"
+      ]
+    },
+    {
+      "description": "Python toolchain lockstep, same shape as 'go toolchain': mise.toml `python`, .python-version (pyenv), the dhi.io/python or python builder image and setup-python open as ONE PR. Repo-level rules come after this preset and keep winning for their deps (dcf-catalog's vecsea uv/python group, dcf-synth's cpython tag override). mise reports a `\"core:<tool>\"` key as depName core:<tool>, hence that alias.",
+      "matchManagers": [
+        "mise",
+        "pyenv",
+        "dockerfile",
+        "github-actions",
+        "custom.regex"
+      ],
+      "matchDepNames": [
+        "python",
+        "core:python",
+        "dhi.io/python"
+      ],
+      "groupName": "python toolchain",
+      "commitMessagePrefix": "chore(python.toolchain):",
+      "labels": [
+        "dependencies",
+        "python"
+      ],
+      "automerge": false,
+      "dependencyDashboardApproval": false,
+      "assignees": [
+        "charliie-dev"
+      ]
+    },
+    {
+      "description": "Node toolchain lockstep: mise.toml `node`, .nvmrc, the dhi.io/node or node image and setup-node's node-version open as ONE PR. mise reports a `\"core:<tool>\"` key as depName core:<tool>, hence that alias.",
+      "matchManagers": [
+        "mise",
+        "nvm",
+        "dockerfile",
+        "github-actions",
+        "custom.regex"
+      ],
+      "matchDepNames": [
+        "node",
+        "core:node",
+        "dhi.io/node"
+      ],
+      "groupName": "node toolchain",
+      "commitMessagePrefix": "chore(node.toolchain):",
+      "labels": [
+        "dependencies",
+        "node"
+      ],
+      "automerge": false,
+      "dependencyDashboardApproval": false,
+      "assignees": [
+        "charliie-dev"
+      ]
+    },
+    {
+      "description": "Bun toolchain lockstep: mise.toml `bun`, the oven/bun build image open as ONE PR (github-actions is listed for parity with the other groups; the github-actions manager's uses-with extraction is proven for setup-go / setup-node — ZenQuery#312, meta#340 — not for the third-party setup-bun, whose bun-version is therefore only gated by ci:toolchain-pins) (the Docker image builds the SPA in CI/release while mise runs local dev, so a solo bump leaves the two on different bun versions). The `.mise/tasks` header bun pin (depName oven-sh/bun) stays in 'mise task tools': it is the atoms' runtime, not a project toolchain, so oven-sh/bun is deliberately NOT matched here. mise reports a `\"core:<tool>\"` key as depName core:<tool>, hence that alias.",
+      "matchManagers": [
+        "mise",
+        "dockerfile",
+        "github-actions",
+        "custom.regex"
+      ],
+      "matchDepNames": [
+        "bun",
+        "core:bun",
+        "oven/bun",
+        "docker.io/oven/bun"
+      ],
+      "groupName": "bun toolchain",
+      "commitMessagePrefix": "chore(bun.toolchain):",
+      "labels": [
+        "dependencies",
+        "bun"
       ],
       "automerge": false,
       "dependencyDashboardApproval": false,
