@@ -312,3 +312,30 @@ consumer uses a contract.
 
 `docs/design-notes/` holds the long-form rationale moved out of this file. Code
 and workflow files win over them; prune rather than extend.
+
+## Comments are present tense
+
+Code is the source of truth. Every comment, docstring or doc line you add or rewrite states
+what the code does now and why it must stay that way. Documents that exist to hold history
+(design notes' history sections, runbook incident records, the changelog) are exempt;
+everything else points at them instead of repeating them.
+
+- No issue, PR or review references (`#123`, `libdcf#533`, `fix #2`, `round 3`, `Task 4`)
+  in the comments, docstrings or docs you add or rewrite. Exceptions: a CLAUDE.md rule may
+  cite the issue that is its rationale, and spec, ADR and design-note pointers, RFCs and
+  third-party bug links stay.
+- No dates, dated rulings or phase anchors (`since P2`, `v0.2 之前`, `第一階段`).
+- No before/after narrative: `previously`, `used to`, `no longer`, `is now`, `the old X`,
+  `before the fix`, `this change`, `一度`, `修正之前`. Keep a guard's rationale, drop its
+  origin story; a regression test names the failure it rejects, not the commit that caused it.
+- No counts of things the code enumerates (how many handlers, channels or packages exist);
+  name the class.
+- No repeated toolchain pins: a version lives where the tool reads it (`mise.toml`, `go.mod`,
+  lockfiles, the Dockerfile base image) and prose points there. Contract versions such as
+  `/api/v1` are not pins.
+- A rewrite must be true of the code as it is. Dropping the number and keeping the sentence
+  leaves stale claims (a renamed test, an exemption absent from the code, a guarantee that
+  holds only while a file is being written). Check the pointer before shipping.
+- Docstrings are comments. Identifiers and string literals are not, and a test that reads
+  source files must not locate code by a comment's wording. A guard whose subject is a doc's
+  own text reads that text, and fails loudly when the anchor is reworded.
