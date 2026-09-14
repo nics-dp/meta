@@ -95,7 +95,10 @@ jobs:
         uses: anchore/sbom-action@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26 # v0.24.2
         with:
           path: ${{ inputs.scan_path }}
-          format: cyclonedx-json
+          # Pin the spec version: syft defaults cyclonedx-json to 1.7, and parlay
+          # (the enrich step below) decodes up to 1.6 (snyk/parlay#136). trivy and
+          # grype read 1.7; the pin follows parlay.
+          format: cyclonedx-json@1.6
           output-file: sbom-source.cdx.json
           upload-artifact: false
           dependency-snapshot: ${{ !inputs.snapshot }}
