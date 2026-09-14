@@ -316,12 +316,14 @@ and workflow files win over them; prune rather than extend.
 ## Comments are present tense
 
 Code is the source of truth. Every comment, docstring or doc line you add or rewrite states
-what the code does now and why it must stay that way. History lives in git and in documents
-written to hold it (design notes, runbook incident records, the changelog), not in comments.
+what the code does now and why it must stay that way. Documents that exist to hold history
+(design notes' history sections, runbook incident records, the changelog) are exempt;
+everything else points at them instead of repeating them.
 
-- No issue, PR or review references in code comments or docstrings (`#123`, `libdcf#533`,
-  `fix #2`, `round 3`, `Task 4`). Spec, ADR and design-note pointers, RFCs and third-party
-  bug links stay. A CLAUDE.md rule may cite the issue that is its rationale.
+- No issue, PR or review references (`#123`, `libdcf#533`, `fix #2`, `round 3`, `Task 4`)
+  in comments, docstrings or docs. Two exceptions: a CLAUDE.md rule may cite the issue that
+  is its rationale, and spec, ADR and design-note pointers, RFCs and third-party bug links
+  stay.
 - No dates, dated rulings or phase anchors (`since P2`, `v0.2 之前`, `第一階段`).
 - No before/after narrative: `previously`, `used to`, `no longer`, `is now`, `the old X`,
   `before the fix`, `this change`, `一度`, `修正之前`. Keep a guard's rationale, drop its
