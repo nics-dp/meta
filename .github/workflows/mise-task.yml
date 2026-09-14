@@ -96,7 +96,7 @@ jobs:
     # `latest` request: resolving one lists every version from the source (for a Go
     # module that is one request per tag), and when the listing exceeds the timeout
     # mise only warns, runs the task without the tool, and the atom fails with
-    # "command not found" (nics-dp/meta#395). 60s replaces mise's 20s default.
+    # "command not found". MISE_FETCH_REMOTE_VERSIONS_TIMEOUT below holds the timeout.
     env:
       MISE_MINIMUM_RELEASE_AGE: "0"
       MISE_FETCH_REMOTE_VERSIONS_TIMEOUT: "60s"
