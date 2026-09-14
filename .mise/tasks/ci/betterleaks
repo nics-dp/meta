@@ -4,7 +4,8 @@
 #MISE raw=true
 # Installing this tool verifies its GitHub artifact attestation, which needs a
 # mise build whose embedded Sigstore trust root carries GitHub's current TSA
-# cert (the mise minimum lives in mise-task.yml); older builds fail with "TSA
+# cert (compatibility floor: docs/design-notes/mise-task-invariants.md; the
+# exact pin is mise-task.yml's `version:` input); older builds fail with "TSA
 # timestamp verification failed: no certificate matches issuer and serial
 # number" (jdx/mise#10680 -- the artifact itself is fine). The version pin
 # below is Renovate-managed and safe to bump normally.
