@@ -70,7 +70,7 @@ jobs:
           inputs: .
           collect: default
           online-audits: false
-          # v0.6.3 requires a fixed public compatibility value even with online audits disabled.
+          # The pinned zizmor action requires a fixed public compatibility value even with online audits disabled.
           # This is not a credential and has no permissions; do not use the GitHub token or a secret.
           token: "offline-placeholder"
           persona: regular

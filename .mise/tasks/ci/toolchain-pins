@@ -16,7 +16,7 @@
 # repo-local first version of this gate; this atom is the org-wide one.
 #
 # Pins are compared component-wise: a shorter pin agrees with a longer one when
-# it is a prefix (Docker tag `3.14` vs mise `3.14.7`); `1.27.0` vs `1.27.1` is
+# it is a prefix (Docker tag `X.Y` vs mise `X.Y.Z`); `X.Y.0` vs `X.Y.1` is
 # drift. A language with a single pin cannot drift. Non-numeric values
 # (`latest`, `stable`, `${{ ... }}`) are ignored.
 set -euo pipefail
@@ -102,7 +102,7 @@ scan_gomod() {
   done < <(grep -nE '^go[[:space:]]*[0-9]' "$f" || true)
 }
 
-# Image references (`golang:1.27.1-…`, `dhi.io/python:3.14-…`, `docker.io/oven/bun:1.4.0@…`)
+# Image references (`golang:X.Y.Z-…`, `dhi.io/python:X.Y-…`, `docker.io/oven/bun:X.Y.Z@…`)
 # whose tag starts with a digit, on the lines grep hands in. `FROM ${GO_BASE}`
 # carries no literal and is skipped; the ARG that defines GO_BASE is what gets read.
 # A trailing ` # comment` is dropped first so an example image in a comment is
@@ -129,7 +129,7 @@ scan_dockerfile() {
 }
 
 # Repo-local mise task scripts: a builder image pinned in a shell variable
-# assignment (e.g. GO_BUILDER_IMAGE="golang:1.27.1-trixie") is a toolchain pin
+# assignment (e.g. GO_BUILDER_IMAGE="golang:X.Y.Z-trixie") is a toolchain pin
 # too. The org preset has no manager for these; a repo either adds its own
 # custom regex manager (dcf-local-env does) or bumps the value by hand -- this
 # gate catches it either way. Only assignment lines count -- optionally
@@ -139,8 +139,8 @@ scan_taskfile() {
   scan_imagerefs "$1" < <(grep -nE '^[[:space:]]*((export|local|readonly|declare)([[:space:]]+-[A-Za-z]+)*[[:space:]]+)?[A-Za-z_][A-Za-z0-9_]*=["'"'"']?(docker\.io/|dhi\.io/)?(library/)?(golang|python|node|oven/bun):[0-9]' "$1" || true)
 }
 
-# Workflows: reusable-workflow inputs (`go_version: "1.27.1"`) and setup-*
-# action inputs (`go-version: '1.27.1'`, `node-version: "24"`). Only a YAML
+# Workflows: reusable-workflow inputs (`go_version: "X.Y.Z"`) and setup-*
+# action inputs (`go-version: 'X.Y.Z'`, `node-version: "NN"`). Only a YAML
 # mapping key at the start of the line (after indentation, optionally as a
 # list item) counts, and lines inside a block scalar (`run: |` / `>` bodies)
 # are skipped, so `hugo-version:`, comments and script text are not pins.

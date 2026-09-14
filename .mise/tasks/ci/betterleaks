@@ -56,7 +56,7 @@ set -euo pipefail
 # are inert here today, but the same text in a mise-templated context would be
 # rendered rather than matched.
 #
-# See nics-dp/meta#347 and nics-dp/meta#352 for why the 1.8.1 generic-password
+# See nics-dp/meta#347 and nics-dp/meta#352 for why the pinned release's generic-password
 # and generic-credential-uri rules required these expansions (2026-08-25/26),
 # and nics-dp/meta#362 for the dcf-smoke lldap-fixture batch (2026-09-07).
 config="$(mktemp)"
