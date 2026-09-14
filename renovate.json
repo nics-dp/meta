@@ -20,11 +20,14 @@
       "minimumReleaseAge": "7 days"
     },
     {
-      "description": "Review Anchore scan action and Grype together",
+      "description": "Review Anchore scan action and Grype together where they gate a workflow; the Grype pins in the mise atoms have their own rule below",
       "groupName": "grype path security gate",
       "matchPackageNames": [
         "anchore/scan-action",
         "anchore/grype"
+      ],
+      "matchFileNames": [
+        ".github/workflows/**"
       ],
       "automerge": false,
       "minimumReleaseAge": "7 days"
@@ -54,7 +57,7 @@
       "automergeType": "pr"
     },
     {
-      "description": "Grype in the mise scan atoms joins the daily scanner group; the blocking `grype-path` scan in ci.yml keeps the reviewed 7-day gate above (placed after it to override for the atoms only).",
+      "description": "Grype in the mise scan atoms follows the security scanners policy; the workflow-side Grype, which gates ci.yml, stays under the grype path security gate rule. The two rules are disjoint by file pattern, so neither depends on ordering.",
       "matchPackageNames": [
         "anchore/grype"
       ],
@@ -70,7 +73,7 @@
       "automergeType": "pr"
     },
     {
-      "description": "Go analysis tools used by the go:audit / go:dead-code / go:bench-compare atoms and the SARIF workflow open as one PR; deadcode has broken on a minor x/tools bump before, so this group keeps the preset's review (no automerge).",
+      "description": "Go analysis tools used by the go:audit / go:dead-code / go:bench-compare atoms and the SARIF workflow open as one PR and keep the preset's review (no automerge): deadcode and benchstat ride x/tools and x/perf, whose minor releases can change analysis results or fail on new language features, so a bump needs a human look.",
       "groupName": "go analysis tools",
       "matchPackageNames": [
         "golang.org/x/vuln",
