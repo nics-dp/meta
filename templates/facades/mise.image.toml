@@ -35,6 +35,7 @@ description = "Run all CI checks"
 depends = [
   "iac:img:hadolint",
   "iac:trivy",
+  "ci:toolchain-pins",
 ]
 
 [tasks.sbom]
