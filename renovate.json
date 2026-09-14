@@ -95,15 +95,19 @@
     },
     {
       "customType": "regex",
-      "description": "Update parlay version in SBOM workflows",
+      "description": "Update synchronized parlay pins: the go install in the SBOM workflows and the github:snyk/parlay tool in the sbom:enrich and py:sbom-custom atoms",
       "managerFilePatterns": [
-        "/^\\.github/workflows/sbom-(?:source|image)\\.yml$/"
+        "/^\\.github/workflows/sbom-(?:source|image)\\.yml$/",
+        "/^\\.mise/tasks/sbom/enrich$/",
+        "/^\\.mise/tasks/py/sbom-custom$/"
       ],
       "matchStrings": [
-        "go install github\\.com/snyk/parlay@(?<currentValue>v\\d+\\.\\d+\\.\\d+)"
+        "go install github\\.com/snyk/parlay@(?<currentValue>v\\d+\\.\\d+\\.\\d+)",
+        "\\\"github:snyk/parlay\\\"=\\\"(?<currentValue>\\d+\\.\\d+\\.\\d+)\\\""
       ],
       "depNameTemplate": "snyk/parlay",
-      "datasourceTemplate": "github-releases"
+      "datasourceTemplate": "github-releases",
+      "extractVersionTemplate": "^v(?<version>.+)$"
     },
     {
       "customType": "regex",
