@@ -315,20 +315,24 @@ and workflow files win over them; prune rather than extend.
 
 ## Comments are present tense
 
-Code is the source of truth. A comment or doc states what the code does now and why it
-must stay that way; git and `docs/design-notes/` hold the history. Copilot review
-enforces this on every PR, so each violation costs a review round.
+Code is the source of truth. Every comment, docstring or doc line you add or rewrite states
+what the code does now and why it must stay that way. History lives in git and in documents
+written to hold it (design notes, runbook incident records, the changelog), not in comments.
 
-- No issue, PR or review references (`#123`, `libdcf#533`, `fix #2`, `round 3`, `Task 4`).
-  Spec, ADR and design-note pointers, RFCs and third-party bug links stay.
+- No issue, PR or review references in code comments or docstrings (`#123`, `libdcf#533`,
+  `fix #2`, `round 3`, `Task 4`). Spec, ADR and design-note pointers, RFCs and third-party
+  bug links stay. A CLAUDE.md rule may cite the issue that is its rationale.
 - No dates, dated rulings or phase anchors (`since P2`, `v0.2 之前`, `第一階段`).
 - No before/after narrative: `previously`, `used to`, `no longer`, `is now`, `the old X`,
   `before the fix`, `this change`, `一度`, `修正之前`. Keep a guard's rationale, drop its
   origin story; a regression test names the failure it rejects, not the commit that caused it.
-- No counts that drift (`three handlers`, `seven channels`, `51 packages`); name the class.
-- No version numbers outside the pin itself (`mise.toml`, lockfiles); point there.
+- No counts of things the code enumerates (how many handlers, channels or packages exist);
+  name the class.
+- No repeated toolchain pins: a version lives where the tool reads it (`mise.toml`, `go.mod`,
+  lockfiles, the Dockerfile base image) and prose points there. Contract versions such as
+  `/api/v1` are not pins.
 - A rewrite must be true of the code as it is. Dropping the number and keeping the sentence
-  leaves stale claims (a renamed test, an exemption that no longer exists, a guarantee that
+  leaves stale claims (a renamed test, an exemption absent from the code, a guarantee that
   holds only while a file is being written). Check the pointer before shipping.
-- Docstrings are comments. Identifiers and string literals are not; a test that reads source
-  text anchors on code shape, never on a comment.
+- Docstrings are comments. Identifiers and string literals are not, and a test that reads
+  source text must not locate code by a comment's wording.
