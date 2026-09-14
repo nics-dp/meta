@@ -15,10 +15,11 @@
 # nics-dp/dcf-platform's test/internal/toolchain_pins_test.go was the Go-only,
 # repo-local first version of this gate; this atom is the org-wide one.
 #
-# Pins are compared component-wise: a shorter pin agrees with a longer one when
-# it is a prefix (Docker tag `X.Y` vs mise `X.Y.Z`); `X.Y.0` vs `X.Y.1` is
-# drift. A language with a single pin cannot drift. Non-numeric values
-# (`latest`, `stable`, `${{ ... }}`) are ignored.
+# Every pin must state the same full `X.Y.Z`: a shorter pin (`X.Y` image tag,
+# `X` setup-* input) is reported as SHORT and fails the gate even when it is
+# the only pin, because it cannot be compared and lets a patch drift silently;
+# two full pins that differ are DRIFT. Non-numeric values (`latest`, `stable`,
+# `${{ ... }}`) are ignored.
 set -euo pipefail
 
 # Scan the whole repository even when invoked from a nested facade
@@ -102,7 +103,7 @@ scan_gomod() {
   done < <(grep -nE '^go[[:space:]]*[0-9]' "$f" || true)
 }
 
-# Image references (`golang:X.Y.Z-…`, `dhi.io/python:X.Y-…`, `docker.io/oven/bun:X.Y.Z@…`)
+# Image references (`golang:X.Y.Z-…`, `dhi.io/python:X.Y.Z-…`, `docker.io/oven/bun:X.Y.Z@…`)
 # whose tag starts with a digit, on the lines grep hands in. `FROM ${GO_BASE}`
 # carries no literal and is skipped; the ARG that defines GO_BASE is what gets read.
 # A trailing ` # comment` is dropped first so an example image in a comment is
@@ -140,7 +141,7 @@ scan_taskfile() {
 }
 
 # Workflows: reusable-workflow inputs (`go_version: "X.Y.Z"`) and setup-*
-# action inputs (`go-version: 'X.Y.Z'`, `node-version: "NN"`). Only a YAML
+# action inputs (`go-version: 'X.Y.Z'`, `node-version: "X.Y.Z"`). Only a YAML
 # mapping key at the start of the line (after indentation, optionally as a
 # list item) counts, and lines inside a block scalar (`run: |` / `>` bodies)
 # are skipped, so `hugo-version:`, comments and script text are not pins.
@@ -196,27 +197,25 @@ if ((${#PINS[@]} == 0)); then
   exit 0
 fi
 
-# Report every pin, then compare per language: every pin must be a component
-# prefix of the most specific pin (longest). On drift, list each distinct
-# version with the locations that state it.
+# Report every pin, then check per language: each pin must be a full X.Y.Z
+# (SHORT otherwise) and all pins must be identical (DRIFT otherwise, listing
+# each distinct version with the locations that state it).
 drift=0
 for lang in go python node bun; do
   ref=''
-  for p in "${PINS[@]}"; do
-    IFS='|' read -r l v loc <<<"$p"
-    [[ $l == "$lang" ]] || continue
-    printf '%-48s %s=%s\n' "$loc" "$l" "$v"
-    if [[ -z $ref ]] || ((${#v} > ${#ref})); then
-      ref=$v
-    fi
-  done
-  [[ -n $ref ]] || continue
   agree=1
   for p in "${PINS[@]}"; do
     IFS='|' read -r l v loc <<<"$p"
     [[ $l == "$lang" ]] || continue
-    [[ "$ref." == "$v."* ]] || agree=0
+    printf '%-48s %s=%s\n' "$loc" "$l" "$v"
+    if [[ ! $v =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+      echo "SHORT $lang: $v at $loc (pin the full X.Y.Z)" >&2
+      drift=1
+    fi
+    [[ -z $ref ]] && ref=$v
+    [[ $v == "$ref" ]] || agree=0
   done
+  [[ -n $ref ]] || continue
   ((agree)) && continue
   drift=1
   # Distinct versions in first-seen order, each with its locations.
