@@ -3,13 +3,16 @@
 #MISE hide=true
 #MISE raw=true
 #MISE depends=["go:install"]
-#MISE tools={"go:golang.org/x/tools/cmd/deadcode"="latest"}
+#MISE tools={"go:golang.org/x/tools/cmd/deadcode"="v0.50.0"}
 #USAGE arg "[entry]" help="Entry package(s) (default: ./... — roots at every main package, commonly cmd/*)"
 #USAGE flag "--filter <regex>" help="Only report functions matching regex"
 #USAGE flag "--whole-program" help="Also analyze test code (compiles files tagged with GO_TEST_TAGS [default: test] and roots tests via -test)"
 
 # shellcheck disable=SC2154
 set -euo pipefail
+# shellcheck disable=SC1091
+source "$(dirname "$0")/../lib/require-tool"
+require_tool deadcode
 # shellcheck disable=SC1091
 source "$(dirname "$0")/../lib/go-env"
 

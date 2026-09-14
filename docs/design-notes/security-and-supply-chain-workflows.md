@@ -24,7 +24,7 @@ Edits since the move:
 
 ### Release & Build (SBOM workflows)
 
-- **`sbom-image.yml`** — Container CycloneDX SBOM (anchore/sbom-action + parlay enrich; the spec version is pinned in each SBOM workflow's `format:` because the scanners lag syft's default, see the step comment there) + Trivy + Grype scan → Release + Security tab. Its Trivy SARIF (`category: trivy-image`) drops `GO-2026-5932` (`golang.org/x/crypto/openpgp` unmaintained) by rule id unconditionally — Trivy SARIF carries no reachability level (jq, fail-safe: keeps the original on error). The unfixed advisory still ships in the Trivy JSON release asset. Grype needs no filter (`only-fixed: true` already excludes a no-fix advisory).
+- **`sbom-image.yml`** — Container CycloneDX SBOM (anchore/sbom-action + parlay enrich; the spec version is pinned in each SBOM workflow's `format:` because parlay lags syft's default, see the step comment there) + Trivy + Grype scan → Release + Security tab. Its Trivy SARIF (`category: trivy-image`) drops `GO-2026-5932` (`golang.org/x/crypto/openpgp` unmaintained) by rule id unconditionally — Trivy SARIF carries no reachability level (jq, fail-safe: keeps the original on error). The unfixed advisory still ships in the Trivy JSON release asset. Grype needs no filter (`only-fixed: true` already excludes a no-fix advisory).
 - **`sbom-source.yml`** — Filesystem SBOM; input `project_name` for artifact naming; same `GO-2026-5932` filter (`category: trivy-source`).
 
 ### Security

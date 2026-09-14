@@ -2,6 +2,9 @@
 #MISE description="Run Trivy IaC scan on Dockerfiles and compose files"
 #MISE hide=true
 #MISE raw=true
-#MISE tools={trivy="latest"}
+#MISE tools={trivy="0.74.0"}
 
+# shellcheck disable=SC1091
+source "$(dirname "$0")/../lib/require-tool"
+require_tool trivy
 trivy config --exit-code 0 .

@@ -2,7 +2,7 @@
 #MISE description="Static analysis via OpenGrep (semgrep-compatible; p/ci baseline + lang packs)"
 #MISE hide=true
 #MISE raw=true
-#MISE tools={"aqua:opengrep/opengrep"="latest"}
+#MISE tools={"aqua:opengrep/opengrep"="1.30.0"}
 #USAGE arg "[packs]" var=#true var_min=0 help="Language packs (golang, python, typescript, javascript, ...). Stacked on top of p/ci baseline."
 #USAGE flag "--audit" help="Add p/default + p/security-audit + p/owasp-top-ten (deep scan, more FPs; nightly/manual use)"
 #USAGE flag "--rules <path>" help="Custom rules file (e.g., .semgrep/rules.yml). Stacked on top of packs." default=""
@@ -14,6 +14,10 @@
 # Task name and #USAGE signature kept stable so consumers need no change.
 
 # shellcheck disable=SC2154
+
+# shellcheck disable=SC1091
+source "$(dirname "$0")/../lib/require-tool"
+require_tool opengrep
 
 eval "packs=(${usage_packs:-})"
 

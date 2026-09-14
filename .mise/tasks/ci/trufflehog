@@ -2,8 +2,11 @@
 #MISE description="Scan for verified live secrets (trufflehog; deep/release scan)"
 #MISE hide=true
 #MISE raw=true
-#MISE tools={"aqua:trufflesecurity/trufflehog"="latest"}
+#MISE tools={"aqua:trufflesecurity/trufflehog"="3.97.4"}
 set -euo pipefail
+# shellcheck disable=SC1091
+source "$(dirname "$0")/../lib/require-tool"
+require_tool trufflehog
 
 # trufflehog: broad detector set (800+) plus ACTIVE verification. This is the
 # deep/release scan, not the per-PR gate. --results=verified reports only LIVE

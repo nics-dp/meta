@@ -3,8 +3,11 @@
 #MISE hide=true
 #MISE raw=true
 #MISE depends=["sbom:enrich"]
-#MISE tools={grype="latest"}
+#MISE tools={grype="0.118.0"}
 
+# shellcheck disable=SC1091
+source "$(dirname "$0")/../lib/require-tool"
+require_tool grype
 # --only-fixed mirrors the CI gate (sbom-source.yml / sbom-image.yml): report
 # only actionable vulnerabilities that have an upstream fix available.
 grype --only-fixed sbom:enriched-source.cdx.json

@@ -90,8 +90,16 @@ jobs:
     # lookups would hit GitHub/aqua APIs directly with no fallback, and a
     # transient GitHub 504 would hard-fail tool installs (e.g. trivy). Keeping
     # the host on absorbs those transient errors via the cached listing.
+    #
+    # Task-level tools (`#MISE tools=` in an atom) are pinned to exact versions, which
+    # mise resolves without a remote listing. The timeout below still guards any
+    # `latest` request: resolving one lists every version from the source (for a Go
+    # module that is one request per tag), and when the listing exceeds the timeout
+    # mise only warns, runs the task without the tool, and the atom fails with
+    # "command not found". MISE_FETCH_REMOTE_VERSIONS_TIMEOUT below holds the timeout.
     env:
       MISE_MINIMUM_RELEASE_AGE: "0"
+      MISE_FETCH_REMOTE_VERSIONS_TIMEOUT: "60s"
       # secrets cannot be used in step-level if:, so bridge to env here.
       HAS_CI_CLIENT_ID: ${{ vars.CI_READ_APP_CLIENT_ID != '' }}
       HAS_CI_PRIVATE_KEY: ${{ secrets.ci_read_app_private_key != '' }}

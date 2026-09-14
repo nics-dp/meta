@@ -91,14 +91,13 @@ jobs:
             echo "version_tag=${TAG}" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Generate source SBOM (CycloneDX JSON 1.6)
+      - name: Generate source SBOM (CycloneDX JSON)
         uses: anchore/sbom-action@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26 # v0.24.2
         with:
           path: ${{ inputs.scan_path }}
-          # Pin the spec version: syft >= 1.51 defaults cyclonedx-json to 1.7,
-          # which trivy 0.70 / grype 0.110 cannot decode ("invalid specification
-          # version" / "sbom format not recognized"). Drop the pin once both
-          # scanners read 1.7.
+          # Pin the spec version: syft defaults cyclonedx-json to 1.7, and parlay
+          # (the enrich step below) decodes up to 1.6 (snyk/parlay#136). trivy and
+          # grype read 1.7; the pin follows parlay.
           format: cyclonedx-json@1.6
           output-file: sbom-source.cdx.json
           upload-artifact: false
@@ -119,6 +118,7 @@ jobs:
         if: always()
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
+          version: v0.74.0
           scan-type: sbom
           scan-ref: enriched-source.cdx.json
           format: sarif
@@ -158,6 +158,7 @@ jobs:
       - name: Scan SBOM with Trivy (JSON)
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
+          version: v0.74.0
           scan-type: sbom
           scan-ref: enriched-source.cdx.json
           format: json

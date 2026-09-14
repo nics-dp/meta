@@ -20,11 +20,14 @@
       "minimumReleaseAge": "7 days"
     },
     {
-      "description": "Review Anchore scan action and Grype together",
+      "description": "Review Anchore scan action and Grype together where they gate a workflow; the Grype pins in the mise atoms have their own rule below",
       "groupName": "grype path security gate",
       "matchPackageNames": [
         "anchore/scan-action",
         "anchore/grype"
+      ],
+      "matchFileNames": [
+        ".github/workflows/**"
       ],
       "automerge": false,
       "minimumReleaseAge": "7 days"
@@ -37,6 +40,55 @@
       ],
       "automerge": false,
       "minimumReleaseAge": "7 days"
+    },
+    {
+      "description": "Scanner binaries: pinned for reproducibility and supply-chain review, refreshed on this rule's schedule with a short release-age buffer and automerged. Detection freshness comes from the databases and rule packs the scanners fetch at run time (trivy-db, grype-db, the opengrep registry); trufflehog's detectors ship in the binary, which is why this group runs more often than the preset's weekly default. opengrep and trufflehog reach this rule through the org preset's mise task-header manager, trivy through meta's own.",
+      "matchPackageNames": [
+        "aquasecurity/trivy",
+        "opengrep/opengrep",
+        "trufflesecurity/trufflehog"
+      ],
+      "groupName": "security scanners",
+      "minimumReleaseAge": "3 days",
+      "schedule": [
+        "before 5am"
+      ],
+      "automerge": true,
+      "automergeType": "pr"
+    },
+    {
+      "description": "Grype in the mise scan atoms follows the security scanners policy; the workflow-side Grype, which gates ci.yml, stays under the grype path security gate rule. The two rules are disjoint by file pattern, so neither depends on ordering.",
+      "matchPackageNames": [
+        "anchore/grype"
+      ],
+      "matchFileNames": [
+        ".mise/tasks/**"
+      ],
+      "groupName": "security scanners",
+      "minimumReleaseAge": "3 days",
+      "schedule": [
+        "before 5am"
+      ],
+      "automerge": true,
+      "automergeType": "pr"
+    },
+    {
+      "description": "Go analysis tools used by the go:audit / go:dead-code / go:bench-compare atoms and the SARIF workflow open as one PR and keep the preset's review (no automerge): deadcode and benchstat ride x/tools and x/perf, whose minor releases can change analysis results or fail on new language features, so a bump needs a human look.",
+      "groupName": "go analysis tools",
+      "matchPackageNames": [
+        "golang.org/x/vuln",
+        "golang.org/x/tools",
+        "golang.org/x/perf"
+      ],
+      "automerge": false
+    },
+    {
+      "description": "parlay is pinned in two forms — the atoms' github:snyk/parlay header (matched by the org preset) and the SBOM workflows' go install line (matched by meta's manager); one group moves both in one PR and keeps the preset's review.",
+      "matchPackageNames": [
+        "snyk/parlay"
+      ],
+      "groupName": "parlay pins",
+      "automerge": false
     }
   ],
   "customManagers": [
@@ -54,15 +106,16 @@
     },
     {
       "customType": "regex",
-      "description": "Update parlay version in SBOM workflows",
+      "description": "Update the parlay go install lines in the SBOM workflows; the atoms' github:snyk/parlay header pins are matched by the org preset's mise task-header manager, and the parlay pins package rule below groups both into one PR",
       "managerFilePatterns": [
         "/^\\.github/workflows/sbom-(?:source|image)\\.yml$/"
       ],
       "matchStrings": [
-        "go install github\\.com/snyk/parlay@(?<currentValue>v\\d+\\.\\d+\\.\\d+)"
+        "go install github\\.com/snyk/parlay@v(?<currentValue>\\d+\\.\\d+\\.\\d+)"
       ],
       "depNameTemplate": "snyk/parlay",
-      "datasourceTemplate": "github-releases"
+      "datasourceTemplate": "github-releases",
+      "extractVersionTemplate": "^v(?<version>.+)$"
     },
     {
       "customType": "regex",
@@ -137,12 +190,14 @@
     },
     {
       "customType": "regex",
-      "description": "Update govulncheck version in the security-sarif workflow",
+      "description": "Update synchronized govulncheck pins in the security-sarif workflow and the go:audit task",
       "managerFilePatterns": [
-        "/^\\.github/workflows/security-sarif\\.yml$/"
+        "/^\\.github/workflows/security-sarif\\.yml$/",
+        "/^\\.mise/tasks/go/audit$/"
       ],
       "matchStrings": [
-        "go install golang\\.org/x/vuln/cmd/govulncheck@(?<currentValue>v\\d+\\.\\d+\\.\\d+)"
+        "go install golang\\.org/x/vuln/cmd/govulncheck@(?<currentValue>v\\d+\\.\\d+\\.\\d+)",
+        "#MISE tools=\\{\\\"go:golang\\.org/x/vuln/cmd/govulncheck\\\"=\\\"(?<currentValue>v\\d+\\.\\d+\\.\\d+)\\\"\\}"
       ],
       "depNameTemplate": "golang.org/x/vuln",
       "datasourceTemplate": "go"
@@ -159,6 +214,63 @@
       ],
       "depNameTemplate": "air-verse/air",
       "datasourceTemplate": "github-releases"
+    },
+    {
+      "customType": "regex",
+      "description": "Update the deadcode pin (golang.org/x/tools) in the go:dead-code task",
+      "managerFilePatterns": [
+        "/^\\.mise/tasks/go/dead-code$/"
+      ],
+      "matchStrings": [
+        "#MISE tools=\\{\\\"go:golang\\.org/x/tools/cmd/deadcode\\\"=\\\"(?<currentValue>v\\d+\\.\\d+\\.\\d+)\\\"\\}"
+      ],
+      "depNameTemplate": "golang.org/x/tools",
+      "datasourceTemplate": "go"
+    },
+    {
+      "customType": "regex",
+      "description": "Track the benchstat pin (golang.org/x/perf) in the go:bench-compare task; x/perf publishes pseudo-versions only, so this mostly documents the dependency",
+      "managerFilePatterns": [
+        "/^\\.mise/tasks/go/bench-compare$/"
+      ],
+      "matchStrings": [
+        "#MISE tools=\\{\\\"go:golang\\.org/x/perf/cmd/benchstat\\\"=\\\"(?<currentValue>v\\d+\\.\\d+\\.\\d+(?:-\\d{14}-[0-9a-f]{12})?)\\\"\\}"
+      ],
+      "depNameTemplate": "golang.org/x/perf",
+      "datasourceTemplate": "go"
+    },
+    {
+      "customType": "regex",
+      "description": "Update synchronized Trivy pins: the core `trivy=` tool in the mise scan atoms (the org preset's header manager only sees aqua:/github: tools) and the trivy-action `version:` input in the SBOM and SARIF workflows",
+      "managerFilePatterns": [
+        "/^\\.mise/tasks/iac/trivy$/",
+        "/^\\.mise/tasks/ci/trivy-license$/",
+        "/^\\.mise/tasks/sbom/trivy$/",
+        "/^\\.mise/tasks/py/sbom-custom$/",
+        "/^\\.github/workflows/sbom-(?:source|image)\\.yml$/",
+        "/^\\.github/workflows/security-sarif\\.yml$/"
+      ],
+      "matchStrings": [
+        "trivy=\\\"(?<currentValue>\\d+\\.\\d+\\.\\d+)\\\"",
+        "uses:[ \\t]*aquasecurity/trivy-action@[0-9a-f]{40}[^\\n]*\\n        with:\\n          version:[ \\t]*v(?<currentValue>\\d+\\.\\d+\\.\\d+)"
+      ],
+      "depNameTemplate": "aquasecurity/trivy",
+      "datasourceTemplate": "github-releases",
+      "extractVersionTemplate": "^v(?<version>.+)$"
+    },
+    {
+      "customType": "regex",
+      "description": "Update the core `grype=` tool in the mise scan atoms (not visible to the org preset's aqua:/github: header manager)",
+      "managerFilePatterns": [
+        "/^\\.mise/tasks/sbom/grype$/",
+        "/^\\.mise/tasks/py/sbom-custom$/"
+      ],
+      "matchStrings": [
+        "grype=\\\"(?<currentValue>\\d+\\.\\d+\\.\\d+)\\\""
+      ],
+      "depNameTemplate": "anchore/grype",
+      "datasourceTemplate": "github-releases",
+      "extractVersionTemplate": "^v(?<version>.+)$"
     }
   ]
 }
