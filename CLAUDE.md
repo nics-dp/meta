@@ -321,9 +321,9 @@ what the code does now and why it must stay that way. Documents that exist to ho
 everything else points at them instead of repeating them.
 
 - No issue, PR or review references (`#123`, `libdcf#533`, `fix #2`, `round 3`, `Task 4`)
-  in comments, docstrings or docs. Two exceptions: a CLAUDE.md rule may cite the issue that
-  is its rationale, and spec, ADR and design-note pointers, RFCs and third-party bug links
-  stay.
+  in the comments, docstrings or docs you add or rewrite. Two exceptions: a CLAUDE.md rule
+  may cite the issue that is its rationale, and spec, ADR and design-note pointers, RFCs and
+  third-party bug links stay.
 - No dates, dated rulings or phase anchors (`since P2`, `v0.2 之前`, `第一階段`).
 - No before/after narrative: `previously`, `used to`, `no longer`, `is now`, `the old X`,
   `before the fix`, `this change`, `一度`, `修正之前`. Keep a guard's rationale, drop its
