@@ -337,4 +337,5 @@ everything else points at them instead of repeating them.
   leaves stale claims (a renamed test, an exemption absent from the code, a guarantee that
   holds only while a file is being written). Check the pointer before shipping.
 - Docstrings are comments. Identifiers and string literals are not, and a test that reads
-  source text must not locate code by a comment's wording.
+  source files must not locate code by a comment's wording. A guard whose subject is a doc's
+  own text reads that text, and fails loudly when the anchor is reworded.
