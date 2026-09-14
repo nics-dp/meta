@@ -9,7 +9,7 @@
 set -euo pipefail
 # shellcheck disable=SC1091
 source "$(dirname "$0")/../lib/require-tool"
-require_tool trivy grype
+require_tool parlay trivy grype
 # shellcheck disable=SC2154
 out="${usage_output:-sbom-py.json}"
 # shellcheck disable=SC2154
