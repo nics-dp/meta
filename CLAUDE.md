@@ -61,12 +61,14 @@ and the polyrepo map before judging blast radius).
 
 - `mise run all` is the whole validation gate and the entry point
   `auto-release.yml` runs: `mise:validate`, `iac:actionlint`, `iac:shellcheck`,
-  `iac:zizmor` and `ci` (`iac:trivy` + `ci:semgrep`), all read-only and in
+  `iac:zizmor` and `ci` (`iac:trivy` + `ci:meta-semgrep`), all read-only and in
   parallel. There is no build or test task. The release driver fails when
   `mise run all` leaves the working tree modified, so every step of `all` must
   stay read-only. → the `[tasks.all]` comment in `mise.toml`, the "Run mise
   run all" step in `auto-release.yml`.
-- `mise run ci` is `iac:trivy` + `ci:semgrep` alone. `iac:trivy` runs with
+- `mise run ci` is `iac:trivy` + `ci:meta-semgrep` alone. The meta-local scanner
+  keeps `p/ci` except its Renovate age rule, replaced by `.opengrep/renovate.yml`;
+  the shared `ci:semgrep` atom keeps its consumer defaults. `iac:trivy` runs with
   `--exit-code 0`, so findings do not fail the gate; a Trivy operational
   error (bad config, scan or DB failure) still exits non-zero and does.
 - Single workflow file: `mise exec -- actionlint <file>`; then `mise run all`
