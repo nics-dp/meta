@@ -1,0 +1,59 @@
+rules:
+  - id: meta-renovate-minimum-release-age
+    languages: [json]
+    severity: ERROR
+    message: Renovate minimumReleaseAge must be at least 3 days; disabled waits are not allowed. Use an integer number of days.
+    paths: &renovate-paths
+      include:
+        - '**/renovate.json'
+        - '**/.renovaterc.json'
+        - '**/renovate-preset.json'
+    pattern-either:
+      - patterns:
+          - pattern: '"minimumReleaseAge": $AGE'
+          - pattern-not: '"minimumReleaseAge": "$DAYS"'
+      - patterns:
+          - pattern: '"minimumReleaseAge": "$AGE"'
+          - metavariable-regex:
+              metavariable: $AGE
+              regex: '^(?!\d+ days?$)'
+      - patterns:
+          - pattern: '"minimumReleaseAge": "$AGE"'
+          - metavariable-pattern:
+              metavariable: $AGE
+              language: generic
+              patterns:
+                - pattern-regex: '^(?P<DAYS>\d+) days?$'
+                - metavariable-comparison:
+                    metavariable: $DAYS
+                    comparison: int($DAYS) < 3
+
+  # OpenGrep preserves Unicode escapes in property names rather than decoding
+  # them. Canonical keys keep age and preset checks from missing those fields.
+  - id: meta-renovate-escaped-key
+    languages: [json]
+    severity: ERROR
+    message: Use unescaped Renovate property names so release-age and preset checks can inspect them.
+    paths: *renovate-paths
+    patterns:
+      - pattern: '"$KEY": $VALUE'
+      - metavariable-regex:
+          metavariable: $KEY
+          regex: '.*\\u.*'
+
+  # Inheritance is trusted only through the sole approved preset, without
+  # ignorePresets. The root match excludes comments for structural containment.
+  - id: meta-renovate-missing-default-age
+    languages: [json]
+    severity: ERROR
+    message: Set a minimumReleaseAge default of at least 3 days or extend only the checked nics-dp/meta Renovate preset without ignorePresets.
+    paths: *renovate-paths
+    patterns:
+      - pattern-not-inside: '{ ..., "minimumReleaseAge": $AGE, ... }'
+      - pattern-either:
+          - patterns:
+              - pattern-regex: &root-object '(?s)\A(?:\s|//[^\r\n]*|/\*.*?\*/)*\K\{'
+              - pattern-not-inside: '{ ..., "extends": ["github>nics-dp/meta:renovate-preset"], ... }'
+          - patterns:
+              - pattern-regex: *root-object
+              - pattern-inside: '{ ..., "ignorePresets": $IGNORED, ... }'

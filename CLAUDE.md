@@ -61,12 +61,14 @@ and the polyrepo map before judging blast radius).
 
 - `mise run all` is the whole validation gate and the entry point
   `auto-release.yml` runs: `mise:validate`, `iac:actionlint`, `iac:shellcheck`,
-  `iac:zizmor` and `ci` (`iac:trivy` + `ci:semgrep`), all read-only and in
+  `iac:zizmor` and `ci` (`iac:trivy` + `ci:meta-semgrep`), all read-only and in
   parallel. There is no build or test task. The release driver fails when
   `mise run all` leaves the working tree modified, so every step of `all` must
   stay read-only. → the `[tasks.all]` comment in `mise.toml`, the "Run mise
   run all" step in `auto-release.yml`.
-- `mise run ci` is `iac:trivy` + `ci:semgrep` alone. `iac:trivy` runs with
+- `mise run ci` is `iac:trivy` + `ci:meta-semgrep` alone. The meta-local scanner
+  keeps `p/ci` except its Renovate age rule, replaced by `.opengrep/renovate.yml`;
+  the shared `ci:semgrep` atom keeps its consumer defaults. `iac:trivy` runs with
   `--exit-code 0`, so findings do not fail the gate; a Trivy operational
   error (bad config, scan or DB failure) still exits non-zero and does.
 - Single workflow file: `mise exec -- actionlint <file>`; then `mise run all`
@@ -210,11 +212,14 @@ before changing any of these; the mechanism is in the code, the history in
   compose images do get `pinDigests`. Internal `github.com/nics-dp/**` Go
   modules are disabled (they move through `go:lib-remote`). → the
   `description` fields of those `packageRules` in `renovate-preset.json`.
-- Pins that exist only in this repository's workflows and atoms (quill, parlay,
-  gosec, govulncheck, air, shellcheck, zizmor, grype, the mise version) are
-  tracked by the custom managers in meta's own `renovate.json`, not the preset.
-  Zizmor action + CLI, Anchore action + Grype and the mise pins are grouped and
-  never automerge. → `renovate.json`.
+- Renovate coverage of this repository's pins is split: the org preset's mise
+  task-header managers see `aqua:`/`github:`/bun pins in the atoms; meta's own
+  `renovate.json` carries custom managers for everything else (core tools such
+  as shellcheck, zizmor, trivy and grype, `go:` module tools, `go install`
+  lines and marked workflow inputs, the mise version). Its package rules decide
+  review versus automerge per group; the scanners automerge on a short
+  release-age buffer, the rest stay reviewed. → `renovate.json`,
+  `renovate-preset.json`.
 
 **Meta's own CI** → `docs/design-notes/meta-self-ci.md`
 
@@ -312,3 +317,30 @@ consumer uses a contract.
 
 `docs/design-notes/` holds the long-form rationale moved out of this file. Code
 and workflow files win over them; prune rather than extend.
+
+## Comments are present tense
+
+Code is the source of truth. Every comment, docstring or doc line you add or rewrite states
+what the code does now and why it must stay that way. Documents that exist to hold history
+(design notes' history sections, runbook incident records, the changelog) are exempt;
+everything else points at them instead of repeating them.
+
+- No issue, PR or review references (`#123`, `libdcf#533`, `fix #2`, `round 3`, `Task 4`)
+  in the comments, docstrings or docs you add or rewrite. Exceptions: a CLAUDE.md rule may
+  cite the issue that is its rationale, and spec, ADR and design-note pointers, RFCs and
+  third-party bug links stay.
+- No dates, dated rulings or phase anchors (`since P2`, `v0.2 之前`, `第一階段`).
+- No before/after narrative: `previously`, `used to`, `no longer`, `is now`, `the old X`,
+  `before the fix`, `this change`, `一度`, `修正之前`. Keep a guard's rationale, drop its
+  origin story; a regression test names the failure it rejects, not the commit that caused it.
+- No counts of things the code enumerates (how many handlers, channels or packages exist);
+  name the class.
+- No repeated toolchain pins: a version lives where the tool reads it (`mise.toml`, `go.mod`,
+  lockfiles, the Dockerfile base image) and prose points there. Contract versions such as
+  `/api/v1` are not pins.
+- A rewrite must be true of the code as it is. Dropping the number and keeping the sentence
+  leaves stale claims (a renamed test, an exemption absent from the code, a guarantee that
+  holds only while a file is being written). Check the pointer before shipping.
+- Docstrings are comments. Identifiers and string literals are not, and a test that reads
+  source files must not locate code by a comment's wording. A guard whose subject is a doc's
+  own text reads that text, and fails loudly when the anchor is reworded.

@@ -22,8 +22,19 @@ includes = [
 description = "Run all CI checks"
 depends = [
   "iac:trivy",
-  "ci:semgrep",
+  "ci:meta-semgrep",
 ]
+
+# Meta-only age policy; consumers keep the shared ci:semgrep defaults.
+[tasks."ci:meta-semgrep"]
+description = "OpenGrep p/ci with meta's Renovate release-age policy"
+hide = true
+tools = { "aqua:opengrep/opengrep" = "1.30.0" }
+run = """
+opengrep scan --error --enable-nosem --config p/ci \
+  --exclude-rule package_managers.renovate.renovate-missing-minimum-release-age.renovate-missing-minimum-release-age \
+  --config .opengrep/renovate.yml .
+"""
 
 # Full validation gate. Entry point for the auto-release driver (`mise run all`)
 # so meta can dogfood its own reusable release workflow. Config repo has no
