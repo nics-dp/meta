@@ -2,7 +2,7 @@
 #MISE description="Scan for verified live secrets (trufflehog; deep/release scan)"
 #MISE hide=true
 #MISE raw=true
-#MISE tools={"aqua:trufflesecurity/trufflehog"="3.97.4"}
+#MISE tools={"aqua:trufflesecurity/trufflehog"="3.97.5"}
 set -euo pipefail
 # shellcheck disable=SC1091
 source "$(dirname "$0")/../lib/require-tool"
