@@ -622,15 +622,34 @@ class SubmissionTests(unittest.TestCase):
             self.helper.prepare(self.project, ".")
 
     def test_sha_event_allowlist(self):
-        for event in self.helper.PR_EVENTS:
+        expected_events = (
+            "pull_request",
+            "pull_request_review",
+            "pull_request_review_comment",
+        )
+        self.assertEqual(self.helper.PR_EVENTS, set(expected_events))
+        for event in expected_events:
             self.assertEqual(
                 self.helper.selected_sha(
                     event, {"pull_request": {"head": {"sha": "b" * 40}}}, "a" * 40
                 ),
                 "b" * 40,
             )
-        for event in ("push", "pull_request_target", "workflow_dispatch"):
+        for event in ("push", "schedule", "pull_request_target", "workflow_dispatch"):
             self.assertEqual(self.helper.selected_sha(event, {}, "a" * 40), "a" * 40)
+        issue_comment = {
+            "action": "created",
+            "issue": {
+                "number": 42,
+                "pull_request": {
+                    "url": "https://api.github.com/repos/org/repo/pulls/42"
+                },
+            },
+        }
+        self.assertEqual(
+            self.helper.selected_sha("issue_comment", issue_comment, "a" * 40),
+            "a" * 40,
+        )
         with self.assertRaises(ValueError):
             self.helper.selected_sha("push", {}, "not-a-sha")
 
