@@ -2,7 +2,7 @@
 #MISE description="Generate Python-native CycloneDX SBOM via cyclonedx-py (better PURL/wheel metadata than syft)"
 #MISE hide=true
 #MISE raw=true
-#MISE tools={"github:snyk/parlay"="0.11.0", trivy="0.74.0", grype="0.118.0"}
+#MISE tools={"github:snyk/parlay"="0.11.0", trivy="0.74.0", grype="0.119.0"}
 #USAGE flag "--output <path>" help="Output file path" default="sbom-py.json"
 #USAGE flag "--source <type>" help="Source: environment / requirements / poetry / pipenv" default="environment"
 

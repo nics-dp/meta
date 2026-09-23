@@ -94,6 +94,31 @@
   "customManagers": [
     {
       "customType": "regex",
+      "description": "Update the Bun default used by production dependency submission and its extracted-helper tests",
+      "managerFilePatterns": [
+        "/^\\.github/workflows/node-dependency-submission\\.yml$/"
+      ],
+      "matchStrings": [
+        "bun_version:[\\s\\S]*?default: \\\"(?<currentValue>\\d+\\.\\d+\\.\\d+)\\\""
+      ],
+      "depNameTemplate": "oven-sh/bun",
+      "datasourceTemplate": "github-releases",
+      "extractVersionTemplate": "^bun-v(?<version>.+)$"
+    },
+    {
+      "customType": "regex",
+      "description": "Update the released Syft version used for production dependency graph normalization",
+      "managerFilePatterns": [
+        "/^\\.github/workflows/node-dependency-submission\\.yml$/"
+      ],
+      "matchStrings": [
+        "syft-version: (?<currentValue>v\\d+\\.\\d+\\.\\d+)"
+      ],
+      "depNameTemplate": "anchore/syft",
+      "datasourceTemplate": "github-releases"
+    },
+    {
+      "customType": "regex",
       "description": "Update quill version in go-release workflow",
       "managerFilePatterns": [
         "/^\\.github/workflows/go-release\\.yml$/"
