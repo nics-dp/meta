@@ -784,7 +784,12 @@ jobs:
             const response = await github.request('POST /repos/{owner}/{repo}/dependency-graph/snapshots', {
               ...snapshot, owner: context.repo.owner, repo: context.repo.repo
             });
-            if (response.status !== 201) throw new Error(`snapshot submission failed: ${response.status}`);
+            const result = response.data?.result;
+            if (response.status !== 201 || !['SUCCESS', 'ACCEPTED'].includes(result)) {
+              const details = {status: response.status, result: result ?? null,
+                               message: response.data?.message ?? null};
+              throw new Error(`snapshot submission failed: ${JSON.stringify(details)}`);
+            }
 
       - name: Archive corrected SPDX
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

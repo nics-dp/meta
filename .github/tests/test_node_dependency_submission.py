@@ -926,40 +926,66 @@ class SubmissionTests(unittest.TestCase):
         const github = {request: async (route, body) => {
           if (route !== 'POST /repos/{owner}/{repo}/dependency-graph/snapshots' ||
               body.owner !== 'org' || body.repo !== 'repo') throw new Error('wrong request');
-          return {status: Number(process.env.STATUS)};
+          if (process.env.REJECT === '1') throw new Error('request rejected');
+          return JSON.parse(process.env.RESPONSE);
         }};
         const context = {repo: {owner: 'org', repo: 'repo'}};
         new AsyncFunction('require', 'github', 'context', process.env.CODE)(require, github, context)
           .catch(error => { console.error(error.message); process.exitCode = 1; });
         """
-        for status in (201, 500):
-            completed = subprocess.run(
+
+        def run_publisher(response, *, reject=False):
+            return subprocess.run(
                 [shutil.which("node"), "-e", wrapper],
                 env={
                     "STATE": str(self.state),
                     "SELECTED_SHA": "a" * 40,
                     "CODE": code,
-                    "STATUS": str(status),
+                    "RESPONSE": json.dumps(response),
+                    "REJECT": "1" if reject else "0",
                 },
                 capture_output=True,
                 timeout=10,
                 check=False,
             )
-            self.assertEqual(completed.returncode == 0, status == 201)
-        snapshot.write_text(json.dumps({"sha": "b" * 40}))
-        completed = subprocess.run(
-            [shutil.which("node"), "-e", wrapper],
-            env={
-                "STATE": str(self.state),
-                "SELECTED_SHA": "a" * 40,
-                "CODE": code,
-                "STATUS": "201",
-            },
-            capture_output=True,
-            timeout=10,
-            check=False,
-        )
+
+        valid = {"status": 201, "data": {"result": "SUCCESS"}}
+        cases = [
+            (valid, True),
+            ({"status": 201, "data": {"result": "ACCEPTED"}}, True),
+            (
+                {
+                    "status": 201,
+                    "data": {
+                        "result": "INVALID",
+                        "message": "invalid snapshot fixture",
+                    },
+                },
+                False,
+            ),
+            ({"status": 201, "data": {"result": "UNEXPECTED"}}, False),
+            ({"status": 201, "data": {"result": None}}, False),
+            ({"status": 201, "data": {"result": 1}}, False),
+            ({"status": 201, "data": {}}, False),
+            ({"status": 201}, False),
+            ({"status": 201, "data": None}, False),
+            ({"status": 500, "data": {"result": "SUCCESS"}}, False),
+            ({"status": 202, "data": {"result": "ACCEPTED"}}, False),
+        ]
+        for response, accepted in cases:
+            with self.subTest(response=response):
+                completed = run_publisher(response)
+                self.assertEqual(completed.returncode == 0, accepted)
+                if (response.get("data") or {}).get("result") == "INVALID":
+                    self.assertIn(b"INVALID", completed.stderr)
+                    self.assertIn(b"invalid snapshot fixture", completed.stderr)
+        completed = run_publisher(valid, reject=True)
         self.assertNotEqual(completed.returncode, 0)
+        self.assertIn(b"request rejected", completed.stderr)
+        snapshot.write_text(json.dumps({"sha": "b" * 40}))
+        completed = run_publisher(valid)
+        self.assertNotEqual(completed.returncode, 0)
+        self.assertIn(b"snapshot publication validation failed", completed.stderr)
 
     @unittest.skipUnless(
         shutil.which("bun"), "Bun is required for non-execution checks"
