@@ -474,3 +474,39 @@ jobs:
       name: Deep Secret Scan
       task: "ci:trufflehog"
       fetch-depth: 0
+
+  node-submission-tests:
+    name: Node Submission Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Read production tool pins
+        id: pins
+        run: |
+          python3 -I - <<'PINS_PY'
+          import os, pathlib, re
+          source = pathlib.Path('.github/workflows/node-dependency-submission.yml').read_text()
+          bun = re.search(r'bun_version:[\s\S]*?default: "([0-9.]+)"', source)[1]
+          syft = re.search(r'syft-version: (v[0-9.]+)', source)[1]
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write(f'bun={bun}\nsyft={syft}\n')
+          PINS_PY
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: ${{ steps.pins.outputs.bun }}
+      - name: Download Syft
+        id: syft
+        uses: anchore/sbom-action/download-syft@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26 # v0.24.2
+        with:
+          syft-version: ${{ steps.pins.outputs.syft }}
+      - name: Test actual inline helper
+        env:
+          SUBMISSION_TEST_SYFT: ${{ steps.syft.outputs.cmd }}
+        run: python3 -I -B .github/tests/test_node_dependency_submission.py -v

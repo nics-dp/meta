@@ -1,19 +1,8 @@
 # yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
-
 name: Node Dependency Submission
 
-# Resolves a bun project's FULL transitive dependency graph and submits it to
-# GitHub's Dependency Submission API (Dependency graph / Dependabot alerts).
-#
-# Why this is needed: GitHub's native dependency graph does NOT parse bun.lock.
-# It only reads package.json (direct dependencies), so Dependabot alerts are
-# blind to the hundreds of transitive npm packages bun actually resolves. This
-# workflow runs `bun install` to materialize node_modules, then has Syft
-# (anchore/sbom-action) catalog the installed tree and upload it as a GitHub
-# dependency snapshot, giving Dependabot alerts full transitive coverage.
-#
-# All dependencies are public npm packages, so no registry token is required.
-# Callers add a job that `uses:` this workflow.
+# Native Bun production membership gates the version/location-aware npm graph.
+# Non-npm findings remain in the submitted snapshot and corrected SPDX artifact.
 on:
   workflow_call:
     inputs:
@@ -25,73 +14,799 @@ on:
       bun_version:
         required: false
         type: string
-        default: "latest"
-        description: "Bun version for oven-sh/setup-bun (e.g. '1.2.0'). Default 'latest'."
+        default: "1.4.2"
+        description: "Bun version supporting pm licenses --prod --json."
 
 permissions:
   contents: read
 
 jobs:
   node-dependency-submission:
-    # Pinned to ubuntu-latest: no caller passes a custom runner.
     runs-on: ubuntu-latest
     permissions:
-      # required to submit the resolved graph to the Dependency Submission API
       contents: write
     steps:
-      - name: Validate working_directory
+      - name: Prepare trusted submission helper
+        id: state
         env:
-          RAW_WD: ${{ inputs.working_directory }}
-        # A reusable workflow cannot trust its caller's inputs: a path that is
-        # empty, absolute, contains a '..' segment, or embeds a newline could run
-        # bun install / Syft outside the workspace or leak unexpected path data
-        # into the dependency snapshot. Fail fast here (mirrors the path
-        # validation in security-sarif.yml). Empty default is "." (see inputs).
+          EVENT_NAME: ${{ github.event_name }}
+          CONTEXT_SHA: ${{ github.sha }}
         run: |
-          case "$RAW_WD" in
-            "") echo "Error: working_directory must not be empty (use '.' for repo root)" >&2; exit 1 ;;
-            /*) echo "Error: working_directory must be relative, got absolute '$RAW_WD'" >&2; exit 1 ;;
-            *$'\n'* | *$'\r'*) echo "Error: working_directory must not contain newlines" >&2; exit 1 ;;
-          esac
-          # Segment-aware '..' check: wrapping in slashes matches '..' only as a
-          # whole path segment, so a legitimate name like 'my..dir' is allowed.
-          case "/$RAW_WD/" in
-            */../*) echo "Error: working_directory must not contain a '..' path segment" >&2; exit 1 ;;
-          esac
+          set -euo pipefail
+          umask 077
+          state=$(python3 -I - <<'STATE_PY'
+          import os, pathlib, tempfile
+          parent = pathlib.Path(os.environ['RUNNER_TEMP'])
+          if not parent.is_absolute() or any(ord(c) < 32 for c in str(parent)):
+              raise ValueError('unsafe runner temp')
+          print(tempfile.mkdtemp(prefix='node-submission.', dir=parent.resolve(strict=True)))
+          STATE_PY
+          )
+          printf 'root=%s\n' "$state" >> "$GITHUB_OUTPUT"
+          cat > "$state/helper.py" <<'SUBMISSION_PY'
+          import argparse
+          import copy
+          import hashlib
+          import json
+          import os
+          from pathlib import Path, PurePosixPath
+          import re
+          import shutil
+          import subprocess
+          import tempfile
+          from urllib.parse import quote, unquote
 
-      - name: Checkout
+          PR_EVENTS = {'pull_request', 'pull_request_comment', 'pull_request_review',
+                       'pull_request_review_comment'}
+          EXCLUDE = '**/node_modules/**/.github/workflows/**'
+
+          def require(condition, message):
+              if not condition:
+                  raise ValueError(message)
+
+          def text(value):
+              require(isinstance(value, str) and value and
+                      not any(ord(c) < 32 or 127 <= ord(c) <= 159 for c in value),
+                      'empty or control-character identity')
+              return value
+
+          def relative(value):
+              text(value)
+              require(not value.startswith('/') and '\\' not in value and
+                      '..' not in value.split('/'), 'unsafe relative path')
+              return PurePosixPath(value).as_posix()
+
+          def inside(root, path):
+              resolved = Path(path).resolve(strict=True)
+              require(resolved.is_relative_to(root.resolve(strict=True)), 'path escapes root')
+              return resolved
+
+          def check_tree(root):
+              root = root.resolve(strict=True)
+              for directory, dirs, files in os.walk(root, followlinks=False):
+                  for name in dirs + files:
+                      text(name)
+                      p = Path(directory) / name
+                      inside(root, p)
+                      require(p.is_file() or p.is_dir(), 'unsupported filesystem entry')
+                  dirs[:] = [d for d in dirs if d != '.git']
+
+          def pairs(items):
+              result = {}
+              for key, value in items:
+                  require(key not in result, 'duplicate JSON key')
+                  result[key] = value
+              return result
+
+          def load(path, jsonc=False):
+              data = Path(path).read_text(encoding='utf-8')
+              if jsonc:
+                  token = r'"(?:[^"\\]|\\.)*"|//[^\n]*|/\*[\s\S]*?\*/'
+                  data = re.sub(token, lambda m: m[0] if m[0].startswith('"') else ' ', data)
+                  data = re.sub(r'("(?:[^"\\]|\\.)*")|,(\s*[}\]])',
+                                lambda m: m[1] if m[1] else m[2], data)
+              return json.loads(data, object_pairs_hook=pairs,
+                                parse_constant=lambda _: require(False, 'non-finite JSON'))
+
+          def atomic(path, value):
+              path = Path(path)
+              require(not path.exists() and not path.is_symlink(), 'stale output')
+              fd, temporary = tempfile.mkstemp(prefix='.pending-', dir=path.parent)
+              try:
+                  with os.fdopen(fd, 'w', encoding='utf-8') as stream:
+                      json.dump(value, stream, ensure_ascii=True, sort_keys=True, allow_nan=False)
+                      stream.flush()
+                      os.fsync(stream.fileno())
+                  require(load(temporary) == value, 'output roundtrip failed')
+                  os.replace(temporary, path)
+              finally:
+                  if os.path.exists(temporary):
+                      os.unlink(temporary)
+
+          def selected_sha(event, payload, context_sha):
+              sha = payload['pull_request']['head']['sha'] if event in PR_EVENTS else context_sha
+              require(isinstance(sha, str) and re.fullmatch(r'[0-9a-f]{40}', sha), 'invalid SHA')
+              return sha
+
+          def package_name(name):
+              text(name)
+              require(re.fullmatch(r'(?:@[A-Za-z0-9_.~-]+/)?[A-Za-z0-9_.~-]+', name) and
+                      name not in {'.', '..'}, 'invalid package name')
+              return name
+
+          def key_path(key):
+              bits = relative(key).split('/')
+              names = []
+              while bits:
+                  name = bits.pop(0)
+                  if name.startswith('@'):
+                      require(bool(bits), 'invalid scoped package key')
+                      name += '/' + bits.pop(0)
+                  names.append(package_name(name))
+              return '/'.join('node_modules/' + name for name in names)
+
+          def dependencies(metadata):
+              result = {}
+              optional_peers = set(metadata.get('optionalPeers') or [])
+              peer_meta = metadata.get('peerDependenciesMeta') or {}
+              require(isinstance(peer_meta, dict), 'invalid peer metadata')
+              for field in ('dependencies', 'peerDependencies', 'optionalDependencies'):
+                  values = metadata.get(field) or {}
+                  require(isinstance(values, dict), 'invalid dependencies')
+                  for name, version in values.items():
+                      package_name(name)
+                      text(version)
+                      optional = field == 'optionalDependencies' or (
+                          field == 'peerDependencies' and
+                          (name in optional_peers or peer_meta.get(name, {}).get('optional') is True))
+                      result[name] = optional
+              return result
+
+          def installed_record(project, location, record):
+              own = load(inside(project, project / location / 'package.json'))
+              require(own.get('name') == record['name'], 'installed name mismatch')
+              if re.match(r'^\d+\.', record['version']):
+                  require(own.get('version') == record['version'], 'installed version mismatch')
+
+          def npm_purl(package):
+              value = text(package['purl'])
+              require(value.startswith('pkg:npm/') and not re.search(r'%(?![0-9a-fA-F]{2})', value),
+                      'invalid npm PURL')
+              base, separator, subpath = value.partition('#')
+              base, query_separator, query = base.partition('?')
+              name, at, version = base.removeprefix('pkg:npm/').rpartition('@')
+              require(at and unquote(name, errors='strict') == package['name'] and
+                      unquote(version, errors='strict') == package['version'], 'npm PURL identity mismatch')
+              canonical = 'pkg:npm/' + quote(package_name(package['name']), safe='/') + '@' + quote(text(package['version']), safe='')
+              qualifiers = {}
+              if query_separator:
+                  require(query, 'empty npm PURL qualifiers')
+                  for item in query.split('&'):
+                      key, equals, raw = item.partition('=')
+                      require(equals and re.fullmatch(r'[a-z][a-z0-9._-]*', key) and key not in qualifiers,
+                              'invalid npm PURL qualifier')
+                      qualifiers[key] = text(unquote(raw, errors='strict'))
+              suffix = ''
+              if separator:
+                  parts = [text(unquote(part, errors='strict')) for part in subpath.split('/')]
+                  require(all(part not in {'.', '..'} and '/' not in part and '\\' not in part for part in parts),
+                          'invalid npm PURL subpath')
+                  suffix = '#' + '/'.join(quote(part, safe='') for part in parts)
+              query = '?' + '&'.join(key + '=' + quote(value, safe='')
+                                     for key, value in sorted(qualifiers.items())) if qualifiers else ''
+              return canonical + suffix, canonical + query + suffix
+
+          def graph(project):
+              project = project.resolve(strict=True)
+              check_tree(project)
+              manifest = load(inside(project, project / 'package.json'))
+              lock = load(inside(project, project / 'bun.lock'), jsonc=True)
+              require(lock.get('lockfileVersion') == 1, 'unsupported Bun lock version')
+              require(set(lock['workspaces']) == {''}, 'workspace installs require a separate project root')
+              for field in ('dependencies', 'devDependencies', 'optionalDependencies', 'peerDependencies'):
+                  require((manifest.get(field) or {}) == (lock['workspaces'][''].get(field) or {}),
+                          'manifest and frozen root differ')
+              records = {}
+              for key, entry in lock['packages'].items():
+                  require(isinstance(entry, list) and len(entry) >= 2, 'invalid lock entry')
+                  identity = text(entry[0])
+                  match = re.fullmatch(r'(@?[^@]+)@(.+)', identity)
+                  require(match is not None, 'invalid lock identity')
+                  name, version = package_name(match[1]), text(match[2])
+                  require(not version.startswith(('file:', 'link:', 'workspace:', 'root:')),
+                          'local package resolution is not supported')
+                  objects = [item for item in entry[1:] if isinstance(item, dict)]
+                  require(len(objects) == 1, 'ambiguous lock metadata')
+                  location = key_path(key)
+                  require(location not in records, 'duplicate installation location')
+                  records[location] = {'name': name, 'version': version, 'metadata': objects[0]}
+              def resolve(parent, name, optional):
+                  base = PurePosixPath(parent)
+                  while True:
+                      candidate = (base / 'node_modules' / name).as_posix()
+                      if candidate in records:
+                          installed = project / candidate / 'package.json'
+                          if installed.exists():
+                              installed_record(project, candidate, records[candidate])
+                              return candidate
+                          require(optional, 'missing required installed package: ' + candidate)
+                          return None
+                      if base == PurePosixPath('.'):
+                          break
+                      base = base.parent
+                  require(optional, 'unresolved required edge: ' + name)
+                  return None
+              roots = set()
+              for name, optional in dependencies(manifest).items():
+                  target = resolve('.', name, optional)
+                  if target:
+                      roots.add(target)
+              edges, pending = {}, sorted(roots)
+              while pending:
+                  location = pending.pop()
+                  if location in edges:
+                      continue
+                  targets = set()
+                  for name, optional in dependencies(records[location]['metadata']).items():
+                      target = resolve(location, name, optional)
+                      if target:
+                          targets.add(target)
+                          pending.append(target)
+                  edges[location] = targets
+              return records, roots, edges
+
+          def inventory_members(inventory, project, records):
+              require(isinstance(inventory, dict), 'invalid native inventory')
+              members, seen_paths = set(), set()
+              for license_name, entries in inventory.items():
+                  text(license_name)
+                  require(isinstance(entries, list), 'invalid native license group')
+                  for entry in entries:
+                      name = package_name(entry['name'])
+                      versions, paths = entry['versions'], entry['paths']
+                      require(isinstance(versions, list) and versions and isinstance(paths, list) and paths,
+                              'missing native identity or paths')
+                      versions = [text(v) for v in versions]
+                      require(len(versions) == len(set(versions)) and len(versions) == len(paths),
+                              'native versions missing representative paths')
+                      # Bun emits one representative path per distinct version, not every occurrence.
+                      for version, value in zip(versions, paths, strict=True):
+                          p = Path(text(value))
+                          require(p.is_absolute(), 'native path is not absolute')
+                          inside(project, p)
+                          lexical_root = project if p.is_relative_to(project) else project.resolve()
+                          require(p.is_relative_to(lexical_root), 'native path is outside project')
+                          location = p.relative_to(lexical_root).as_posix()
+                          require(location in records, 'native path absent from lock')
+                          record = records[location]
+                          require((record['name'], record['version']) == (name, version),
+                                  'native identity differs from lock')
+                          installed_record(project, location, record)
+                          require(location not in seen_paths, 'duplicate native path')
+                          seen_paths.add(location)
+                          members.add((name, version))
+              return members
+
+          def references(document):
+              packages = document['artifacts']
+              require(isinstance(packages, list), 'invalid artifacts')
+              ids = [text(p['id']) for p in packages]
+              ids += [text(f['id']) for f in document.get('files', [])]
+              ids.append(text(document['source']['id']))
+              require(len(ids) == len(set(ids)), 'duplicate source/package/file ID')
+              ids = set(ids)
+              for relation in document['artifactRelationships']:
+                  require(relation['parent'] in ids and relation['child'] in ids,
+                          'dangling native relationship')
+
+          def normalize(raw, inventory, project, scan_root):
+              references(raw)
+              require(raw['descriptor']['name'] == 'syft', 'unexpected detector')
+              require(raw['descriptor']['configuration']['packages']['javascript']
+                      ['include-dev-dependencies'] is True, 'Syft dev inventory is disabled')
+              require(raw['source']['type'] == 'directory', 'unexpected source type')
+              source_path = Path(text(raw['source']['metadata']['path']))
+              if source_path.is_absolute():
+                  require(source_path.resolve(strict=True) == scan_root.resolve(strict=True), 'unexpected scan source')
+              else:
+                  relative(source_path.as_posix())
+              records, roots, edges = graph(project)
+              identities = {(records[location]['name'], records[location]['version']) for location in edges}
+              require(inventory_members(inventory, project, records) == identities,
+                      'native production inventory differs from reconstructed graph')
+              result = copy.deepcopy(raw)
+              removed = {p['id'] for p in raw['artifacts'] if p['type'] == 'npm'}
+              result['artifacts'] = [p for p in result['artifacts'] if p['id'] not in removed]
+              aliases, selected, identity_purls = {}, {}, {}
+              for location in sorted(edges):
+                  record = records[location]
+                  candidates = [p for p in raw['artifacts'] if p['type'] == 'npm' and
+                                p['name'] == record['name'] and p['version'] == record['version']]
+                  locked = [p for p in candidates if p.get('metadataType') == 'javascript-bun-lock-entry'
+                            and any(loc.get('path') == '/bun.lock' for loc in p.get('locations', []))]
+                  candidates = locked
+                  require(bool(candidates), 'production package missing from root Syft evidence: ' + location)
+                  for candidate in candidates:
+                      for field in ('dependencies', 'optionalDependencies', 'peerDependencies'):
+                          require((candidate.get('metadata', {}).get(field) or {}) ==
+                                  (record['metadata'].get(field) or {}), 'ambiguous Syft dependency metadata')
+                      for loc in candidate['locations']:
+                          relative(text(loc['path']).removeprefix('/'))
+                  purls = {npm_purl(candidate)[1] for candidate in candidates}
+                  require(len(purls) == 1, 'conflicting npm PURLs')
+                  purl = next(iter(purls))
+                  identity = (record['name'], record['version'])
+                  require(identity_purls.setdefault(identity, purl) == purl, 'conflicting npm source qualifiers')
+                  # Equal identities can occur at distinct frozen installation locations.
+                  candidate = sorted(candidates, key=lambda p: p['id'])[0]
+                  package = copy.deepcopy(candidate)
+                  package['id'] = hashlib.sha256(('npm:' + location + ':' + record['name'] + '@' +
+                                                 record['version']).encode()).hexdigest()[:16]
+                  package['locations'] = copy.deepcopy(candidate['locations'])
+                  package['locations'].append({'path': '/' + location + '/package.json',
+                                               'accessPath': '/' + location + '/package.json'})
+                  package['purl'] = purl
+                  for item in candidates:
+                      aliases.setdefault(item['id'], set()).add(package['id'])
+                  selected[location] = package
+                  result['artifacts'].append(package)
+              relationships = []
+              for relation in raw['artifactRelationships']:
+                  parent, child = relation['parent'], relation['child']
+                  if relation['type'] == 'dependency-of' and parent in removed and child in removed:
+                      continue
+                  parents = aliases.get(parent, set()) if parent in removed else {parent}
+                  children = aliases.get(child, set()) if child in removed else {child}
+                  for new_parent in sorted(parents):
+                      for new_child in sorted(children):
+                          item = copy.deepcopy(relation)
+                          item.update(parent=new_parent, child=new_child)
+                          relationships.append(item)
+              for dependent, targets in sorted(edges.items()):
+                  for dependency in sorted(targets):
+                      relationships.append({'parent': selected[dependency]['id'],
+                                            'child': selected[dependent]['id'], 'type': 'dependency-of'})
+              result['artifactRelationships'] = list({json.dumps(r, sort_keys=True): r
+                                                      for r in relationships}.values())
+              references(result)
+              return result, selected, roots, edges
+
+          def strip_emojis(value):
+              # The action's UTF-16 surrogate-pair range covers U+1F000 through U+10FFFF.
+              return re.sub('[\u2700-\u27bf\ue000-\uf8ff\U0001f000-\U0010ffff]', '', value)
+
+          def snapshot(converted, selected, roots, edges, source, context, source_prefix='.', native=None):
+              result = copy.deepcopy(converted)
+              require(result['detector']['name'] == 'syft' and
+                      result['detector']['url'] == 'https://github.com/anchore/syft', 'detector changed')
+              if 'manifests' not in result:
+                  require(native is not None and native['artifacts'] == [],
+                          'conversion omitted nonempty inventory manifests')
+                  result['manifests'] = {}
+              require(isinstance(result['manifests'], dict), 'invalid converted manifests')
+              npm_nodes, location_keys, identities = {}, {}, {}
+              for location, package in sorted(selected.items()):
+                  key, purl = npm_purl(package)
+                  identity = (package['name'], package['version'])
+                  require(identities.setdefault(identity, key) == key, 'conflicting npm identity keys')
+                  node = npm_nodes.setdefault(key, {'package_url': purl, 'scope': 'runtime',
+                                                   'relationship': 'indirect', 'dependencies': []})
+                  require(node['package_url'] == purl, 'conflicting npm source qualifiers')
+                  if location in roots:
+                      node['relationship'] = 'direct'
+                  location_keys[location] = key
+              require(len(npm_nodes) == len(identities), 'GitHub npm identity count differs')
+              for location, targets in edges.items():
+                  node = npm_nodes[location_keys[location]]
+                  node['dependencies'] = sorted(set(node['dependencies']) | {location_keys[t] for t in targets})
+              aliases = {}
+              for manifest in result['manifests'].values():
+                  for key, node in manifest['resolved'].items():
+                      value = node['package_url']
+                      if value.startswith('pkg:npm/'):
+                          base = value.partition('#')[0].partition('?')[0].removeprefix('pkg:npm/')
+                          name, _, version = base.rpartition('@')
+                          canonical, purl = npm_purl({'purl': value, 'name': unquote(name, errors='strict'),
+                                                      'version': unquote(version, errors='strict')})
+                          require(canonical in npm_nodes and npm_nodes[canonical]['package_url'] == purl,
+                                  'conversion changed npm identity or source')
+                          require(aliases.setdefault(key, canonical) == canonical, 'ambiguous converted npm key')
+              manifests = {}
+              retained = {key for manifest in result['manifests'].values()
+                          for key, node in manifest['resolved'].items()
+                          if not node['package_url'].startswith('pkg:npm/')}
+              require(not retained.intersection(npm_nodes), 'cross-ecosystem identity collision')
+              source_path = source.resolve(strict=True)
+              wd = relative(context['working_directory'])
+              for key, manifest in result['manifests'].items():
+                  resolved = {k: v for k, v in manifest['resolved'].items()
+                              if not v['package_url'].startswith('pkg:npm/')}
+                  if not resolved:
+                      continue
+                  original = text(manifest['file']['source_location'])
+                  path = Path(original)
+                  if path.is_absolute():
+                      require(path.is_relative_to(source_path), 'manifest source escapes scan root')
+                      original = path.relative_to(source_path).as_posix()
+                  elif not Path(source_prefix).is_absolute() and source_prefix != '.':
+                      prefix = PurePosixPath(relative(source_prefix))
+                      require(PurePosixPath(original).is_relative_to(prefix), 'manifest source prefix differs')
+                      original = PurePosixPath(original).relative_to(prefix).as_posix()
+                  original = relative(original)
+                  new_key = (PurePosixPath(wd) / original).as_posix()
+                  require(new_key not in manifests, 'manifest collision')
+                  for node in resolved.values():
+                      targets = {aliases.get(d, d) for d in (node.get('dependencies') or [])}
+                      node['dependencies'] = sorted(d for d in targets if d in retained or
+                                                    (native is None and d in npm_nodes))
+                  manifest['name'] = new_key
+                  manifest['file']['source_location'] = new_key
+                  manifest['resolved'] = resolved
+                  manifests[new_key] = manifest
+              manifest_path = (PurePosixPath(wd) / 'bun.lock').as_posix()
+              require(manifest_path not in manifests, 'npm manifest collision')
+              manifests[manifest_path] = {'name': manifest_path,
+                                          'file': {'source_location': manifest_path}, 'resolved': npm_nodes}
+              if native is not None:
+                  packages = {package['id']: package for package in native['artifacts']}
+                  npm_ids = {package['id']: location_keys[location] for location, package in selected.items()}
+                  by_url, by_key = {}, {}
+                  for manifest in manifests.values():
+                      for key, node in manifest['resolved'].items():
+                          by_url.setdefault(node['package_url'], set()).add(key)
+                          by_key.setdefault(key, []).append(node)
+                  def cross_key(identifier):
+                      if identifier in npm_ids:
+                          return npm_ids[identifier]
+                      matches = by_url.get(packages[identifier].get('purl'), set())
+                      require(len(matches) == 1, 'cross-ecosystem package identity is unresolved')
+                      return next(iter(matches))
+                  for relation in native['artifactRelationships']:
+                      parent, child = relation['parent'], relation['child']
+                      if (relation['type'] == 'dependency-of' and parent in packages and child in packages and
+                              ((parent in npm_ids) != (child in npm_ids))):
+                          dependency, dependent = cross_key(parent), cross_key(child)
+                          for node in by_key[dependent]:
+                              node['dependencies'] = sorted(set(node['dependencies']) | {dependency})
+              result['manifests'] = manifests
+              result['sha'] = selected_sha('push', {}, context['sha'])
+              result['ref'] = text(context['ref'])
+              result['job'] = {'id': text(context['run_id']),
+                               'correlator': text(strip_emojis(text(context['workflow']) + '_' +
+                                                              text(context['job'])))}
+              validate_snapshot(result)
+              return result
+
+          def validate_snapshot(document):
+              require(document['version'] == 0 and isinstance(document['manifests'], dict), 'invalid snapshot')
+              text(document['scanned'])
+              all_keys = {key for manifest in document['manifests'].values() for key in manifest['resolved']}
+              for name, manifest in document['manifests'].items():
+                  relative(name)
+                  require(manifest['file']['source_location'] == name, 'invalid source location')
+                  for key, node in manifest['resolved'].items():
+                      text(key)
+                      text(node['package_url'])
+                      require(node['relationship'] in {'direct', 'indirect'} and
+                              node['scope'] in {'runtime', 'development'}, 'invalid dependency classification')
+                      require(all(d in all_keys for d in node.get('dependencies', [])),
+                              'dangling GitHub dependency')
+
+          def validate_spdx(document, selected, edges, native=None):
+              require(document['spdxVersion'].startswith('SPDX-'), 'invalid SPDX')
+              ids = {document['SPDXID']}
+              ids.update(p['SPDXID'] for p in document.get('packages', []))
+              ids.update(f['SPDXID'] for f in document.get('files', []))
+              for relation in document.get('relationships', []):
+                  require(relation['spdxElementId'] in ids and
+                          relation['relatedSpdxElement'] in ids | {'NONE', 'NOASSERTION'}, 'dangling SPDX reference')
+              npm = {r['referenceLocator'] for p in document.get('packages', [])
+                     for r in p.get('externalRefs', []) if r['referenceType'] == 'purl' and
+                     r['referenceLocator'].startswith('pkg:npm/')}
+              require(npm == {p['purl'] for p in selected.values()}, 'SPDX npm inventory differs')
+              mapped = {}
+              for location, package in selected.items():
+                  matches = [p['SPDXID'] for p in document.get('packages', [])
+                             if p['SPDXID'].endswith('-' + package['id'])]
+                  require(len(matches) == 1, 'SPDX installation identity lost')
+                  mapped[location] = matches[0]
+              expected = {(mapped[dependency], mapped[dependent])
+                          for dependent, targets in edges.items() for dependency in targets}
+              actual = {(r['spdxElementId'], r['relatedSpdxElement'])
+                        for r in document.get('relationships', []) if r['relationshipType'] == 'DEPENDENCY_OF'
+                        and r['spdxElementId'] in mapped.values() and r['relatedSpdxElement'] in mapped.values()}
+              require(actual == expected, 'SPDX dependency graph differs')
+              if native is not None:
+                  package_ids = {package['id'] for package in native['artifacts']}
+                  links = [(r['parent'], r['child']) for r in native['artifactRelationships']
+                           if r['type'] == 'dependency-of' and r['parent'] in package_ids and r['child'] in package_ids]
+                  spdx_ids = {}
+                  for identifier in {endpoint for link in links for endpoint in link}:
+                      matches = [p['SPDXID'] for p in document.get('packages', [])
+                                 if p['SPDXID'].endswith('-' + identifier)]
+                      require(len(matches) == 1, 'SPDX related package identity lost')
+                      spdx_ids[identifier] = matches[0]
+                  expected = {(spdx_ids[parent], spdx_ids[child]) for parent, child in links}
+                  actual = {(r['spdxElementId'], r['relatedSpdxElement'])
+                            for r in document.get('relationships', []) if r['relationshipType'] == 'DEPENDENCY_OF'
+                            and r['spdxElementId'] in spdx_ids.values() and r['relatedSpdxElement'] in spdx_ids.values()}
+                  require(actual == expected, 'SPDX retained dependency graph differs')
+
+          def safe_env(state):
+              home = state / 'home'
+              home.mkdir(exist_ok=True)
+              return {'HOME': str(home), 'XDG_CONFIG_HOME': str(home), 'PATH': '/usr/bin:/bin',
+                      'TMPDIR': str(state), 'LANG': 'C.UTF-8', 'NO_COLOR': '1',
+                      'GIT_CONFIG_NOSYSTEM': '1', 'GIT_CONFIG_GLOBAL': '/dev/null',
+                      'GIT_TERMINAL_PROMPT': '0', 'BUN_INSTALL_CACHE_DIR': str(state / 'cache')}
+
+          def execute(command, state, cwd, output=None):
+              completed = subprocess.run(command, cwd=cwd, env=safe_env(state),
+                                         capture_output=True, timeout=600, check=False)
+              diagnostic = completed.stderr.decode('utf-8', errors='replace')
+              require(completed.returncode == 0, 'command failed: ' + diagnostic)
+              if 'licenses' in command:
+                  require(completed.stderr == b'', 'native inventory diagnostic: ' + diagnostic)
+              if len(command) > 1 and command[1] == 'convert':
+                  diagnostic = re.sub(r'(?m)^\[\d+\]  WARN convert is an experimental feature, '
+                                      r'run `syft convert -h` for help\n?', '', diagnostic)
+              if len(command) > 1 and command[1] == 'install':
+                  diagnostic += completed.stdout.decode('utf-8', errors='replace')
+              require(not re.search(r'(?i)\b(warn(?:ing)?|error|skipp(?:ed|ing))\b', diagnostic),
+                      'incomplete command output: ' + diagnostic)
+              if output:
+                  require(not output.exists(), 'stale command output')
+                  output.write_bytes(completed.stdout)
+              return completed.stdout
+
+          def configs(state):
+              require(state.is_absolute() and state.is_dir() and not state.is_symlink() and
+                      state.stat().st_uid == os.getuid() and state.stat().st_mode & 0o077 == 0,
+                      'configuration root is not private')
+              require(not (state / 'bunfig.toml').is_symlink() and not (state / 'syft.yaml').is_symlink(),
+                      'unsafe configuration path')
+              (state / 'bunfig.toml').write_text('preload = []\n[install]\nignoreScripts = true\n')
+              (state / 'syft.yaml').write_text('check-for-app-update: false\njavascript:\n'
+                                              '  include-dev-dependencies: true\n'
+                                              '  search-remote-licenses: false\n')
+
+          def finish(args):
+              state, project, source = Path(args.state), Path(args.project), Path(args.source)
+              require(not state.resolve().is_relative_to(source.resolve()) and
+                      not state.resolve().is_relative_to(project.resolve()), 'outputs are inside scan inputs')
+              context = load(args.context)
+              # A failed rerun cannot expose an earlier validated publication.
+              require(not (state / 'published').exists(), 'stale publication')
+              require(Path(args.inventory_stderr).read_bytes() == b'', 'native inventory warning')
+              raw = load(args.raw)
+              prefix = text(raw['source']['metadata']['path'])
+              if not Path(prefix).is_absolute():
+                  require(relative(prefix) in {'.', relative(context['working_directory'])}, 'unexpected source prefix')
+              corrected, selected, roots, edges = normalize(raw, load(args.inventory), project, source)
+              atomic(state / 'corrected.syft.json', corrected)
+              for format_name, filename in [('spdx-json', 'converted.spdx.json'), ('github-json', 'converted.github.json')]:
+                  output = state / filename
+                  execute([args.syft, 'convert', str(state / 'corrected.syft.json'),
+                           '--config', str(state / 'syft.yaml'), '-o', format_name], state, state, output)
+              spdx = load(state / 'converted.spdx.json')
+              validate_spdx(spdx, selected, edges, corrected)
+              final = snapshot(load(state / 'converted.github.json'), selected, roots, edges, source, context, prefix, corrected)
+              publication = state / 'publication-pending'
+              publication.mkdir()
+              try:
+                  artifact = text(context['repository'].split('/')[-1]) + '-' + text(context['job']) + '.spdx.json'
+                  require(re.fullmatch(r'[A-Za-z0-9_.-]+', artifact), 'unsafe artifact name')
+                  atomic(publication / artifact, spdx)
+                  atomic(publication / 'snapshot.json', final)
+                  atomic(publication / 'receipt.json', {'sha256': hashlib.sha256(
+                      (publication / 'snapshot.json').read_bytes()).hexdigest(), 'sha': context['sha']})
+                  os.replace(publication, state / 'published')
+              finally:
+                  if publication.exists():
+                      shutil.rmtree(publication)
+              return artifact
+
+          def input_hashes(root, names):
+              hashes = {}
+              for name in names:
+                  path = root / relative(name)
+                  resolved = inside(root, path)
+                  require(resolved.is_file(), 'installation input is not a regular file')
+                  if name not in {'package.json', 'bun.lock'}:
+                      require(not path.is_symlink(), 'patch input must be a regular file')
+                  hashes[name] = hashlib.sha256(resolved.read_bytes()).hexdigest()
+              return hashes
+
+          def stage_install_inputs(root, project):
+              manifest = load(inside(root, root / 'package.json'))
+              lock = load(inside(root, root / 'bun.lock'), jsonc=True)
+              patches = manifest.get('patchedDependencies', {})
+              require(isinstance(patches, dict) and patches == lock.get('patchedDependencies', {}),
+                      'manifest and frozen patches differ')
+              names = {'package.json', 'bun.lock'}
+              for identity, value in patches.items():
+                  text(identity)
+                  name = relative(value)
+                  parts = PurePosixPath(name).parts
+                  require(parts and not any(part in {'.git', 'node_modules', 'package.json', 'bun.lock',
+                                                     'bunfig.toml', '.bunfig.toml', '.npmrc'} or
+                                            part.startswith('.env') for part in parts), 'unsafe patch path')
+                  names.add(name)
+              hashes = input_hashes(root, sorted(names))
+              require(not any(project.iterdir()), 'installation project is not empty')
+              for name in hashes:
+                  target = project / name
+                  target.parent.mkdir(parents=True, exist_ok=True)
+                  shutil.copyfile(inside(root, root / name), target)
+              require(input_hashes(project, hashes) == hashes and input_hashes(root, hashes) == hashes,
+                      'installation inputs changed during staging')
+              return hashes
+
+          def prepare(workspace, wd):
+              workspace = Path(workspace).resolve(strict=True)
+              root = inside(workspace, workspace / relative(wd))
+              require(root.is_dir(), 'project is not a directory')
+              inside(root, root / 'package.json')
+              inside(root, root / 'bun.lock')
+              check_tree(root)
+              return root
+
+          def main():
+              parser = argparse.ArgumentParser()
+              parser.add_argument('command', choices=['select', 'prepare', 'run', 'finish'])
+              for name in ('state', 'workspace', 'wd', 'sha', 'bun', 'syft', 'project', 'source',
+                           'raw', 'inventory', 'inventory-stderr', 'context', 'parent'):
+                  parser.add_argument('--' + name)
+              args = parser.parse_args()
+              if args.command == 'select':
+                  print('sha=' + selected_sha(os.environ['EVENT_NAME'], load(os.environ['GITHUB_EVENT_PATH']),
+                                             os.environ['CONTEXT_SHA']))
+              elif args.command == 'prepare':
+                  prepare(args.workspace, args.wd)
+              elif args.command == 'finish':
+                  configs(Path(args.state))
+                  finish(args)
+              else:
+                  state = Path(args.state).resolve(strict=True)
+                  root = prepare(args.workspace, args.wd)
+                  head = execute(['/usr/bin/git', '-C', args.workspace, 'rev-parse', 'HEAD'], state, state)
+                  require(head.decode().strip() == selected_sha('push', {}, args.sha), 'checkout SHA mismatch')
+                  configs(state)
+                  project = state / 'project'
+                  project.mkdir()
+                  hashes = stage_install_inputs(root, project)
+                  lock = load(project / 'bun.lock', jsonc=True)
+                  require(set(lock['workspaces']) == {''}, 'workspace installs require a separate project root')
+                  for key, entry in lock['packages'].items():
+                      key_path(key)
+                      require(isinstance(entry, list) and entry and isinstance(entry[0], str), 'invalid lock entry')
+                      text(entry[0])
+                      require(not re.search(r'@(file|link|workspace|root):', entry[0]), 'local package resolution')
+                  install = [args.bun, 'install', '--config=' + str(state / 'bunfig.toml'),
+                             '--frozen-lockfile', '--ignore-scripts']
+                  execute(install, state, project)
+                  require(input_hashes(project, hashes) == hashes and input_hashes(root, hashes) == hashes,
+                          'installation inputs changed')
+                  check_tree(project)
+                  # Bun's inventory command requires this directory even when installation is empty.
+                  (project / 'node_modules').mkdir(exist_ok=True)
+                  inventory = execute([args.bun, '--config=' + str(state / 'bunfig.toml'),
+                                       'pm', 'licenses', '--prod', '--json'], state, project)
+                  (state / 'inventory.json').write_bytes(inventory)
+                  (state / 'inventory.stderr').write_bytes(b'')
+                  require(not (root / 'node_modules').exists(), 'checkout contains node_modules')
+                  if (project / 'node_modules').exists():
+                      shutil.copytree(project / 'node_modules', root / 'node_modules', symlinks=True)
+                  check_tree(root)
+                  execute([args.syft, 'scan', 'dir:' + str(root), '--config', str(state / 'syft.yaml'),
+                           '--source-name', os.environ['REPOSITORY'], '--source-version', args.sha,
+                           '--exclude', EXCLUDE, '-o', 'syft-json'], state, state, state / 'raw.syft.json')
+                  context = {key: os.environ[name] for key, name in (
+                      ('repository', 'REPOSITORY'), ('workflow', 'WORKFLOW'), ('job', 'JOB'),
+                      ('run_id', 'RUN_ID'), ('ref', 'REF'))}
+                  context.update(sha=args.sha, working_directory=args.wd)
+                  atomic(state / 'context.json', context)
+                  args.project, args.source = str(project), str(root)
+                  args.raw, args.inventory = str(state / 'raw.syft.json'), str(state / 'inventory.json')
+                  args.inventory_stderr, args.context = str(state / 'inventory.stderr'), str(state / 'context.json')
+                  artifact = finish(args)
+                  with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+                      output.write('artifact=' + artifact + '\n')
+
+          if __name__ == '__main__':
+              main()
+          SUBMISSION_PY
+          python3 -I "$state/helper.py" select >> "$GITHUB_OUTPUT"
+
+      - name: Checkout selected snapshot commit
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ steps.state.outputs.sha }}
           fetch-depth: 1
-          # Do not persist the GITHUB_TOKEN into the checkout so later steps
-          # (including the third-party setup-bun / sbom-action) cannot reuse it
-          # (CodeQL actions/untrusted-checkout). The default GITHUB_TOKEN from the
-          # job still authorizes the snapshot upload via the action's own env.
           persist-credentials: false
+
+      - name: Validate checkout containment
+        env:
+          STATE: ${{ steps.state.outputs.root }}
+          RAW_WD: ${{ inputs.working_directory }}
+        run: python3 -I "$STATE/helper.py" prepare --workspace "$GITHUB_WORKSPACE" --wd "$RAW_WD"
 
       - name: Set up bun
         uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version: ${{ inputs.bun_version }}
 
-      - name: Install dependencies (frozen lockfile)
-        working-directory: ${{ inputs.working_directory }}
-        # --frozen-lockfile installs exactly the versions resolved in bun.lock, so
-        # the submitted graph matches the committed lockfile and the step fails if
-        # bun.lock is stale rather than silently resolving different versions.
-        # --ignore-scripts skips package lifecycle scripts (postinstall, etc.):
-        # they are not needed to materialize node_modules for cataloging, and
-        # skipping them removes arbitrary-code-execution surface if this workflow
-        # is ever run against untrusted (pull_request) content.
-        run: bun install --frozen-lockfile --ignore-scripts
-
-      - name: Catalog node_modules and submit dependency snapshot
-        uses: anchore/sbom-action@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26 # v0.24.2
+      - name: Download released Syft
+        id: syft
+        uses: anchore/sbom-action/download-syft@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26 # v0.24.2
         with:
-          # Scan the installed tree: Syft's node cataloger reads each package's
-          # own package.json, capturing the FULL transitive set that GitHub's
-          # bun.lock-blind native parser misses.
-          path: ${{ inputs.working_directory }}
-          # Upload the SBOM to GitHub's dependency graph as a snapshot so
-          # Dependabot alerts cover transitive npm dependencies.
-          dependency-snapshot: true
+          syft-version: v1.52.0
+
+      - name: Build and validate production submission
+        id: build
+        env:
+          STATE: ${{ steps.state.outputs.root }}
+          RAW_WD: ${{ inputs.working_directory }}
+          SELECTED_SHA: ${{ steps.state.outputs.sha }}
+          SYFT: ${{ steps.syft.outputs.cmd }}
+          REPOSITORY: ${{ github.repository }}
+          WORKFLOW: ${{ github.workflow }}
+          JOB: ${{ github.job }}
+          RUN_ID: ${{ github.run_id }}
+          REF: ${{ github.ref }}
+        run: |
+          set -euo pipefail
+          python3 -I "$STATE/helper.py" run --state "$STATE" --workspace "$GITHUB_WORKSPACE" \
+            --wd "$RAW_WD" --sha "$SELECTED_SHA" --bun "$(command -v bun)" --syft "$SYFT"
+
+      - name: Submit validated snapshot
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          STATE: ${{ steps.state.outputs.root }}
+          SELECTED_SHA: ${{ steps.state.outputs.sha }}
+        with:
+          script: |
+            const fs = require('node:fs');
+            const path = require('node:path');
+            const crypto = require('node:crypto');
+            const root = fs.realpathSync(process.env.STATE);
+            const file = path.join(root, 'published', 'snapshot.json');
+            if (fs.realpathSync(file) !== file || !fs.lstatSync(file).isFile()) {
+              throw new Error('unsafe snapshot publication');
+            }
+            const bytes = fs.readFileSync(file);
+            const receipt = JSON.parse(fs.readFileSync(path.join(root, 'published', 'receipt.json')));
+            const snapshot = JSON.parse(bytes);
+            if (crypto.createHash('sha256').update(bytes).digest('hex') !== receipt.sha256 ||
+                snapshot.sha !== process.env.SELECTED_SHA || receipt.sha !== snapshot.sha) {
+              throw new Error('snapshot publication validation failed');
+            }
+            const response = await github.request('POST /repos/{owner}/{repo}/dependency-graph/snapshots', {
+              ...snapshot, owner: context.repo.owner, repo: context.repo.repo
+            });
+            if (response.status !== 201) throw new Error(`snapshot submission failed: ${response.status}`);
+
+      - name: Archive corrected SPDX
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ${{ steps.build.outputs.artifact }}
+          path: ${{ steps.state.outputs.root }}/published/${{ steps.build.outputs.artifact }}
+          if-no-files-found: error
+
+      - name: Remove run-owned submission files
+        if: always() && steps.state.outputs.root != ''
+        env:
+          STATE: ${{ steps.state.outputs.root }}
+        run: |
+          python3 -I - <<'CLEANUP_PY'
+          import os, pathlib, re, shutil, stat
+          path = pathlib.Path(os.environ['STATE'])
+          parent = pathlib.Path(os.environ['RUNNER_TEMP']).resolve(strict=True)
+          if path.parent != parent or not re.fullmatch(r'node-submission\.[A-Za-z0-9_]+', path.name):
+              raise ValueError('cleanup target is not run-owned')
+          if path.exists() or path.is_symlink():
+              mode = path.lstat()
+              if not stat.S_ISDIR(mode.st_mode) or mode.st_uid != os.getuid() or stat.S_IMODE(mode.st_mode) != 0o700:
+                  raise ValueError('unsafe cleanup root')
+              shutil.rmtree(path)
+          CLEANUP_PY
