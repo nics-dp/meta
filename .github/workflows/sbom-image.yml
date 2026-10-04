@@ -178,7 +178,7 @@ jobs:
         if: always()
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
-          version: v0.74.0
+          version: v0.75.0
           scan-type: sbom
           scan-ref: enriched-image.cdx.json
           format: sarif
@@ -222,7 +222,7 @@ jobs:
       - name: Scan SBOM with Trivy (JSON)
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
-          version: v0.74.0
+          version: v0.75.0
           scan-type: sbom
           scan-ref: enriched-image.cdx.json
           format: json
