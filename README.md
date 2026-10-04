@@ -327,7 +327,15 @@ mise use -g hk            # 或任何讓 hk 在 PATH 上的方式
 hk install --global --mise
 ```
 
-全域 launcher 走 `mise x`，沒有 `hk.pkl` 的 repo 自動略過；`HK=0 git commit` 可單次跳過。
+全域 launcher 走 `mise x`，沒有 `hk.pkl` 的 repo 自動略過；`HK=0 git commit` 可單次跳過。反過來說，全域安裝後**任何**含 `hk.pkl` 的 repo（包括剛 clone、尚未審閱的外部 repo）在 commit／push 時都會以你的權限執行其中的指令；hk 沒有 `mise trust`／`direnv allow` 那樣的信任閘門。在不信任的 repo 內停用：
+
+```sh
+for e in pre-commit commit-msg pre-push prepare-commit-msg; do
+  git config --local hook.hk-$e.enabled false
+done
+```
+
+或不加 `--global`，只在信任的 repo 內執行 `hk install --mise`。
 
 個人覆寫寫在 `hk.local.pkl`（已 gitignore）。hk 只選用一個設定檔（`hk.local.pkl` 優先於 `hk.pkl`，不會合併），所以該檔第一行必須是 `amends "./hk.pkl"`，否則共用 hooks 會整組消失。
 
