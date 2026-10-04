@@ -327,7 +327,15 @@ mise use -g hk            # 或任何讓 hk 在 PATH 上的方式
 hk install --global --mise
 ```
 
-全域 launcher 走 `mise x`，沒有 `hk.pkl` 的 repo 自動略過。個人覆寫寫在 `hk.local.pkl`（已 gitignore）；`HK=0 git commit` 可單次跳過。Consumer repo 要套用時，複製 `hk.pkl` 並把 `pre-push` 改成自家的驗證 facade（`release-check` 或 `all`）。
+全域 launcher 走 `mise x`，沒有 `hk.pkl` 的 repo 自動略過；`HK=0 git commit` 可單次跳過。
+
+個人覆寫寫在 `hk.local.pkl`（已 gitignore）。hk 只選用一個設定檔（`hk.local.pkl` 優先於 `hk.pkl`，不會合併），所以該檔第一行必須是 `amends "./hk.pkl"`，否則共用 hooks 會整組消失。
+
+Consumer repo 要套用時：
+
+1. 複製 `hk.pkl`
+2. 在自家 `mise.toml` 的 `[tools]` 加上 `betterleaks`（版本見本 repo `mise.toml`）：hk builtin 只呼叫工具、不會安裝，facade 範本也沒有宣告它
+3. 把 `pre-push` 改成自家的驗證 facade（`release-check` 或 `all`）
 
 ---
 
