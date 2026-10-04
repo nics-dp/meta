@@ -62,7 +62,7 @@
     },
     {
       "customType": "regex",
-      "description": "Update the hk Pkl package pins in hk.pkl: the `amends` line (Config.pkl) and the `import` line (Builtins.pkl) both read `package://github.com/jdx/hk/releases/download/v<ver>/hk@<ver>#/…`. No native manager reads Pkl, hk requires both lines on the same package version, and each line carries the version twice (release tag and `hk@` package name); the match spans both occurrences so the whole-match replacement rewrites them together, and both lines resolve to the same dependency so they land in one branch. The preset carries it because consumers copy hk.pkl verbatim (README「本機 git hooks」); it matches only `hk.pkl` / `.config/hk.pkl`, so a repo without that file is unaffected.",
+      "description": "Update the hk Pkl package pins in hk.pkl: the Config.pkl `amends` URL and the Builtins.pkl `import` URL, both of the form `package://github.com/jdx/hk/releases/download/v<ver>/hk@<ver>#/…`. No native manager reads Pkl, and hk requires the Config and Builtins URLs to name the same package version. The match spans the whole URL prefix, so the release tag and the `hk@` package version are replaced together, and every URL resolves to the same dependency, so they land in one branch. The preset carries it because consumers copy hk.pkl verbatim (README「本機 git hooks」); it matches an `hk.pkl` file at any depth and nothing else, so a repo without that file is unaffected.",
       "managerFilePatterns": [
         "/(^|/)(?:\\.config/)?hk\\.pkl$/"
       ],

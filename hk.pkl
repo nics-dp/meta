@@ -1,11 +1,12 @@
 amends "package://github.com/jdx/hk/releases/download/v2.5.0/hk@2.5.0#/Config.pkl"
 import "package://github.com/jdx/hk/releases/download/v2.5.0/hk@2.5.0#/Builtins.pkl"
 
-// Local git hooks over the same gates CI runs. Hooks are machine-level git
-// config (`hk install --global --mise`); a clone without this file is a no-op.
-// pre-commit sees staged files only, with unstaged work stashed; pre-push runs
-// once per push for the whole batch of commits. `HK=0 git commit` skips hk for
-// one command.
+// Local git hooks. pre-commit and commit-msg are local-only checks on the
+// staged files and the message (CI does not repeat them); pre-push runs the
+// validation gate CI runs, once per push for the whole batch of commits. Hooks
+// are machine-level git config (`hk install --global --mise`); a clone without
+// this file is a no-op. pre-commit stashes unstaged work while it runs.
+// `HK=0 git commit` skips hk for one command.
 steps {
   // Secret scan before the commit exists. ci:betterleaks stays the PR gate: it
   // scans the base..HEAD range, not staged files. The binary is pinned in

@@ -219,7 +219,8 @@ before changing any of these; the mechanism is in the code, the history in
   `description` fields of those `packageRules` in `renovate-preset.json`.
 - Renovate coverage of this repository's pins is split: the org preset's mise
   task-header managers see `aqua:`/`github:`/bun pins in the atoms and its
-  `hk.pkl` manager the two hk `package://` pins (both lines, one dependency —
+  `hk.pkl` manager the hk `package://` pins (the `Config.pkl` amends and the
+  `Builtins.pkl` import, one dependency that must stay on one version —
   consumers copy that file, which is why it is not meta-only); meta's own
   `renovate.json` carries custom managers for everything else (core tools such
   as shellcheck, zizmor, trivy and grype, `go:` module tools, `go install`
