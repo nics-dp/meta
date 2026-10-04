@@ -218,7 +218,9 @@ before changing any of these; the mechanism is in the code, the history in
   modules are disabled (they move through `go:lib-remote`). → the
   `description` fields of those `packageRules` in `renovate-preset.json`.
 - Renovate coverage of this repository's pins is split: the org preset's mise
-  task-header managers see `aqua:`/`github:`/bun pins in the atoms; meta's own
+  task-header managers see `aqua:`/`github:`/bun pins in the atoms and its
+  `hk.pkl` manager the two hk `package://` pins (both lines, one dependency —
+  consumers copy that file, which is why it is not meta-only); meta's own
   `renovate.json` carries custom managers for everything else (core tools such
   as shellcheck, zizmor, trivy and grype, `go:` module tools, `go install`
   lines and marked workflow inputs, the mise version). Its package rules decide
