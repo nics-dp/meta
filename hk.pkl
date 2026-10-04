@@ -12,9 +12,10 @@ steps {
   // scans the base..HEAD range, not staged files. The binary is pinned in
   // mise.toml [tools].
   ["betterleaks"] = Builtins.betterleaks
-  // `mise fmt --check` on the mise config files the builtin selects (its own
-  // glob is the authority); mise:validate (in `all`) checks the task graph,
-  // not formatting.
+  // The builtin's glob only decides whether the step runs (a staged mise config
+  // file); its command is `mise fmt --check` with no file arguments, so it
+  // checks every mise config file loaded here, not just the staged ones.
+  // mise:validate (in `all`) checks the task graph, not formatting.
   ["mise"] = Builtins.mise
 }
 
