@@ -19,11 +19,13 @@ set -euo pipefail
 #
 # On a pull_request we preferentially scan only the commits the PR introduces
 # (base..HEAD) so a pre-existing historical leak does not block every unrelated
-# PR; if the base ref can't be fetched we fall back to a full-history scan (see
-# the fetch guard below). On push / workflow_dispatch we scan the full history.
-# Both require the caller to checkout with fetch-depth: 0 for the full commit
-# history; the PR base ref itself is pulled in by the git fetch below (checkout
-# alone fetches only the checked-out ref, even at fetch-depth: 0).
+# PR; if the base ref is absent and can't be fetched we fall back to a
+# full-history scan (see the guard below). On push / workflow_dispatch we scan
+# the full history. Both require the caller to checkout with fetch-depth: 0:
+# at that depth actions/checkout's refspec is +refs/heads/*:refs/remotes/origin/*,
+# so origin/<base> is already in the local graph and no network access is
+# needed (mise-task.yml checks out with persist-credentials: false, so a git
+# fetch from inside the atom has no credentials on a private repo and fails).
 #
 # Org-wide allowlist: extend the default rule set and only *subtract* well
 # understood false positives. Two path rules cover vendored third-party code and
@@ -153,14 +155,15 @@ BLCFG
 common=(git . --redact --no-banner --config "$config")
 
 if [ "${GITHUB_EVENT_NAME:-}" = "pull_request" ] && [ -n "${GITHUB_BASE_REF:-}" ]; then
-  # Bring the PR's base branch into the local graph so base..HEAD resolves
-  # (actions/checkout fetches only the checked-out ref, even at fetch-depth: 0).
-  # On fetch failure (missing ref / permissions) fall back to a full-history
-  # scan: running a range scan against an absent base ref would fail for a
-  # reason unrelated to any leak. Merge commits are intentionally NOT excluded
-  # so secrets introduced while resolving a conflict are still caught.
-  if git fetch --no-tags --quiet origin \
-      "+refs/heads/${GITHUB_BASE_REF}:refs/remotes/origin/${GITHUB_BASE_REF}"; then
+  # Use origin/<base> from the checkout when it is already there; fetch it only
+  # when absent (a shallow or single-branch checkout). On fetch failure
+  # (missing ref / no credentials) fall back to a full-history scan: running a
+  # range scan against an absent base ref would fail for a reason unrelated to
+  # any leak. Merge commits are intentionally NOT excluded so secrets
+  # introduced while resolving a conflict are still caught.
+  if git rev-parse --verify --quiet "origin/${GITHUB_BASE_REF}^{commit}" >/dev/null \
+     || git fetch --no-tags --quiet origin \
+        "+refs/heads/${GITHUB_BASE_REF}:refs/remotes/origin/${GITHUB_BASE_REF}"; then
     betterleaks "${common[@]}" --log-opts="origin/${GITHUB_BASE_REF}..HEAD"
   else
     echo "::warning::could not fetch base ref '${GITHUB_BASE_REF}'; scanning full history instead"
