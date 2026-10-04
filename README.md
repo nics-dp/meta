@@ -309,6 +309,25 @@ Consumer repo 之 `renovate.json` 引用 org preset：
 
 驗證：`mise tasks ls` 應只顯示範本內的 facade 名 + repo-specific extras（atoms hidden）；`mise run --dry-run ci test sbom` resolve 無誤。
 
+### 本機 git hooks（hk）
+
+本 repo 以 [hk](https://hk.jdx.dev/) 在 commit／push 前跑與 CI 相同的閘門，設定在根目錄 `hk.pkl`：
+
+| hook         | 內容                                                                                           |
+| ------------ | ---------------------------------------------------------------------------------------------- |
+| `pre-commit` | `betterleaks` 掃 staged 檔（`ci:betterleaks` 掃的是 PR 的 base..HEAD，兩者互補）                 |
+| `commit-msg` | Conventional Commits 格式                                                                      |
+| `pre-push`   | `mise run all`，即 `auto-release.yml` 跑的整套驗證閘門                                          |
+
+每台開發機安裝一次（Git ≥ 2.54）：
+
+```sh
+mise use -g hk            # 或任何讓 hk 在 PATH 上的方式
+hk install --global --mise
+```
+
+全域 launcher 走 `mise x`，沒有 `hk.pkl` 的 repo 自動略過。個人覆寫寫在 `hk.local.pkl`（已 gitignore）；`HK=0 git commit` 可單次跳過。Consumer repo 要套用時，複製 `hk.pkl` 並把 `pre-push` 改成自家的驗證 facade（`release-check` 或 `all`）。
+
 ---
 
 ## 相關文件

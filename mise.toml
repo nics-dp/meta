@@ -8,22 +8,20 @@ task.output = "keep-order"
 # task) belong here.
 [tools]
 act = "latest"
+# hk.pkl's pre-commit secret scan; hk builtins invoke the tool but do not
+# install it. ci:betterleaks pins its own copy inline for the PR gate.
+betterleaks = "1.9.0"
 
 # ------------------------------------------------------------------------------
 [task_config]
-includes = [
-  ".mise/tasks",
-]
+includes = [".mise/tasks"]
 
 # ==============================================================================
 #  CI Tasks
 # ==============================================================================
 [tasks.ci]
 description = "Run all CI checks"
-depends = [
-  "iac:trivy",
-  "ci:meta-semgrep",
-]
+depends = ["iac:trivy", "ci:meta-semgrep"]
 
 # Meta-only age policy; consumers keep the shared ci:semgrep defaults.
 [tasks."ci:meta-semgrep"]
@@ -45,7 +43,13 @@ opengrep scan --error --enable-nosem --config p/ci \
 # so they are not duplicated here.
 [tasks.all]
 description = "Validation gate: task/workflow definitions + ci scans (auto-release driver entry point)"
-depends = ["mise:validate", "iac:actionlint", "iac:shellcheck", "iac:zizmor", "ci"]
+depends = [
+  "mise:validate",
+  "iac:actionlint",
+  "iac:shellcheck",
+  "iac:zizmor",
+  "ci",
+]
 
 # ==============================================================================
 #  SBOM Tasks

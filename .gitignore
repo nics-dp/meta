@@ -4,6 +4,10 @@
 # === Agent & worktree artifacts ===
 .claude
 .worktrees/
+.worktree/
+
+# === hk personal overrides (hk.pkl is the tracked project config) ===
+hk.local.pkl
 docs/plans/
 docs/superpowers/
 

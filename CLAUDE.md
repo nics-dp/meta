@@ -51,8 +51,13 @@ and the polyrepo map before judging blast radius).
   that exist only in this repository's workflows and atoms.
 - `zizmor.yml` — Zizmor dispositions keyed by `file:line`.
 - `mise.toml` — meta's own facade (`ci`, `all`, `sbom`) over the local
-  `.mise/tasks`; `[tools]` holds only project-level tools (`act`) because atoms
-  declare theirs inline.
+  `.mise/tasks`; `[tools]` holds only project-level tools (`act`, and the
+  `betterleaks` binary `hk.pkl` invokes) because atoms declare theirs inline.
+- `hk.pkl` — local git hooks (pre-commit secret scan on staged files,
+  Conventional Commits on commit-msg, `mise run all` on pre-push). The hooks
+  themselves are machine-level git config installed once per developer with
+  `hk install --global --mise`; nothing here runs in CI. → the README's
+  "本機 git hooks" section for setup.
 - `docs/design-notes/` — rationale moved out of this file.
 
 ## Commands
