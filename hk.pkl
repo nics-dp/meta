@@ -1,0 +1,41 @@
+amends "package://github.com/jdx/hk/releases/download/v2.5.0/hk@2.5.0#/Config.pkl"
+import "package://github.com/jdx/hk/releases/download/v2.5.0/hk@2.5.0#/Builtins.pkl"
+
+// Local git hooks. pre-commit and commit-msg are local-only checks on the
+// staged files and the message (CI does not repeat them); pre-push runs the
+// validation gate CI runs, once per push for the whole batch of commits. Hooks
+// are machine-level git config (`hk install --global --mise`); hk looks for a
+// project config from the repo upward through its parent directories, and a
+// clone with none on that path is a no-op. pre-commit stashes unstaged work
+// while it runs.
+// `HK=0 git commit` skips hk for one command.
+steps {
+  // Secret scan before the commit exists. ci:betterleaks stays the PR gate: it
+  // scans the base..HEAD range, not staged files. The binary is pinned in
+  // mise.toml [tools].
+  ["betterleaks"] = Builtins.betterleaks
+  // The builtin's glob only decides whether the step runs (a staged mise config
+  // file); its command is `mise fmt --check` with no file arguments, so it
+  // checks every mise config file loaded here, not just the staged ones.
+  // mise:validate (in `all`) checks the task graph, not formatting.
+  ["mise"] = Builtins.mise
+}
+
+hooks {
+  ["commit-msg"] {
+    steps {
+      ["conventional-commit"] = Builtins.check_conventional_commit
+    }
+  }
+  // The validation gate auto-release.yml runs; every step is read-only.
+  ["pre-push"] {
+    steps {
+      ["all"] {
+        check = new CommandSpec {
+          command = "mise run all"
+          effect = "read"
+        }
+      }
+    }
+  }
+}

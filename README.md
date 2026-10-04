@@ -291,6 +291,7 @@ Consumer repo 之 `renovate.json` 引用 org preset：
 - `.mise/tasks/*` 任務 header 內 `"aqua:<pkg>"="<ver>"` / `"github:<pkg>"="<ver>"` 釘版（generic，只配對數字開頭版本，`="latest"` 掃描器不動）
 - `.mise/tasks/*` 任務 header 內 `bun="<ver>"`（映射 oven-sh/bun）
 - `.github/workflows/*.yml` 行首 `*_version: "x.y.z"` mapping key 且帶行尾 `# renovate: datasource=<ds> depName=<dep>` marker（傳給 go-release / security-sarif / image-release 的 reusable workflow input；regex manager 看不懂 YAML 結構，所以只認有 marker 的行，且 marker 不可寫在 `run: |` 等 block scalar 內；依 depName 進對應 `<lang> toolchain` 群組）。README 一律不寫語言版本（寫「版本見 `mise.toml`」），所以沒有 README manager。
+- `jdx/hk` — `hk.pkl` 的 `Config.pkl`（`amends`）／`Builtins.pkl`（`import`）`package://` 釘版；兩個 URL 必須同版，URL 內的 release tag 與 `hk@` 版本一起更新（放在 preset 是因為 consumer 直接複製 `hk.pkl`）
 
 > workflow（`.github/workflows/**`）內以 `go install …@vX` 釘版的工具（quill、parlay、gosec、govulncheck）與 `mise-task.yml` 的 `jdx/mise-action` `version:` pin **不在「org preset」customManager 覆蓋範圍**（preset 只含上列 regex customManagers，供 consumer extend），而是由 meta repo 自家 `renovate.json` 的 self customManagers 追蹤。Self managers 也同步抽取 ShellCheck atom pin、Zizmor atom + official-action CLI input，以及 Grype workflow input；package rules 將 Zizmor action+CLI 與 Anchore action+Grype 各自分組且禁止 automerge，因 image `support/versions` digest 或 scanner policy 必須人工覆核。Snyk Labs scanner commit 刻意沒有 manager，只能手動驗 signed source、support/lock diff 與完整 baseline。consumer repo 無此類 workflow/self-validation 工具釘版，故 preset 不需涵蓋。
 
@@ -308,6 +309,41 @@ Consumer repo 之 `renovate.json` 引用 org preset：
    - `DOCKERHUB_USERNAME` + `DOCKERHUB_TOKEN` (Docker image repos)
 
 驗證：`mise tasks ls` 應只顯示範本內的 facade 名 + repo-specific extras（atoms hidden）；`mise run --dry-run ci test sbom` resolve 無誤。
+
+### 本機 git hooks（hk）
+
+本 repo 以 [hk](https://hk.jdx.dev/) 管理本機 git hooks，設定在根目錄 `hk.pkl`：commit 階段跑只看 staged 檔的本機檢查（CI 不重跑這些），push 階段跑與 CI 共用的驗證閘門：
+
+| hook         | 內容                                                                                           |
+| ------------ | ---------------------------------------------------------------------------------------------- |
+| `pre-commit` | `betterleaks` 掃 staged 檔（`ci:betterleaks` 掃的是 PR 的 base..HEAD，兩者互補）；staged 檔含 mise 設定檔時觸發 `mise fmt --check`（該指令不帶檔案參數，檢查的是這裡載入的所有 mise 設定檔，不限 staged） |
+| `commit-msg` | Conventional Commits 格式                                                                      |
+| `pre-push`   | `mise run all`，即 `auto-release.yml` 跑的整套驗證閘門                                          |
+
+每台開發機安裝一次（Git ≥ 2.54）：
+
+```sh
+mise use -g hk            # 或任何讓 hk 在 PATH 上的方式
+hk install --global --mise
+```
+
+全域 launcher 走 `mise x`；hk 會從 repo 目錄一路向父目錄尋找 project config（`hk.local.pkl`／`hk.pkl` 及其 `.config/` 變體），repo 與所有父目錄都沒有時才略過；`HK=0 git commit` 可單次跳過。反過來說，全域安裝後**任何**在這條搜尋路徑上找得到 `hk.pkl` 的 repo（包括剛 clone、尚未審閱的外部 repo）在 commit／push 時都會以你的權限執行其中的指令；hk 沒有 `mise trust`／`direnv allow` 那樣的信任閘門。在不信任的 repo 內停用：
+
+```sh
+for e in pre-commit commit-msg pre-push prepare-commit-msg; do
+  git config --local hook.hk-$e.enabled false
+done
+```
+
+或不加 `--global`，只在信任的 repo 內執行 `hk install --mise`。
+
+個人覆寫寫在 `hk.local.pkl`（已 gitignore）。hk 只選用一個設定檔（`hk.local.pkl` 優先於 `hk.pkl`，不會合併），所以該檔第一行必須是 `amends "./hk.pkl"`，否則共用 hooks 會整組消失。
+
+Consumer repo 要套用時：
+
+1. 複製 `hk.pkl`
+2. 在自家 `mise.toml` 的 `[tools]` 加上 `betterleaks`（版本見本 repo `mise.toml`）：hk builtin 只呼叫工具、不會安裝，facade 範本也沒有宣告它
+3. 把 `pre-push` 改成自家的驗證 facade（`release-check` 或 `all`）
 
 ---
 

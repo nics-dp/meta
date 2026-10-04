@@ -51,8 +51,13 @@ and the polyrepo map before judging blast radius).
   that exist only in this repository's workflows and atoms.
 - `zizmor.yml` — Zizmor dispositions keyed by `file:line`.
 - `mise.toml` — meta's own facade (`ci`, `all`, `sbom`) over the local
-  `.mise/tasks`; `[tools]` holds only project-level tools (`act`) because atoms
-  declare theirs inline.
+  `.mise/tasks`; `[tools]` holds only project-level tools (`act`, and the
+  `betterleaks` binary `hk.pkl` invokes) because atoms declare theirs inline.
+- `hk.pkl` — local git hooks (pre-commit secret scan on staged files,
+  Conventional Commits on commit-msg, `mise run all` on pre-push). The hooks
+  themselves are machine-level git config installed once per developer with
+  `hk install --global --mise`; nothing here runs in CI. → the README's
+  "本機 git hooks" section for setup.
 - `docs/design-notes/` — rationale moved out of this file.
 
 ## Commands
@@ -213,7 +218,10 @@ before changing any of these; the mechanism is in the code, the history in
   modules are disabled (they move through `go:lib-remote`). → the
   `description` fields of those `packageRules` in `renovate-preset.json`.
 - Renovate coverage of this repository's pins is split: the org preset's mise
-  task-header managers see `aqua:`/`github:`/bun pins in the atoms; meta's own
+  task-header managers see `aqua:`/`github:`/bun pins in the atoms and its
+  `hk.pkl` manager the hk `package://` pins (the `Config.pkl` amends and the
+  `Builtins.pkl` import, one dependency that must stay on one version —
+  consumers copy that file, which is why it is not meta-only); meta's own
   `renovate.json` carries custom managers for everything else (core tools such
   as shellcheck, zizmor, trivy and grype, `go:` module tools, `go install`
   lines and marked workflow inputs, the mise version). Its package rules decide

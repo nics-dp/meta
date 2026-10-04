@@ -59,6 +59,19 @@
       "matchStrings": [
         "(?:^|\\n)[ \\t]*(?:-[ \\t]+)?[a-z]+_version:[ \\t]*[\"']?(?<currentValue>\\d+(?:\\.\\d+)*)[\"']?[ \\t]*#[ \\t]*renovate:[ \\t]*datasource=(?<datasource>\\S+)[ \\t]+depName=(?<depName>\\S+)(?:[ \\t]+versioning=(?<versioning>\\S+))?"
       ]
+    },
+    {
+      "customType": "regex",
+      "description": "Update the hk Pkl package pins in hk.pkl: the Config.pkl `amends` URL and the Builtins.pkl `import` URL, both of the form `package://github.com/jdx/hk/releases/download/v<ver>/hk@<ver>#/…`. No native manager reads Pkl, and hk requires the Config and Builtins URLs to name the same package version. The match spans the whole URL prefix, so the release tag and the `hk@` package version are replaced together, and every URL resolves to the same dependency, so they land in one branch. The preset carries it because consumers copy hk.pkl verbatim (README「本機 git hooks」); it matches an `hk.pkl` file at any depth and nothing else, so a repo without that file is unaffected.",
+      "managerFilePatterns": [
+        "/(^|/)(?:\\.config/)?hk\\.pkl$/"
+      ],
+      "matchStrings": [
+        "package://github\\.com/jdx/hk/releases/download/v(?<currentValue>\\d+\\.\\d+\\.\\d+)/hk@\\d+\\.\\d+\\.\\d+#/"
+      ],
+      "depNameTemplate": "jdx/hk",
+      "datasourceTemplate": "github-releases",
+      "extractVersionTemplate": "^v(?<version>.+)$"
     }
   ],
   "packageRules": [
