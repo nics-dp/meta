@@ -4,8 +4,10 @@ import "package://github.com/jdx/hk/releases/download/v2.5.0/hk@2.5.0#/Builtins.
 // Local git hooks. pre-commit and commit-msg are local-only checks on the
 // staged files and the message (CI does not repeat them); pre-push runs the
 // validation gate CI runs, once per push for the whole batch of commits. Hooks
-// are machine-level git config (`hk install --global --mise`); a clone without
-// this file is a no-op. pre-commit stashes unstaged work while it runs.
+// are machine-level git config (`hk install --global --mise`); hk looks for a
+// project config from the repo upward through its parent directories, and a
+// clone with none on that path is a no-op. pre-commit stashes unstaged work
+// while it runs.
 // `HK=0 git commit` skips hk for one command.
 steps {
   // Secret scan before the commit exists. ci:betterleaks stays the PR gate: it

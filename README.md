@@ -327,7 +327,7 @@ mise use -g hk            # 或任何讓 hk 在 PATH 上的方式
 hk install --global --mise
 ```
 
-全域 launcher 走 `mise x`，沒有 `hk.pkl` 的 repo 自動略過；`HK=0 git commit` 可單次跳過。反過來說，全域安裝後**任何**含 `hk.pkl` 的 repo（包括剛 clone、尚未審閱的外部 repo）在 commit／push 時都會以你的權限執行其中的指令；hk 沒有 `mise trust`／`direnv allow` 那樣的信任閘門。在不信任的 repo 內停用：
+全域 launcher 走 `mise x`；hk 會從 repo 目錄一路向父目錄尋找 project config（`hk.local.pkl`／`hk.pkl` 及其 `.config/` 變體），repo 與所有父目錄都沒有時才略過；`HK=0 git commit` 可單次跳過。反過來說，全域安裝後**任何**在這條搜尋路徑上找得到 `hk.pkl` 的 repo（包括剛 clone、尚未審閱的外部 repo）在 commit／push 時都會以你的權限執行其中的指令；hk 沒有 `mise trust`／`direnv allow` 那樣的信任閘門。在不信任的 repo 內停用：
 
 ```sh
 for e in pre-commit commit-msg pre-push prepare-commit-msg; do
