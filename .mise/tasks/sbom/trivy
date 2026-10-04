@@ -3,7 +3,7 @@
 #MISE hide=true
 #MISE raw=true
 #MISE depends=["sbom:enrich"]
-#MISE tools={trivy="0.74.0"}
+#MISE tools={trivy="0.75.0"}
 
 # shellcheck disable=SC1091
 source "$(dirname "$0")/../lib/require-tool"
