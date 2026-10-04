@@ -316,7 +316,7 @@ Consumer repo 之 `renovate.json` 引用 org preset：
 
 | hook         | 內容                                                                                           |
 | ------------ | ---------------------------------------------------------------------------------------------- |
-| `pre-commit` | `betterleaks` 掃 staged 檔（`ci:betterleaks` 掃的是 PR 的 base..HEAD，兩者互補）                 |
+| `pre-commit` | `betterleaks` 掃 staged 檔（`ci:betterleaks` 掃的是 PR 的 base..HEAD，兩者互補）；`mise fmt --check` 檢查 staged 的 mise 設定檔格式 |
 | `commit-msg` | Conventional Commits 格式                                                                      |
 | `pre-push`   | `mise run all`，即 `auto-release.yml` 跑的整套驗證閘門                                          |
 
