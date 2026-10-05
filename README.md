@@ -301,7 +301,7 @@ Consumer repo 之 `renovate.json` 引用 org preset：
 
 1. 從 `templates/facades/mise.<archetype>.toml` (`go-service`/`go-lib`/`frontend`/`python`/`image`) 複製為 repo 自家 `mise.toml`
    - Go：版本寫在 `go.mod` 的 `toolchain goX.Y.Z`，`mise.toml` 不寫 `go`（facade 的 `idiomatic_version_file_enable_tools` 讓 mise 與 CI 讀它）。`go` 指令是模組的最低相容版本，必須低於 `toolchain`，例如 `go X.Y.0` 配 `toolchain goX.Y.1`：兩者同版時 go 指令會刪掉 `toolchain` 行。`toolchain` 升級後 `go` 可以留在原本的版本，Renovate 不會更新它。`ci:toolchain-pins` 以 `toolchain` 行為準，沒有 `toolchain` 行時才比對 `go` 指令。
-   - Python／Node：版本可以只寫在 `.python-version`／`.nvmrc`，`ci:toolchain-pins` 一樣會比對；`mise.toml` 沒有對應 pin 不算錯。
+   - Python／Node：facade 把版本寫在 `mise.toml` 的 `[tools]`（python facade 是 `python`）。`ci:toolchain-pins` 也會比對 `.python-version`／`.nvmrc`，但 mise 與 CI 的 mise-action 只有在 `[settings].idiomatic_version_file_enable_tools` 列出 `python`／`node` 時才讀這兩個檔案，預設不讀；要讓它們成為唯一來源，consumer 必須自己加上這個設定。
 2. 確認 `[task_config].includes = ["git::https://github.com/nics-dp/meta.git//.mise/tasks?ref=main"]`
 3. 加 repo-specific tasks/tools/env at end
 4. 寫 `.github/workflows/ci.yml`，用 matrix 呼叫 `nics-dp/meta/.github/workflows/mise-task.yml@main`
