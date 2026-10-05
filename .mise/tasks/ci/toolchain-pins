@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
-#MISE description="Fail when a language toolchain (go/python/node/bun) is pinned to different versions across mise.toml, the go.mod go directive, Dockerfiles, .mise/tasks image refs, workflows, .python-version and .nvmrc"
+#MISE description="Fail when a language toolchain (go/python/node/bun) is pinned to different versions across mise.toml, go.mod (its toolchain directive, else its go directive), Dockerfiles, .mise/tasks image refs, workflows, .python-version and .nvmrc"
 #MISE hide=true
 #MISE raw=true
 #
 # The toolchain version is stated in files nothing at runtime connects:
-# mise.toml (the toolchain CI and dev install), go.mod (the module minimum),
-# the Dockerfile builder image (what compiles the release image) and the
-# reusable workflows' `go_version` (what compiles snapshot/release binaries).
-# Documentation deliberately states no version (README says "pinned in
-# mise.toml"), so prose is out of scope here.
+# mise.toml or go.mod's `toolchain` directive (the toolchain CI and dev
+# install; mise reads either), the Dockerfile builder image (what compiles the
+# release image) and the reusable workflows' `go_version` (what compiles
+# snapshot/release binaries). Documentation deliberately states no version, so
+# prose is out of scope here.
 # Drift does not fail loudly -- go:audit scans one toolchain while the release
 # is built by another -- and Renovate's per-language toolchain groups only
 # batch what a manager extracts, so a bump can still land in one file alone.
@@ -88,17 +88,23 @@ scan_mise() {
   done <"$f"
 }
 
-# go.mod: the `go` directive only (any run of whitespace before the version).
-# A `toolchain` directive is deliberately not a pin: it may legitimately select
-# a newer patch toolchain than the module's minimum language version.
+# go.mod: the `toolchain goX.Y.Z` directive when present, otherwise the `go`
+# directive (any run of whitespace before the version). The toolchain line is
+# what Go and mise build with; the `go` line is then only the module's minimum
+# language version and sits a patch below it on purpose (the go command drops a
+# toolchain line equal to the `go` line), so it is not compared. A go.mod
+# without a toolchain line keeps its `go` line as the pin.
 scan_gomod() {
-  local f=$1 n rest ver
+  local f=$1 n rest ver re='^go[[:space:]]*([0-9][0-9.]*)'
+  if grep -qE '^toolchain[[:space:]]+go[0-9]' "$f"; then
+    re='^toolchain[[:space:]]+go([0-9][0-9.]*)'
+  fi
   while IFS=: read -r n rest; do
-    [[ $rest =~ ^go[[:space:]]*([0-9][0-9.]*) ]] || continue
+    [[ $rest =~ $re ]] || continue
     if ver=$(num "${BASH_REMATCH[1]}"); then
       pin go "$ver" "$f:$n"
     fi
-  done < <(grep -nE '^go[[:space:]]*[0-9]' "$f" || true)
+  done < <(grep -nE '^(go|toolchain)[[:space:]]' "$f" || true)
 }
 
 # Image references (`golang:X.Y.Z-…`, `dhi.io/python:X.Y.Z-…`, `docker.io/oven/bun:X.Y.Z@…`)
