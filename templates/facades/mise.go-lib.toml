@@ -10,9 +10,11 @@ idiomatic_version_file_enable_tools = ["go"]
 # ------------------------------------------------------------------------------
 [tools]
 # Go toolchain: go.mod's `toolchain goX.Y.Z` line, read by mise through
-# idiomatic_version_file_enable_tools above. Keep go.mod's `go` directive a patch
-# below it (e.g. `go X.Y.0` with `toolchain goX.Y.1`): the go command drops a
-# toolchain line equal to the go line, and ci:toolchain-pins compares the toolchain.
+# idiomatic_version_file_enable_tools above. go.mod's `go` directive is the
+# module's minimum language version and must stay below the toolchain (e.g.
+# `go X.Y.0` with `toolchain goX.Y.1`): the go command drops a toolchain line equal
+# to the go line. It may lag the toolchain after upgrades; Renovate does not bump it
+# and ci:toolchain-pins compares only the toolchain.
 
 [env]
 # Override meta config base if forking nics-dp/meta

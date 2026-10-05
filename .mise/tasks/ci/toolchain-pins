@@ -92,9 +92,9 @@ scan_mise() {
 # directive. Go accepts indentation before a directive (`go mod edit -json`
 # parses it), and any run of whitespace before the version. The toolchain line is
 # what Go and mise build with; the `go` line is then only the module's minimum
-# language version and sits a patch below it on purpose (the go command drops a
-# toolchain line equal to the `go` line), so it is not compared. A go.mod
-# without a toolchain line keeps its `go` line as the pin.
+# language version. It must stay below the toolchain (the go command drops a
+# toolchain line equal to the `go` line) and may lag it by any amount, so it is
+# not compared. A go.mod without a toolchain line keeps its `go` line as the pin.
 scan_gomod() {
   local f=$1 n rest ver re='^[[:space:]]*go[[:space:]]*([0-9][0-9.]*)'
   if grep -qE '^[[:space:]]*toolchain[[:space:]]+go[0-9]' "$f"; then
