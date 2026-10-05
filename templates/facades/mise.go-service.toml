@@ -4,11 +4,16 @@
 [settings]
 jobs = 16
 task.output = "keep-order"
+# Go comes from go.mod's `toolchain goX.Y.Z` line (see [tools]). CI's mise-action
+# reads this file, so the setting lives here, not only in a developer's config.
+idiomatic_version_file_enable_tools = ["go"]
 
 # ------------------------------------------------------------------------------
 [tools]
-# Go toolchain
-go = "1.27.1"
+# Go toolchain: go.mod's `toolchain goX.Y.Z` line, read by mise through
+# idiomatic_version_file_enable_tools above. Keep go.mod's `go` directive a patch
+# below it (e.g. `go X.Y.0` with `toolchain goX.Y.1`): the go command drops a
+# toolchain line equal to the go line, and ci:toolchain-pins compares the toolchain.
 
 [env]
 # Override meta config base if forking nics-dp/meta

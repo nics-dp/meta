@@ -300,6 +300,8 @@ Consumer repo 之 `renovate.json` 引用 org preset：
 ## Consumer Repo 設置步驟
 
 1. 從 `templates/facades/mise.<archetype>.toml` (`go-service`/`go-lib`/`frontend`/`python`/`image`) 複製為 repo 自家 `mise.toml`
+   - Go：版本寫在 `go.mod` 的 `toolchain goX.Y.Z`，`mise.toml` 不寫 `go`（facade 的 `idiomatic_version_file_enable_tools` 讓 mise 與 CI 讀它）。`go` 指令保持比 `toolchain` 低一個 patch，例如 `go X.Y.0` 配 `toolchain goX.Y.1`：兩者同版時 go 指令會刪掉 `toolchain` 行。`ci:toolchain-pins` 以 `toolchain` 行為準，沒有 `toolchain` 行時才比對 `go` 指令。
+   - Python／Node：版本可以只寫在 `.python-version`／`.nvmrc`，`ci:toolchain-pins` 一樣會比對；`mise.toml` 沒有對應 pin 不算錯。
 2. 確認 `[task_config].includes = ["git::https://github.com/nics-dp/meta.git//.mise/tasks?ref=main"]`
 3. 加 repo-specific tasks/tools/env at end
 4. 寫 `.github/workflows/ci.yml`，用 matrix 呼叫 `nics-dp/meta/.github/workflows/mise-task.yml@main`
