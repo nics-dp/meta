@@ -89,22 +89,23 @@ scan_mise() {
 }
 
 # go.mod: the `toolchain goX.Y.Z` directive when present, otherwise the `go`
-# directive (any run of whitespace before the version). The toolchain line is
+# directive. Go accepts indentation before a directive (`go mod edit -json`
+# parses it), and any run of whitespace before the version. The toolchain line is
 # what Go and mise build with; the `go` line is then only the module's minimum
 # language version and sits a patch below it on purpose (the go command drops a
 # toolchain line equal to the `go` line), so it is not compared. A go.mod
 # without a toolchain line keeps its `go` line as the pin.
 scan_gomod() {
-  local f=$1 n rest ver re='^go[[:space:]]*([0-9][0-9.]*)'
-  if grep -qE '^toolchain[[:space:]]+go[0-9]' "$f"; then
-    re='^toolchain[[:space:]]+go([0-9][0-9.]*)'
+  local f=$1 n rest ver re='^[[:space:]]*go[[:space:]]*([0-9][0-9.]*)'
+  if grep -qE '^[[:space:]]*toolchain[[:space:]]+go[0-9]' "$f"; then
+    re='^[[:space:]]*toolchain[[:space:]]+go([0-9][0-9.]*)'
   fi
   while IFS=: read -r n rest; do
     [[ $rest =~ $re ]] || continue
     if ver=$(num "${BASH_REMATCH[1]}"); then
       pin go "$ver" "$f:$n"
     fi
-  done < <(grep -nE '^(go|toolchain)[[:space:]]' "$f" || true)
+  done < <(grep -nE '^[[:space:]]*(go|toolchain)[[:space:]]' "$f" || true)
 }
 
 # Image references (`golang:X.Y.Z-…`, `dhi.io/python:X.Y.Z-…`, `docker.io/oven/bun:X.Y.Z@…`)
