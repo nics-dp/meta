@@ -116,10 +116,11 @@ before changing any of these; the mechanism is in the code, the history in
   the include resolves to, it does not make the task a no-op.
   → `.mise/tasks/meta/bump`.
 - `node:audit` gates only advisories with a published fix, at every severity:
-  the GHSA ids bun lists under `no published version fixes:` are warned and
-  passed to `--ignore`, a fix blocked by a dependent's range still gates, and an
-  unreadable dry run ignores nothing. → the header comment in
-  `.mise/tasks/node/audit`.
+  the `--ignore` tokens bun prints under `no published version fixes:` (GHSA or
+  numeric advisory ids) are warned and passed to `--ignore`, a fix blocked by a
+  dependent's range still gates, and an unreadable dry run ignores nothing.
+  → the header comment in `.mise/tasks/node/audit`; regression suite
+  `python3 .github/tests/test_node_audit.py`.
 - File-mutating lint / format atoms are named `*-fix` and paired with a
   `*-check`; the facade templates define `release-check` as `ci` minus the
   `*-fix` atoms on that basis. → `templates/facades/*.toml`.

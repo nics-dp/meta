@@ -7,12 +7,15 @@ set -euo pipefail
 
 # An advisory with no published fixed version is not actionable, so it is reported
 # as a warning and ignored; it gates again on its own once upstream publishes a fix.
-# Only the `no published version fixes:` section of the dry run is read: a fix blocked
-# by a dependent's range is listed elsewhere and still gates. If the section cannot be
-# read (format change, network error), nothing is ignored and the full audit gates.
+# Only the `no published version fixes:` section of the dry run is read, and only the
+# tokens bun prints after `--ignore` there (a GHSA id, or the numeric advisory id when
+# the advisory URL has no GHSA): a fix blocked by a dependent's range is listed in
+# another section and still gates. If the section cannot be read (format change,
+# network error), nothing is ignored and the full audit gates.
+# Regression: .github/tests/test_node_audit.py
 unfixable=$(bun audit fix --latest --dry-run 2>&1 \
   | awk '/^no published version fixes:/{f=1;next} f&&/^[^ ]/{f=0} f' \
-  | grep -oE 'GHSA(-[0-9a-z]{4}){3}' | sort -u || true)
+  | grep -oE -- '--ignore (GHSA(-[0-9a-z]{4}){3}|[0-9]+)' | cut -d' ' -f2 | sort -u || true)
 
 args=()
 for id in $unfixable; do
