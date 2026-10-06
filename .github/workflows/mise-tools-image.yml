@@ -9,7 +9,10 @@
 # fails when two atoms pin one tool to different versions. Each build is pushed to the
 # mutable `tag` input; consumers pin `ghcr.io/nics-dp/mise-tools@<digest>` from the job
 # output or summary, because a rebuild yields a new digest and moves the tag.
-# The package is private and the image is unsigned.
+# The package is private. Each pushed digest gets a build provenance attestation stored with
+# this repository's attestations (not pushed to the registry), so a consumer can check with
+# `gh attestation verify oci://<image>@<digest> --repo nics-dp/meta --signer-workflow
+# nics-dp/meta/.github/workflows/mise-tools-image.yml` that this workflow built the image.
 
 name: mise-tools-image
 
@@ -39,6 +42,10 @@ jobs:
     permissions:
       contents: read
       packages: write
+      # Build provenance attestation for the pushed digest.
+      attestations: write
+      artifact-metadata: write
+      id-token: write
     outputs:
       digest: ${{ steps.push.outputs.digest }}
     env:
@@ -138,6 +145,12 @@ jobs:
             echo "- \`$IMAGE:$EXTRA_TAG\`"
             echo "- \`$IMAGE@$digest\`"
           } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: ${{ env.IMAGE }}
+          subject-digest: ${{ steps.push.outputs.digest }}
 
       - name: Remove job-local state
         if: always()
