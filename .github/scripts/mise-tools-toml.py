@@ -15,7 +15,7 @@ import tomllib
 from pathlib import Path
 
 HEADER = "#MISE tools="
-GO_VERSION = re.compile(r"\d+\.\d+(\.\d+)?((rc|beta)\d+)?")
+GO_VERSION = re.compile(r"[0-9]+\.[0-9]+\.[0-9]+")
 
 
 def collect(tasks_dir: Path) -> dict[str, tuple[str, str]]:
@@ -43,7 +43,7 @@ def main() -> None:
         sys.exit(__doc__.strip().splitlines()[2])
     tasks_dir, go_version = Path(sys.argv[1]), sys.argv[2]
     if not GO_VERSION.fullmatch(go_version):
-        sys.exit(f"error: go version {go_version!r} is not of the form X.Y[.Z]")
+        sys.exit(f"error: go version {go_version!r} is not of the form X.Y.Z")
     tools = collect(tasks_dir)
     if not tools:
         sys.exit(f"error: no {HEADER} header under {tasks_dir}")
