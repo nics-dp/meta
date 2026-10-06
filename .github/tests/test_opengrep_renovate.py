@@ -137,6 +137,9 @@ class OpenGrepRenovateTests(unittest.TestCase):
                     {"matchPackageNames": ["docker"], "minimumReleaseAge": None},
                     {"matchDatasources": ["docker"], "minimumReleaseAge": "1 day"},
                     {"matchDatasources": ["docker"], "minimumReleaseAge": False},
+                    {**docker_null, "patch": {"minimumReleaseAge": False}},
+                    {**docker_null, "major": {"minimumReleaseAge": 0}},
+                    {"major": {"minimumReleaseAge": False}, **docker_null},
                 )
             ):
                 add(
