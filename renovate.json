@@ -144,11 +144,12 @@
     },
     {
       "customType": "regex",
-      "description": "Update synchronized mise pins: the mise-task reusable workflow, auto-release.yml's mise_version input default, and self-release.yml's explicit pass",
+      "description": "Update synchronized mise pins: the mise-task reusable workflow, auto-release.yml's mise_version input default, self-release.yml's explicit pass, and the mise that mise-tools-image.yml embeds in the tool image",
       "managerFilePatterns": [
         "/^\\.github/workflows/mise-task\\.yml$/",
         "/^\\.github/workflows/auto-release\\.yml$/",
-        "/^\\.github/workflows/self-release\\.yml$/"
+        "/^\\.github/workflows/self-release\\.yml$/",
+        "/^\\.github/workflows/mise-tools-image\\.yml$/"
       ],
       "matchStrings": [
         "jdx/mise-action@[\\s\\S]*?version:\\s*\"(?<currentValue>\\d+\\.\\d+\\.\\d+)\"",

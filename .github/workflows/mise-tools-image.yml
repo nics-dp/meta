@@ -1,0 +1,142 @@
+# yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
+# Build and push ghcr.io/nics-dp/mise-tools (linux/amd64) with `mise oci`.
+#
+# The image carries mise plus the union of every atom's `#MISE tools=` pin and the Go
+# toolchain given by the `go_version` input, so a container job can run `mise run <atom>`
+# without installing tools. `.github/scripts/mise-tools-toml.py` builds the tool set and
+# fails when two atoms pin one tool to different versions. Each build is pushed to the
+# mutable `tag` input; consumers pin `ghcr.io/nics-dp/mise-tools@<digest>` from the job
+# output or summary, because a rebuild yields a new digest and moves the tag.
+# The package is private and the image is unsigned.
+
+name: mise-tools-image
+
+on:
+  workflow_dispatch:
+    inputs:
+      go_version:
+        description: "Go toolchain version to include (X.Y.Z, normally the consumers' go.mod toolchain)"
+        required: true
+        type: string
+      tag:
+        description: "Mutable tag the build is pushed to (pin the reported digest, not the tag)"
+        required: false
+        type: string
+        default: experiment
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build and push mise-tools
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      digest: ${{ steps.push.outputs.digest }}
+    env:
+      IMAGE: ghcr.io/nics-dp/mise-tools
+      # The image must resolve atom tools the way mise-task.yml does at run time;
+      # see the env comment on its `run` job.
+      MISE_MINIMUM_RELEASE_AGE: "0"
+      MISE_EXPERIMENTAL: "1"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Prepare job-local state
+        env:
+          GO_VERSION: ${{ inputs.go_version }}
+          EXTRA_TAG: ${{ inputs.tag }}
+        run: |
+          if [ -z "$RUNNER_TEMP" ] || [[ "$RUNNER_TEMP" != /* ]] || [[ "$RUNNER_TEMP" == *$'\n'* ]]; then
+            echo "::error::RUNNER_TEMP must be absolute and single-line"
+            exit 1
+          fi
+          if [[ ! "$EXTRA_TAG" =~ ^[A-Za-z0-9_][A-Za-z0-9._-]{0,127}$ ]]; then
+            echo "::error::tag must be a valid OCI tag"
+            exit 1
+          fi
+          state="${RUNNER_TEMP%/}/mise-tools-image"
+          rm -rf -- "$state"
+          umask 077
+          mkdir -p "$state/docker" "$state/config"
+          # Registry credentials stay in this job-local file, never in $HOME. docker
+          # login writes it through DOCKER_CONFIG; mise reads it through REGISTRY_AUTH_FILE.
+          {
+            echo "MISE_TOOLS_STATE=$state"
+            echo "DOCKER_CONFIG=$state/docker"
+            echo "REGISTRY_AUTH_FILE=$state/docker/config.json"
+          } >> "$GITHUB_ENV"
+          python3 .github/scripts/mise-tools-toml.py .mise/tasks "$GO_VERSION" > "$state/config/mise.toml"
+          {
+            echo "### Tool set"
+            echo '```toml'
+            cat "$state/config/mise.toml"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # Same action pin and mise version as mise-task.yml; the synchronized mise pins
+      # custom manager in renovate.json bumps them together. The embedded mise binary
+      # is the one this action installs.
+      - uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+        with:
+          version: "2026.10.2"
+          install: false
+          cache: false
+
+      - name: Install tools
+        env:
+          MISE_GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          cd "$MISE_TOOLS_STATE/config"
+          mise trust mise.toml
+          mise install
+
+      - name: Build image
+        run: |
+          cd "$MISE_TOOLS_STATE/config"
+          mise oci build --from buildpack-deps:noble-scm --output "$MISE_TOOLS_STATE/image"
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Push image
+        id: push
+        env:
+          EXTRA_TAG: ${{ inputs.tag }}
+        run: |
+          layout="$MISE_TOOLS_STATE/image"
+          digest="$(jq -r '.manifests[0].digest' "$layout/index.json")"
+          if [[ ! "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+            echo "::error::OCI layout has no single manifest digest"
+            exit 1
+          fi
+          cd "$MISE_TOOLS_STATE/config"
+          mise oci push --image-dir "$layout" "$IMAGE:$EXTRA_TAG"
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+          {
+            echo "### Pushed"
+            echo "- \`$IMAGE:$EXTRA_TAG\`"
+            echo "- \`$IMAGE@$digest\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Remove job-local state
+        if: always()
+        run: |
+          state="${RUNNER_TEMP%/}/mise-tools-image"
+          rm -rf -- "$state"
+          if [ -e "$state" ]; then
+            echo "::error::job-local registry credentials were not removed"
+            exit 1
+          fi
