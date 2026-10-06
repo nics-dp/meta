@@ -422,6 +422,21 @@
       "assignees": [
         "charliie-dev"
       ]
+    },
+    {
+      "description": "No release-age wait for the language toolchain images and for every dhi.io image: a new tag or digest joins the PR on the scan that finds it. Renovate dates a Docker Hub image by its tag's last push, and official images such as golang re-push a tag whenever their base refreshes, so the 7-day wait restarts and the builder image falls out of its toolchain group (go.mod moves, the Dockerfile does not). Registries other than Docker Hub, dhi.io included, report no release date at all, and the default minimumReleaseAgeBehaviour then holds their updates in Pending Status Checks indefinitely. The toolchain version's own age is still gated where it carries a real release date (gomod, mise, setup-*), and ci:toolchain-pins checks that the pins agree.",
+      "matchDatasources": [
+        "docker"
+      ],
+      "matchPackageNames": [
+        "golang",
+        "python",
+        "node",
+        "oven/bun",
+        "docker.io/oven/bun",
+        "dhi.io/**"
+      ],
+      "minimumReleaseAge": null
     }
   ]
 }
