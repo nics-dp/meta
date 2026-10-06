@@ -4,7 +4,8 @@
 Usage: mise-tools-toml.py <tasks-dir> <go-version> [<atom>,<atom>,...]
 
 With no atom list every atom counts; otherwise only the named atoms (task names such as
-`go:lint-check` or `iac:img:hadolint`) do, and a name that matches no atom file is an error.
+`go:lint-check` or `iac:img:hadolint`) do, and a name that matches no atom is an error. An atom
+is a file with a `#MISE hide=true` header, so a lib/ helper is not one.
 
 Each header value is parsed as a TOML inline table. A tool pinned to different versions by
 two atoms is an error that lists both pins, so the image never silently picks one of them.
@@ -22,15 +23,19 @@ GO_VERSION = re.compile(r"[0-9]+\.[0-9]+\.[0-9]+")
 ATOM = re.compile(r"[a-z0-9_-]+(:[a-z0-9_-]+)+")
 
 
+def is_atom(path: Path) -> bool:
+    return path.is_file() and "#MISE hide=true" in path.read_text(encoding="utf-8").splitlines()
+
+
 def atom_paths(tasks_dir: Path, atoms: list[str]) -> list[Path]:
     if not atoms:
-        return sorted(p for p in tasks_dir.rglob("*") if p.is_file())
+        return sorted(p for p in tasks_dir.rglob("*") if is_atom(p))
     paths = []
     for atom in atoms:
         if not ATOM.fullmatch(atom):
             sys.exit(f"error: {atom!r} is not an atom task name")
         path = tasks_dir.joinpath(*atom.split(":"))
-        if not path.is_file():
+        if not is_atom(path):
             sys.exit(f"error: no atom {atom} under {tasks_dir}")
         paths.append(path)
     return sorted(set(paths))
