@@ -2,7 +2,7 @@ rules:
   - id: meta-renovate-minimum-release-age
     languages: [json]
     severity: ERROR
-    message: Renovate minimumReleaseAge must be at least 3 days; disabled waits are not allowed. Use an integer number of days.
+    message: Renovate minimumReleaseAge must be at least 3 days; disabled waits are not allowed except null in a package rule scoped to exactly the docker datasource. Use an integer number of days.
     paths: &renovate-paths
       include:
         - '**/renovate.json'
@@ -12,6 +12,11 @@ rules:
       - patterns:
           - pattern: '"minimumReleaseAge": $AGE'
           - pattern-not: '"minimumReleaseAge": "$DAYS"'
+          # The one exemption: a package rule scoped to exactly the docker datasource may
+          # reset the wait with null. Docker Hub dates an image by its tag's last push, which
+          # re-pushes keep restarting, and other registries report no date at all; the
+          # preset's rule that uses this explains which images it covers.
+          - pattern-not-inside: '{ ..., "matchDatasources": ["docker"], ..., "minimumReleaseAge": null, ... }'
       - patterns:
           - pattern: '"minimumReleaseAge": "$AGE"'
           - metavariable-regex:

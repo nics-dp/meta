@@ -122,6 +122,28 @@ class OpenGrepRenovateTests(unittest.TestCase):
                         },
                         (AGE,),
                     )
+            docker_null = {"matchDatasources": ["docker"], "minimumReleaseAge": None}
+            for index, rule in enumerate(
+                (docker_null, dict(reversed(list(docker_null.items()))))
+            ):
+                add(
+                    f"docker-null-{index}/renovate.json",
+                    {"minimumReleaseAge": "7 days", "packageRules": [rule]},
+                )
+            for index, rule in enumerate(
+                (
+                    {"matchDatasources": ["docker", "npm"], "minimumReleaseAge": None},
+                    {"matchDatasources": ["npm"], "minimumReleaseAge": None},
+                    {"matchPackageNames": ["docker"], "minimumReleaseAge": None},
+                    {"matchDatasources": ["docker"], "minimumReleaseAge": "1 day"},
+                    {"matchDatasources": ["docker"], "minimumReleaseAge": False},
+                )
+            ):
+                add(
+                    f"bad-docker-exemption-{index}/renovate.json",
+                    {"minimumReleaseAge": "7 days", "packageRules": [rule]},
+                    (AGE,),
+                )
             add(
                 "missing-default/renovate.json",
                 {"packageRules": [{"matchPackageNames": ["example"]}]},
