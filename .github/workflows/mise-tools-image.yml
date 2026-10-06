@@ -3,13 +3,19 @@
 # the runner's skopeo, which uploads large layers in one request (mise's chunked blob upload is
 # rejected by ghcr with 416 Range Not Satisfiable).
 #
-# The image carries mise plus the union of every atom's `#MISE tools=` pin and the Go
-# toolchain given by the `go_version` input, so a container job can run `mise run <atom>`
-# without installing tools. `.github/scripts/mise-tools-toml.py` builds the tool set and
+# The image carries mise plus the union of the `#MISE tools=` pins of the atoms named by the
+# `atoms` input (every atom when empty) and the Go toolchain given by the `go_version` input.
+# The script reads only the named atoms' own pins and does not follow `#MISE depends=`, so also
+# name each atom that a named atom depends on (`sbom:grype` needs `sbom:enrich,sbom:source`).
+# A container job can then run those atoms without installing tools; a smaller atom set gives
+# a smaller image to pull. `.github/scripts/mise-tools-toml.py` builds the tool set and
 # fails when two atoms pin one tool to different versions. Each build is pushed to the
 # mutable `tag` input; consumers pin `ghcr.io/nics-dp/mise-tools@<digest>` from the job
 # output or summary, because a rebuild yields a new digest and moves the tag.
-# The package is private and the image is unsigned.
+# The package is private. Each pushed digest gets a build provenance attestation stored with
+# this repository's attestations (not pushed to the registry), so a consumer can check with
+# `gh attestation verify oci://<image>@<digest> --repo nics-dp/meta --signer-workflow
+# nics-dp/meta/.github/workflows/mise-tools-image.yml` that this workflow built the image.
 
 name: mise-tools-image
 
@@ -20,6 +26,11 @@ on:
         description: "Go toolchain version to include (X.Y.Z, normally the consumers' go.mod toolchain)"
         required: true
         type: string
+      atoms:
+        description: "Comma-separated atom task names whose own tools to include; also name the atoms they depend on (empty = every atom)"
+        required: false
+        type: string
+        default: ""
       tag:
         description: "Mutable tag the build is pushed to (pin the reported digest, not the tag)"
         required: false
@@ -55,6 +66,7 @@ jobs:
       - name: Prepare job-local state
         env:
           GO_VERSION: ${{ inputs.go_version }}
+          ATOMS: ${{ inputs.atoms }}
           EXTRA_TAG: ${{ inputs.tag }}
         run: |
           if [ -z "$RUNNER_TEMP" ] || [[ "$RUNNER_TEMP" != /* ]] || [[ "$RUNNER_TEMP" == *$'\n'* ]]; then
@@ -76,9 +88,10 @@ jobs:
             echo "DOCKER_CONFIG=$state/docker"
             echo "REGISTRY_AUTH_FILE=$state/docker/config.json"
           } >> "$GITHUB_ENV"
-          python3 .github/scripts/mise-tools-toml.py .mise/tasks "$GO_VERSION" > "$state/config/mise.toml"
+          python3 .github/scripts/mise-tools-toml.py .mise/tasks "$GO_VERSION" "$ATOMS" \
+            > "$state/config/mise.toml"
           {
-            echo "### Tool set"
+            echo "### Tool set (atoms: ${ATOMS:-all})"
             echo '```toml'
             cat "$state/config/mise.toml"
             echo '```'
@@ -148,3 +161,20 @@ jobs:
             echo "::error::job-local registry credentials were not removed"
             exit 1
           fi
+
+  # A separate job so the OIDC token never reaches the build job, which runs mise and every
+  # atom tool. The attestation needs only the digest: no checkout, no registry access, and no
+  # storage record (artifact-metadata).
+  attest:
+    name: Attest build provenance
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      attestations: write
+      id-token: write
+    steps:
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: ghcr.io/nics-dp/mise-tools
+          subject-digest: ${{ needs.build.outputs.digest }}
+          create-storage-record: false
