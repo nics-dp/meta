@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-#MISE description="Fail when a language toolchain (go/python/node/bun) is pinned to different versions across mise.toml, go.mod and go.work (the toolchain directive, else the go directive), Dockerfiles, .mise/tasks image refs, workflows, .python-version and .nvmrc"
+#MISE description="Fail when a language toolchain (go/python/node/bun) is pinned to different versions across mise.toml, go.mod and go.work (the toolchain directive, else the go directive; a go.mod under a tracked go.work counts only its toolchain directive), Dockerfiles, .mise/tasks image refs, workflows, .python-version and .nvmrc"
 #MISE hide=true
 #MISE raw=true
 #
@@ -94,13 +94,19 @@ scan_mise() {
 # too and must agree with every other one. Go accepts indentation before a
 # directive (`go mod edit -json` parses it), and any run of whitespace before the
 # version. The toolchain line is what Go and mise build with; the `go` line is
-# then only the module's minimum language version. It must stay below the toolchain (the go command drops a
-# toolchain line equal to the `go` line) and may lag it by any amount, so it is
-# not compared. A go.mod without a toolchain line keeps its `go` line as the pin.
+# then only the module's minimum language version. It must stay below the
+# toolchain (the go command drops a toolchain line equal to the `go` line) and
+# may lag it by any amount, so it is not compared. A go.mod without a toolchain
+# line keeps its `go` line as the pin, except under a tracked go.work: Go looks
+# for go.work from the working directory upward, so that workspace selects the
+# toolchain for its whole subtree and a member's `go` line is only its minimum.
+# There a go.mod counts only its toolchain line, if it has one.
 scan_gomod() {
   local f=$1 n rest ver re='^[[:space:]]*go[[:space:]]*([0-9][0-9.]*)'
   if grep -qE '^[[:space:]]*toolchain[[:space:]]+go[0-9]' "$f"; then
     re='^[[:space:]]*toolchain[[:space:]]+go([0-9][0-9.]*)'
+  elif [[ $f == go.mod || $f == */go.mod ]] && in_workspace "$f"; then
+    return 0
   fi
   while IFS=: read -r n rest; do
     [[ $rest =~ $re ]] || continue
@@ -186,7 +192,27 @@ scan_versionfile() {
   fi
 }
 
-while IFS= read -r f; do
+# Directories that hold a tracked go.work ("." for the root). in_workspace is
+# true for a file in one of them or anywhere below it.
+FILES=()
+while IFS= read -r f; do FILES+=("$f"); done < <(list_files)
+WORKSPACES=()
+for f in ${FILES[@]+"${FILES[@]}"}; do
+  case $f in
+    go.work) WORKSPACES+=(.) ;;
+    */go.work) WORKSPACES+=("${f%/go.work}") ;;
+  esac
+done
+in_workspace() {
+  local dir=. w
+  [[ $1 == */* ]] && dir=${1%/*}
+  for w in ${WORKSPACES[@]+"${WORKSPACES[@]}"}; do
+    [[ $w == . || $dir == "$w" || $dir == "$w"/* ]] && return 0
+  done
+  return 1
+}
+
+for f in ${FILES[@]+"${FILES[@]}"}; do
   [[ -f $f ]] || continue
   case $f in
     mise.toml | */mise.toml | .mise.toml | */.mise.toml | .mise/config.toml | */.mise/config.toml) scan_mise "$f" ;;
@@ -197,7 +223,7 @@ while IFS= read -r f; do
     .python-version | */.python-version) scan_versionfile python "$f" ;;
     .nvmrc | */.nvmrc) scan_versionfile node "$f" ;;
   esac
-done < <(list_files)
+done
 
 if ((${#PINS[@]} == 0)); then
   echo "toolchain-pins: no toolchain pins found"
