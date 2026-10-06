@@ -3,9 +3,10 @@
 # the runner's skopeo, which uploads large layers in one request (mise's chunked blob upload is
 # rejected by ghcr with 416 Range Not Satisfiable).
 #
-# The image carries mise plus the union of every atom's `#MISE tools=` pin and the Go
-# toolchain given by the `go_version` input, so a container job can run `mise run <atom>`
-# without installing tools. `.github/scripts/mise-tools-toml.py` builds the tool set and
+# The image carries mise plus the union of the `#MISE tools=` pins of the atoms named by the
+# `atoms` input (every atom when empty) and the Go toolchain given by the `go_version` input,
+# so a container job can run those atoms without installing tools; a smaller atom set gives a
+# smaller image to pull. `.github/scripts/mise-tools-toml.py` builds the tool set and
 # fails when two atoms pin one tool to different versions. Each build is pushed to the
 # mutable `tag` input; consumers pin `ghcr.io/nics-dp/mise-tools@<digest>` from the job
 # output or summary, because a rebuild yields a new digest and moves the tag.
@@ -23,6 +24,11 @@ on:
         description: "Go toolchain version to include (X.Y.Z, normally the consumers' go.mod toolchain)"
         required: true
         type: string
+      atoms:
+        description: "Comma-separated atom task names whose tools to include (empty = every atom)"
+        required: false
+        type: string
+        default: ""
       tag:
         description: "Mutable tag the build is pushed to (pin the reported digest, not the tag)"
         required: false
@@ -58,6 +64,7 @@ jobs:
       - name: Prepare job-local state
         env:
           GO_VERSION: ${{ inputs.go_version }}
+          ATOMS: ${{ inputs.atoms }}
           EXTRA_TAG: ${{ inputs.tag }}
         run: |
           if [ -z "$RUNNER_TEMP" ] || [[ "$RUNNER_TEMP" != /* ]] || [[ "$RUNNER_TEMP" == *$'\n'* ]]; then
@@ -79,9 +86,10 @@ jobs:
             echo "DOCKER_CONFIG=$state/docker"
             echo "REGISTRY_AUTH_FILE=$state/docker/config.json"
           } >> "$GITHUB_ENV"
-          python3 .github/scripts/mise-tools-toml.py .mise/tasks "$GO_VERSION" > "$state/config/mise.toml"
+          python3 .github/scripts/mise-tools-toml.py .mise/tasks "$GO_VERSION" "$ATOMS" \
+            > "$state/config/mise.toml"
           {
-            echo "### Tool set"
+            echo "### Tool set (atoms: ${ATOMS:-all})"
             echo '```toml'
             cat "$state/config/mise.toml"
             echo '```'
