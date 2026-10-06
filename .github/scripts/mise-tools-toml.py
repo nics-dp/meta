@@ -3,9 +3,10 @@
 
 Usage: mise-tools-toml.py <tasks-dir> <go-version> [<atom>,<atom>,...]
 
-With no atom list every atom counts; otherwise only the named atoms (task names such as
-`go:lint-check` or `iac:img:hadolint`) do, and a name that matches no atom is an error. An atom
-is a file with a `#MISE hide=true` header, so a lib/ helper is not one.
+With no atom list or an empty one every atom counts; otherwise only the named atoms (task names
+such as `go:lint-check` or `iac:img:hadolint`) do, and a name that matches no atom, or an empty
+item such as in `a,,b` or `a,`, is an error. An atom is a file with a `#MISE hide=true`
+header, so a lib/ helper is not one.
 
 Each header value is parsed as a TOML inline table. A tool pinned to different versions by
 two atoms is an error that lists both pins, so the image never silently picks one of them.
@@ -65,7 +66,7 @@ def main() -> None:
     if len(sys.argv) not in (3, 4):
         sys.exit(__doc__.strip().splitlines()[2])
     tasks_dir, go_version = Path(sys.argv[1]), sys.argv[2]
-    atoms = [a for a in sys.argv[3].split(",") if a] if len(sys.argv) == 4 else []
+    atoms = sys.argv[3].split(",") if len(sys.argv) == 4 and sys.argv[3] else []
     if not GO_VERSION.fullmatch(go_version):
         sys.exit(f"error: go version {go_version!r} is not of the form X.Y.Z")
     tools = collect(tasks_dir, atoms)
