@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-#MISE description="Fail when a language toolchain (go/python/node/bun) is pinned to different versions across mise.toml, go.mod (its toolchain directive, else its go directive), Dockerfiles, .mise/tasks image refs, workflows, .python-version and .nvmrc"
+#MISE description="Fail when a language toolchain (go/python/node/bun) is pinned to different versions across mise.toml, go.mod and go.work (the toolchain directive, else the go directive), Dockerfiles, .mise/tasks image refs, workflows, .python-version and .nvmrc"
 #MISE hide=true
 #MISE raw=true
 #
@@ -88,11 +88,13 @@ scan_mise() {
   done <"$f"
 }
 
-# go.mod: the `toolchain goX.Y.Z` directive when present, otherwise the `go`
-# directive. Go accepts indentation before a directive (`go mod edit -json`
-# parses it), and any run of whitespace before the version. The toolchain line is
-# what Go and mise build with; the `go` line is then only the module's minimum
-# language version. It must stay below the toolchain (the go command drops a
+# go.mod and go.work: the `toolchain goX.Y.Z` directive when present, otherwise
+# the `go` directive. Both files share this directive syntax; in workspace mode
+# Go and mise select the toolchain from go.work, so a tracked go.work is a pin
+# too and must agree with every other one. Go accepts indentation before a
+# directive (`go mod edit -json` parses it), and any run of whitespace before the
+# version. The toolchain line is what Go and mise build with; the `go` line is
+# then only the module's minimum language version. It must stay below the toolchain (the go command drops a
 # toolchain line equal to the `go` line) and may lag it by any amount, so it is
 # not compared. A go.mod without a toolchain line keeps its `go` line as the pin.
 scan_gomod() {
@@ -188,7 +190,7 @@ while IFS= read -r f; do
   [[ -f $f ]] || continue
   case $f in
     mise.toml | */mise.toml | .mise.toml | */.mise.toml | .mise/config.toml | */.mise/config.toml) scan_mise "$f" ;;
-    go.mod | */go.mod) scan_gomod "$f" ;;
+    go.mod | */go.mod | go.work | */go.work) scan_gomod "$f" ;;
     Dockerfile | */Dockerfile | Dockerfile.* | */Dockerfile.* | *.Dockerfile) scan_dockerfile "$f" ;;
     .mise/tasks/* | */.mise/tasks/*) scan_taskfile "$f" ;;
     .github/workflows/*.yml | .github/workflows/*.yaml) scan_workflow "$f" ;;
