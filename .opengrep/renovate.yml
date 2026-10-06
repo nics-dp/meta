@@ -13,10 +13,10 @@ rules:
           - pattern: '"minimumReleaseAge": $AGE'
           - pattern-not: '"minimumReleaseAge": "$DAYS"'
           - pattern-not: '"minimumReleaseAge": null'
-      # The one exemption: a packageRules entry scoped to exactly the docker datasource may
+      # The exemption: a packageRules entry scoped to exactly the docker datasource may
       # reset the wait with null. Docker Hub dates an image by its tag's last push, which
       # re-pushes keep restarting, and other registries report no date at all; the preset's
-      # rule that uses this explains which images it covers. The three null branches flag a
+      # rule that uses this explains which images it covers. The null branches flag a
       # null outside such an object, one in such an object that is no array element (a root
       # config), and any null in an object that is the value of a key (an update-type block),
       # so the exemption never reaches a nested block of a docker-null rule.
