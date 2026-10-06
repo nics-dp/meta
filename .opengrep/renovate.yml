@@ -18,7 +18,8 @@ rules:
       # re-pushes keep restarting, and other registries report no date at all; the preset's
       # rule that uses this explains which images it covers. The three null branches flag a
       # null outside such an object, one in such an object that is no array element (a root
-      # config), and one in such an object that is the value of a key (an update-type block).
+      # config), and any null in an object that is the value of a key (an update-type block),
+      # so the exemption never reaches a nested block of a docker-null rule.
       - patterns:
           - pattern: '"minimumReleaseAge": null'
           - pattern-not-inside: '{ ..., "matchDatasources": ["docker"], ..., "minimumReleaseAge": null, ... }'
@@ -28,7 +29,7 @@ rules:
           - pattern-not-inside: '[..., { ..., "matchDatasources": ["docker"], ..., "minimumReleaseAge": null, ... }, ...]'
       - patterns:
           - pattern: '"minimumReleaseAge": null'
-          - pattern-inside: '"$KEY": { ..., "matchDatasources": ["docker"], ..., "minimumReleaseAge": null, ... }'
+          - pattern-inside: '"$KEY": { ..., "minimumReleaseAge": null, ... }'
       - patterns:
           - pattern: '"minimumReleaseAge": "$AGE"'
           - metavariable-regex:
