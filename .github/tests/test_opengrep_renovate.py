@@ -168,6 +168,11 @@ class OpenGrepRenovateTests(unittest.TestCase):
                     {"packageRules": [[docker_null]]},
                     {"npm": {"packageRules": [docker_null]}},
                     {"vulnerabilityAlerts": {"packageRules": [docker_null]}},
+                    {"hostRules": [{"packageRules": [docker_null]}]},
+                    {"packageRules": [{"packageRules": [docker_null]}]},
+                    {"hostRules": [[{"packageRules": [docker_null]}]]},
+                    {"npm": [{"packageRules": [docker_null]}]},
+                    {"npm": {"hostRules": [{"packageRules": [docker_null]}]}},
                 )
             ):
                 add(
@@ -178,6 +183,11 @@ class OpenGrepRenovateTests(unittest.TestCase):
             add(
                 "bad-docker-exemption-root/renovate.json",
                 {**docker_null, "packageRules": [docker_null]},
+                (AGE,),
+            )
+            add_raw(
+                "bad-docker-array-root/renovate.json",
+                json.dumps([{"minimumReleaseAge": "7 days", "packageRules": [docker_null]}]),
                 (AGE,),
             )
             add(

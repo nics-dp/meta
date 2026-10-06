@@ -19,8 +19,9 @@ rules:
       # rule that uses this explains which images it covers. The null branches flag a null
       # outside such an object, one in such an object that is no packageRules element (a root
       # config or another array), any null in an object that is the value of a key (an
-      # update-type block), and one in a packageRules array nested under a key, so the
-      # exemption reaches only an entry of the root packageRules array.
+      # update-type block), and one in a packageRules array that an object holds when that
+      # object is the value of a key or an array element. The exemption thus reaches only an
+      # entry of the root packageRules array.
       - patterns:
           - pattern: '"minimumReleaseAge": null'
           - pattern-not-inside: '{ ..., "matchDatasources": ["docker"], ..., "minimumReleaseAge": null, ... }'
@@ -34,6 +35,13 @@ rules:
       - patterns:
           - pattern: '"minimumReleaseAge": null'
           - pattern-inside: '"$KEY": { ..., "packageRules": [..., { ..., "minimumReleaseAge": null, ... }, ...], ... }'
+      - patterns:
+          - pattern: '"minimumReleaseAge": null'
+          - pattern-inside: '[..., $HOLDER, ...]'
+          - metavariable-pattern:
+              metavariable: $HOLDER
+              pattern: '{ ..., "packageRules": [..., { ..., "minimumReleaseAge": null, ... }, ...], ... }'
+          - focus-metavariable: $HOLDER
       - patterns:
           - pattern: '"minimumReleaseAge": "$AGE"'
           - metavariable-regex:
