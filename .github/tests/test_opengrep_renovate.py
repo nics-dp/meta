@@ -161,9 +161,33 @@ class OpenGrepRenovateTests(unittest.TestCase):
                     {"minimumReleaseAge": "7 days", "packageRules": others},
                     (AGE,),
                 )
+            for index, extra in enumerate(
+                (
+                    {"ignoreDeps": [docker_null]},
+                    {"hostRules": [docker_null]},
+                    {"packageRules": [[docker_null]]},
+                    {"npm": {"packageRules": [docker_null]}},
+                    {"vulnerabilityAlerts": {"packageRules": [docker_null]}},
+                    {"hostRules": [{"packageRules": [docker_null]}]},
+                    {"packageRules": [{"packageRules": [docker_null]}]},
+                    {"hostRules": [[{"packageRules": [docker_null]}]]},
+                    {"npm": [{"packageRules": [docker_null]}]},
+                    {"npm": {"hostRules": [{"packageRules": [docker_null]}]}},
+                )
+            ):
+                add(
+                    f"bad-docker-outside-packagerules-{index}/renovate.json",
+                    {"minimumReleaseAge": "7 days", **extra},
+                    (AGE,),
+                )
             add(
                 "bad-docker-exemption-root/renovate.json",
                 {**docker_null, "packageRules": [docker_null]},
+                (AGE,),
+            )
+            add_raw(
+                "bad-docker-array-root/renovate.json",
+                json.dumps([{"minimumReleaseAge": "7 days", "packageRules": [docker_null]}]),
                 (AGE,),
             )
             add(
