@@ -253,7 +253,7 @@ Go 與 Node 的 dependency-submission 拆成兩支：`go.mod` GitHub 原生解�
 - Scanner-only rollback 會移除 hosted scanner jobs（`Zizmor Action`、`Grype Path`、`GitHub Actions Scanner`）、scanner wrapper、scanner Renovate/docs，並恢復 matrix `Zizmor` check；local E2 atoms、`zizmor.yml` 與 `mise run all` gate 保留。若 required-check policy 仍引用舊 `Zizmor`，必須先協調改為 `Zizmor Action`，不可直接發布。
 - `self-supply-chain.yml` — meta 消費自家 `scorecard.yml`（`publish: false`，改走 filtered 路徑）；無 dependency-submission job（meta 無編譯語言 manifest，純配置）。
 - `self-dependency-review.yml` — meta 的 PR-time dependency review，透過 `dependency-review.yml` reusable。
-- `mise-tools-image.yml` — 手動（`workflow_dispatch`）建置並推送私有 image `ghcr.io/nics-dp/mise-tools`，僅 linux/amd64：以 `mise oci` 打包 mise 本體、所有 atom `#MISE tools=` pin 的聯集（由 `.github/scripts/mise-tools-toml.py` 產生；同一工具在不同 atom 釘不同版本即失敗）與 `go_version` input 指定的 Go toolchain，base 為 `buildpack-deps:noble-scm`（Ubuntu 24.04 加 git 與 CA 憑證，container job 的 checkout、mise 的 `git::` task include 與 Go module 下載都需要）。同一份建置推到不可變的 `sha-<short sha>` tag 與 `tag` input（預設 `experiment`），digest 寫入 job summary 與 job output；registry 憑證只存在 `RUNNER_TEMP` 並於 `always()` 清除。image 未簽章。
+- `mise-tools-image.yml` — 手動（`workflow_dispatch`）建置並推送私有 image `ghcr.io/nics-dp/mise-tools`，僅 linux/amd64：以 `mise oci` 打包 mise 本體、所有 atom `#MISE tools=` pin 的聯集（由 `.github/scripts/mise-tools-toml.py` 產生；同一工具在不同 atom 釘不同版本即失敗）與 `go_version` input 指定的 Go toolchain，base image 是 `Build image` step 的 `--from` 值，必須帶 git 與 CA 憑證（container job 的 checkout、mise 的 `git::` task include 與 Go module 下載都需要）。每次建置推到可變的 `tag` input（預設 `experiment`），每次重建都會產生新 digest；job summary 與 job output 的 digest 才是不可變的引用，consumer 應釘 `ghcr.io/nics-dp/mise-tools@<digest>`。registry 憑證只存在 `RUNNER_TEMP` 並於 `always()` 清除。image 未簽章。
 
 ---
 

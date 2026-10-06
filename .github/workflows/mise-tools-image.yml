@@ -4,8 +4,9 @@
 # The image carries mise plus the union of every atom's `#MISE tools=` pin and the Go
 # toolchain given by the `go_version` input, so a container job can run `mise run <atom>`
 # without installing tools. `.github/scripts/mise-tools-toml.py` builds the tool set and
-# fails when two atoms pin one tool to different versions. One build is pushed to the
-# immutable `sha-<short sha>` tag and to the `tag` input; both name the same digest.
+# fails when two atoms pin one tool to different versions. Each build is pushed to the
+# mutable `tag` input; consumers pin `ghcr.io/nics-dp/mise-tools@<digest>` from the job
+# output or summary, because a rebuild yields a new digest and moves the tag.
 # The package is private and the image is unsigned.
 
 name: mise-tools-image
@@ -18,7 +19,7 @@ on:
         required: true
         type: string
       tag:
-        description: "Extra mutable tag pushed alongside sha-<short sha>"
+        description: "Mutable tag the build is pushed to (pin the reported digest, not the tag)"
         required: false
         type: string
         default: experiment
@@ -58,9 +59,8 @@ jobs:
             echo "::error::RUNNER_TEMP must be absolute and single-line"
             exit 1
           fi
-          # sha-* is the immutable namespace; the extra tag must not overwrite it.
-          if [[ ! "$EXTRA_TAG" =~ ^[A-Za-z0-9_][A-Za-z0-9._-]{0,127}$ ]] || [[ "$EXTRA_TAG" == sha-* ]]; then
-            echo "::error::tag must be a valid OCI tag outside the sha-* namespace"
+          if [[ ! "$EXTRA_TAG" =~ ^[A-Za-z0-9_][A-Za-z0-9._-]{0,127}$ ]]; then
+            echo "::error::tag must be a valid OCI tag"
             exit 1
           fi
           state="${RUNNER_TEMP%/}/mise-tools-image"
@@ -122,15 +122,11 @@ jobs:
             echo "::error::OCI layout has no single manifest digest"
             exit 1
           fi
-          sha_tag="sha-${GITHUB_SHA::7}"
           cd "$MISE_TOOLS_STATE/config"
-          # One built layout pushed twice, so both tags name the same manifest.
-          mise oci push --image-dir "$layout" "$IMAGE:$sha_tag"
           mise oci push --image-dir "$layout" "$IMAGE:$EXTRA_TAG"
           echo "digest=$digest" >> "$GITHUB_OUTPUT"
           {
             echo "### Pushed"
-            echo "- \`$IMAGE:$sha_tag\`"
             echo "- \`$IMAGE:$EXTRA_TAG\`"
             echo "- \`$IMAGE@$digest\`"
           } >> "$GITHUB_STEP_SUMMARY"
