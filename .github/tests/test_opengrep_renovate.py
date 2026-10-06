@@ -140,6 +140,7 @@ class OpenGrepRenovateTests(unittest.TestCase):
                     {**docker_null, "patch": {"minimumReleaseAge": False}},
                     {**docker_null, "major": {"minimumReleaseAge": 0}},
                     {"major": {"minimumReleaseAge": False}, **docker_null},
+                    {"matchDatasources": ["npm"], "major": docker_null},
                 )
             ):
                 add(
@@ -147,6 +148,11 @@ class OpenGrepRenovateTests(unittest.TestCase):
                     {"minimumReleaseAge": "7 days", "packageRules": [rule]},
                     (AGE,),
                 )
+            add(
+                "bad-docker-exemption-root/renovate.json",
+                {**docker_null, "packageRules": [docker_null]},
+                (AGE,),
+            )
             add(
                 "missing-default/renovate.json",
                 {"packageRules": [{"matchPackageNames": ["example"]}]},
