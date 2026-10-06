@@ -1,5 +1,7 @@
 # yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
-# Build and push ghcr.io/nics-dp/mise-tools (linux/amd64) with `mise oci`.
+# Build ghcr.io/nics-dp/mise-tools (linux/amd64) with `mise oci build` and push the layout with
+# the runner's skopeo, which uploads large layers in one request (mise's chunked blob upload is
+# rejected by ghcr with 416 Range Not Satisfiable).
 #
 # The image carries mise plus the union of every atom's `#MISE tools=` pin and the Go
 # toolchain given by the `go_version` input, so a container job can run `mise run <atom>`
@@ -122,8 +124,14 @@ jobs:
             echo "::error::OCI layout has no single manifest digest"
             exit 1
           fi
-          cd "$MISE_TOOLS_STATE/config"
-          mise oci push --image-dir "$layout" "$IMAGE:$EXTRA_TAG"
+          skopeo copy --preserve-digests --dest-authfile "$REGISTRY_AUTH_FILE" \
+            "oci:$layout" "docker://$IMAGE:$EXTRA_TAG"
+          pushed="$(skopeo inspect --authfile "$REGISTRY_AUTH_FILE" --format '{{.Digest}}' \
+            "docker://$IMAGE:$EXTRA_TAG")"
+          if [ "$pushed" != "$digest" ]; then
+            echo "::error::registry digest $pushed differs from the layout digest $digest"
+            exit 1
+          fi
           echo "digest=$digest" >> "$GITHUB_OUTPUT"
           {
             echo "### Pushed"
