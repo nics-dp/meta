@@ -10,6 +10,10 @@ header, so a lib/ helper is not one. A named atom with no `#MISE tools=` header 
 so the image can hold only Go; with every atom counted, no header at all is an error, which
 catches a wrong tasks dir.
 
+Only the named atoms' own headers count. The script does not follow `#MISE depends=`, so the
+caller also names each atom that a named atom depends on, for example `sbom:enrich` and
+`sbom:source` for `sbom:grype`.
+
 Each header value is parsed as a TOML inline table. A tool pinned to different versions by
 two atoms is an error that lists both pins, so the image never silently picks one of them.
 The Go toolchain comes from the caller because no atom declares it.

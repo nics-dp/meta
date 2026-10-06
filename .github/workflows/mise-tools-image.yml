@@ -4,9 +4,11 @@
 # rejected by ghcr with 416 Range Not Satisfiable).
 #
 # The image carries mise plus the union of the `#MISE tools=` pins of the atoms named by the
-# `atoms` input (every atom when empty) and the Go toolchain given by the `go_version` input,
-# so a container job can run those atoms without installing tools; a smaller atom set gives a
-# smaller image to pull. `.github/scripts/mise-tools-toml.py` builds the tool set and
+# `atoms` input (every atom when empty) and the Go toolchain given by the `go_version` input.
+# The script reads only the named atoms' own pins and does not follow `#MISE depends=`, so also
+# name each atom that a named atom depends on (`sbom:grype` needs `sbom:enrich,sbom:source`).
+# A container job can then run those atoms without installing tools; a smaller atom set gives
+# a smaller image to pull. `.github/scripts/mise-tools-toml.py` builds the tool set and
 # fails when two atoms pin one tool to different versions. Each build is pushed to the
 # mutable `tag` input; consumers pin `ghcr.io/nics-dp/mise-tools@<digest>` from the job
 # output or summary, because a rebuild yields a new digest and moves the tag.
@@ -25,7 +27,7 @@ on:
         required: true
         type: string
       atoms:
-        description: "Comma-separated atom task names whose tools to include (empty = every atom)"
+        description: "Comma-separated atom task names whose own tools to include; also name the atoms they depend on (empty = every atom)"
         required: false
         type: string
         default: ""
