@@ -52,13 +52,26 @@
     },
     {
       "customType": "regex",
-      "description": "Toolchain versions handed to the reusable workflows (go-release / security-sarif / image-release …) as plain string inputs, e.g. `go_version: \"x.y.z\" # renovate: datasource=golang-version depName=go`. No built-in manager reads workflow inputs, so without this the CI and release toolchain silently stays behind mise.toml. A regex manager cannot see YAML structure, so the input must carry the trailing `# renovate: datasource=<ds> depName=<dep>` marker and only marked lines are managed; the marker must not be written inside a block scalar (`run: |` body), because the regex would manage that text too. The ci:toolchain-pins atom reads every structural *_version key, marked or not, skips block scalars, and fails on drift. Documentation deliberately states no toolchain version (README says 'pinned in mise.toml'), so there is no README manager to keep in step.",
+      "description": "Toolchain versions handed to the reusable workflows (go-release / security-sarif / image-release …) as plain string inputs, e.g. `go_version: \"x.y.z\" # renovate: datasource=golang-version depName=go`. No built-in manager reads workflow inputs, so without this the CI and release toolchain silently stays behind the version the repo pins for that toolchain. A regex manager cannot see YAML structure, so the input must carry the trailing `# renovate: datasource=<ds> depName=<dep>` marker and only marked lines are managed; the marker must not be written inside a block scalar (`run: |` body), because the regex would manage that text too. The ci:toolchain-pins atom reads every structural *_version key, marked or not, skips block scalars, and fails on drift. Documentation deliberately states no toolchain version, so there is no README manager to keep in step.",
       "managerFilePatterns": [
         "/^\\.github/workflows/[^/]+\\.ya?ml$/"
       ],
       "matchStrings": [
         "(?:^|\\n)[ \\t]*(?:-[ \\t]+)?[a-z]+_version:[ \\t]*[\"']?(?<currentValue>\\d+(?:\\.\\d+)*)[\"']?[ \\t]*#[ \\t]*renovate:[ \\t]*datasource=(?<datasource>\\S+)[ \\t]+depName=(?<depName>\\S+)(?:[ \\t]+versioning=(?<versioning>\\S+))?"
       ]
+    },
+    {
+      "customType": "regex",
+      "description": "go.work's `toolchain goX.Y.Z` line. In workspace mode Go and mise select the toolchain from go.work rather than go.mod, and the gomod manager reads only go.mod, so without this a tracked go.work toolchain stays behind the go toolchain group. The extracted dep is named go with the golang-version datasource, so it joins that group; the go directive is the workspace's minimum language version and is left alone, like the gomod default for go.mod. ci:toolchain-pins compares the same line.",
+      "managerFilePatterns": [
+        "/(^|/)go\\.work$/"
+      ],
+      "matchStrings": [
+        "(?:^|\\n)[ \\t]*toolchain[ \\t]+go(?<currentValue>\\d+\\.\\d+\\.\\d+)"
+      ],
+      "depNameTemplate": "go",
+      "datasourceTemplate": "golang-version",
+      "depTypeTemplate": "toolchain"
     },
     {
       "customType": "regex",
@@ -306,20 +319,7 @@
       "enabled": false
     },
     {
-      "description": "Renovate never proposes go-directive bumps in go.mod by default; rangeStrategy=bump opts in so go.mod rides the 'go toolchain' group below together with mise.toml, the builder image and workflow go_version, instead of silently staying behind.",
-      "matchManagers": [
-        "gomod"
-      ],
-      "matchDepNames": [
-        "go"
-      ],
-      "matchDepTypes": [
-        "golang"
-      ],
-      "rangeStrategy": "bump"
-    },
-    {
-      "description": "Collapse the Go toolchain's separate per-manager update PRs into one. go.mod (gomod), mise.toml (mise), the dhi.io/golang or golang builder image (dockerfile), setup-go's go-version (github-actions) and marked workflow go_version inputs (custom.regex) all track the same Go version but live in different manager groups, so they would otherwise open and merge as independent PRs (a mise bump landing while go.mod and the image lag). matchManagers scopes this to exactly those managers, so an unrelated dep named `go` in another ecosystem (e.g. an npm package) is not swept in — and its update policy is left untouched. dependencyDashboardApproval is off so the combined bump opens directly (overriding the gomod dashboard-only rule above for these deps); automerge is off so a human reviews the single PR. Note: groupName batches whatever updates are available in a given run — it does not wait for every member nor force identical versions across datasources, so this narrows the drift window rather than guaranteeing lockstep; the ci:toolchain-pins atom is the gate. Placed after the per-manager groups above to override them. mise reports a `\"core:<tool>\"` key as depName core:<tool>, hence that alias.",
+      "description": "Collapse the Go toolchain's separate per-manager update PRs into one. go.mod's `toolchain` directive (gomod, depType toolchain), go.work's `toolchain` line (custom.regex), mise.toml (mise), the dhi.io/golang or golang builder image (dockerfile), setup-go's go-version (github-actions) and marked workflow go_version inputs (custom.regex) all track the same Go version but live in different manager groups, so they would otherwise open and merge as independent PRs (a mise bump landing while go.mod and the image lag). matchManagers scopes this to exactly those managers, so an unrelated dep named `go` in another ecosystem (e.g. an npm package) is not swept in — and its update policy is left untouched. dependencyDashboardApproval is off so the combined bump opens directly (overriding the gomod dashboard-only rule above for these deps); automerge is off so a human reviews the single PR. Note: groupName batches whatever updates are available in a given run — it does not wait for every member nor force identical versions across datasources, so this narrows the drift window rather than guaranteeing lockstep; the ci:toolchain-pins atom is the gate. go.mod's `go` directive is the module's minimum language version: it must stay below `toolchain` (the go command drops a toolchain line equal to it) and may lag it after a toolchain bump, so the preset leaves it to Renovate's default of not bumping it and ci:toolchain-pins does not compare it. Placed after the per-manager groups above to override them. mise reports a `\"core:<tool>\"` key as depName core:<tool>, hence that alias.",
       "matchManagers": [
         "gomod",
         "mise",
