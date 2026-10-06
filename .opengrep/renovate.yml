@@ -13,13 +13,22 @@ rules:
           - pattern: '"minimumReleaseAge": $AGE'
           - pattern-not: '"minimumReleaseAge": "$DAYS"'
           - pattern-not: '"minimumReleaseAge": null'
+      # The one exemption: a packageRules entry scoped to exactly the docker datasource may
+      # reset the wait with null. Docker Hub dates an image by its tag's last push, which
+      # re-pushes keep restarting, and other registries report no date at all; the preset's
+      # rule that uses this explains which images it covers. The three null branches flag a
+      # null outside such an object, one in such an object that is no array element (a root
+      # config), and one in such an object that is the value of a key (an update-type block).
       - patterns:
           - pattern: '"minimumReleaseAge": null'
-          # The one exemption: a packageRules entry scoped to exactly the docker datasource may
-          # reset the wait with null. Docker Hub dates an image by its tag's last push, which
-          # re-pushes keep restarting, and other registries report no date at all; the
-          # preset's rule that uses this explains which images it covers.
-          - pattern-not-inside: '"packageRules": [..., { ..., "matchDatasources": ["docker"], ..., "minimumReleaseAge": null, ... }, ...]'
+          - pattern-not-inside: '{ ..., "matchDatasources": ["docker"], ..., "minimumReleaseAge": null, ... }'
+      - patterns:
+          - pattern: '"minimumReleaseAge": null'
+          - pattern-inside: '{ ..., "matchDatasources": ["docker"], ..., "minimumReleaseAge": null, ... }'
+          - pattern-not-inside: '[..., { ..., "matchDatasources": ["docker"], ..., "minimumReleaseAge": null, ... }, ...]'
+      - patterns:
+          - pattern: '"minimumReleaseAge": null'
+          - pattern-inside: '"$KEY": { ..., "matchDatasources": ["docker"], ..., "minimumReleaseAge": null, ... }'
       - patterns:
           - pattern: '"minimumReleaseAge": "$AGE"'
           - metavariable-regex:
