@@ -1,7 +1,6 @@
 # yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
 # Build ghcr.io/nics-dp/mise-tools (linux/amd64) with `mise oci build` and push the layout with
-# the runner's skopeo, which uploads large layers in one request (mise's chunked blob upload is
-# rejected by ghcr with 416 Range Not Satisfiable).
+# `mise oci push`. Docker Buildx checks the registry digest against the local layout.
 #
 # The image carries mise plus the union of the `#MISE tools=` pins of the atoms named by the
 # `atoms` input (every atom when empty) and the Go toolchain given by the `go_version` input.
@@ -102,7 +101,7 @@ jobs:
       # is the one this action installs.
       - uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
         with:
-          version: "2026.10.2"
+          version: "2026.10.4"
           install: false
           cache: false
 
@@ -137,10 +136,9 @@ jobs:
             echo "::error::OCI layout has no single manifest digest"
             exit 1
           fi
-          skopeo copy --preserve-digests --dest-authfile "$REGISTRY_AUTH_FILE" \
-            "oci:$layout" "docker://$IMAGE:$EXTRA_TAG"
-          pushed="$(skopeo inspect --authfile "$REGISTRY_AUTH_FILE" --format '{{.Digest}}' \
-            "docker://$IMAGE:$EXTRA_TAG")"
+          mise oci push --image-dir "$layout" "$IMAGE:$EXTRA_TAG"
+          pushed="$(docker buildx imagetools inspect --format '{{.Manifest.Digest}}' \
+            "$IMAGE:$EXTRA_TAG")"
           if [ "$pushed" != "$digest" ]; then
             echo "::error::registry digest $pushed differs from the layout digest $digest"
             exit 1
