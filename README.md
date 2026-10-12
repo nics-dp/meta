@@ -229,7 +229,7 @@ Go 與 Node 的 dependency-submission 拆成兩支：`go.mod` GitHub 原生解�
 
 `security-sarif.yml` 的 `run_gosec` / `run_govulncheck` 會在 `run_go` 開啟時分別選擇 Go scanner，三者預設皆為 `true`；`run_go: false` 仍是總開關。`gosec_blocking` 預設為 `false`，只有 `run_go && run_gosec && gosec_blocking` 才會讓 gosec fail closed，涵蓋 vendor 準備、gosec finding 或執行失敗、本機 SARIF 結構預檢、私有 Go 狀態清理、SARIF upload action（包含 `wait-for-processing: true` 回報 terminal `failed`）及 artifact 清理。upload polling API error 或 timeout 只會 warning，處理狀態視為 unknown；govulncheck、semgrep、trivy config、hadolint 仍是 informational。caller 設定錯誤或安全檢查（例如不合法的 `scan_path`）仍可獨立讓 workflow 失敗，因此不可將整支 workflow 視為永不失敗。
 
-本機 `go:sast` atom 維持 blocking，gosec 版本釘在 `.mise/tasks/go/sast` 的 `#MISE tools` header 與 `security-sarif.yml` 的 `go install` 行（code is truth，文件不重複版本）；meta repo 自家的 Renovate custom manager 會同步更新這兩處 pin。
+本機 `go:sast` atom 維持 blocking。`go:sast` 與 `security-sarif.yml` 都用掃描所用的 Go toolchain 從原始碼建置 gosec：在臨時 module 以 `-require=` 行釘 gosec 版本並加上 `golang.org/x/tools` 下限，因為 release binary 內建的 x/tools 讀不懂較新 toolchain 寫出的 export data 時，每個 package 都會載入失敗（code is truth，文件不重複版本）。meta repo 自家的 Renovate custom manager 會同步更新這兩處 gosec pin；x/tools 下限不需 manager，gosec 自身要求更高版本時 MVS 以 gosec 為準。`go:sast` 用 `-terse` 而非 `-quiet`，因為 `-quiet` 在沒有 finding 時會在計入載入錯誤前以 exit 0 結束。
 
 詳見各 workflow 內 `workflow_call` 之 `inputs` / `secrets` 宣告。
 
@@ -295,7 +295,7 @@ Consumer repo 之 `renovate.json` 引用 org preset：
 - `go.work` 的 `toolchain goX.Y.Z` 行（workspace 模式下 Go 與 mise 以 `go.work` 選 toolchain，gomod manager 只讀 `go.mod`；抽成 `go` 進 `go toolchain` 群組，`go` 指令不動）
 - `jdx/hk` — `hk.pkl` 的 `Config.pkl`（`amends`）／`Builtins.pkl`（`import`）`package://` 釘版；兩個 URL 必須同版，URL 內的 release tag 與 `hk@` 版本一起更新（放在 preset 是因為 consumer 直接複製 `hk.pkl`）
 
-> workflow（`.github/workflows/**`）內以 `go install …@vX` 釘版的工具（quill、parlay、gosec、govulncheck）與 `mise-task.yml` 的 `jdx/mise-action` `version:` pin **不在「org preset」customManager 覆蓋範圍**（preset 只含上列 regex customManagers，供 consumer extend），而是由 meta repo 自家 `renovate.json` 的 self customManagers 追蹤。Self managers 也同步抽取 ShellCheck atom pin、Zizmor atom + official-action CLI input，以及 Grype workflow input；package rules 將 Zizmor action+CLI 與 Anchore action+Grype 各自分組且禁止 automerge，因 image `support/versions` digest 或 scanner policy 必須人工覆核。Snyk Labs scanner commit 刻意沒有 manager，只能手動驗 signed source、support/lock diff 與完整 baseline。consumer repo 無此類 workflow/self-validation 工具釘版，故 preset 不需涵蓋。
+> workflow（`.github/workflows/**`）內以 `go install …@vX` 釘版的工具（quill、parlay、govulncheck）、gosec 的 `-require=` 行與 `mise-task.yml` 的 `jdx/mise-action` `version:` pin **不在「org preset」customManager 覆蓋範圍**（preset 只含上列 regex customManagers，供 consumer extend），而是由 meta repo 自家 `renovate.json` 的 self customManagers 追蹤。Self managers 也同步抽取 ShellCheck atom pin、Zizmor atom + official-action CLI input，以及 Grype workflow input；package rules 將 Zizmor action+CLI 與 Anchore action+Grype 各自分組且禁止 automerge，因 image `support/versions` digest 或 scanner policy 必須人工覆核。Snyk Labs scanner commit 刻意沒有 manager，只能手動驗 signed source、support/lock diff 與完整 baseline。consumer repo 無此類 workflow/self-validation 工具釘版，故 preset 不需涵蓋。
 
 ---
 
