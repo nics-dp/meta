@@ -116,9 +116,15 @@ before changing any of these; the mechanism is in the code, the history in
   before the exit code is decided (not fail-fast): `run` reaches formatting only
   where a repo declares `formatters:`, with test scope controlled by `run.tests`.
   → the header comment in `.mise/tasks/go/lint-check`.
-- `go:sast` pins gosec in its `#MISE tools=` header; `security-sarif.yml` pins
-  the same tool in its `go install` line, and the "synchronized gosec pins"
-  custom manager in `renovate.json` moves both together. Do not bump one alone.
+- `go:sast` and `security-sarif.yml` each build gosec from source with the
+  scanning Go toolchain, in a throwaway module carrying the gosec pin and a
+  `golang.org/x/tools` floor (`-require=` lines), because a released gosec can
+  carry an x/tools whose importer predates that toolchain's export data, and
+  then every package fails to load. The "synchronized gosec pins" custom manager
+  in `renovate.json` moves both gosec lines together; do not bump one alone. The
+  floor has no manager: MVS lets gosec's own requirement win once it is higher.
+  `go:sast` runs `-terse`, not `-quiet`, which exits 0 on zero findings before
+  load errors count. → the comments above the build in both files.
 - `meta:bump` is `mise cache clear` + `mise install` and nothing else; it is
   unconditional — pinning a tag instead of `?ref=main` bounds which revision
   the include resolves to, it does not make the task a no-op.
