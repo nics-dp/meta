@@ -9,7 +9,7 @@
 # timestamp verification failed: no certificate matches issuer and serial
 # number" (jdx/mise#10680 -- the artifact itself is fine). The version pin
 # below is Renovate-managed and safe to bump normally.
-#MISE tools={"github:betterleaks/betterleaks"="1.8.1"}
+#MISE tools={"github:betterleaks/betterleaks"="1.9.0"}
 set -euo pipefail
 
 # betterleaks: fast, configurable secret scanner from the Gitleaks authors. Used
