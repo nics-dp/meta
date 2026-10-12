@@ -9,10 +9,10 @@ set -euo pipefail
 # shellcheck disable=SC1091
 source "$(dirname "$0")/../lib/go-env"
 
-# Two passes because each build configuration hides files from the other. The untagged pass is the
-# production build, the only one that type-checks `//go:build !test` files. The GO_TEST_TAGS pass
-# (default `test`, the tags go:test compiles with) reaches the test files and test-only seams behind
-# that tag, which the untagged pass never sees.
+# The untagged pass is the production build and keeps the production constraints, so a file the
+# tagged build excludes (`//go:build !test` under the default tags) is still fixed. The GO_TEST_TAGS
+# pass (default `test`, the tags go:test compiles with) extends coverage to the files gated on those
+# tags, such as test files and test-only seams.
 go fix ./...
 go fix "-tags=$GO_TEST_TAGS" ./...
 
