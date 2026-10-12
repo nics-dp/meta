@@ -1,13 +1,20 @@
 #!/usr/bin/env bash
-#MISE description="Migrate Go source to new APIs via go fix (rewrites deprecated stdlib paths/calls)"
+#MISE description="Migrate Go source to new APIs via go fix over the production build and the GO_TEST_TAGS build"
 #MISE hide=true
 #MISE raw=true
 #MISE depends=["go:install"]
 #MISE silent="stdout"
 
 set -euo pipefail
+# shellcheck disable=SC1091
+source "$(dirname "$0")/../lib/go-env"
 
+# Two passes because each build configuration hides files from the other. The untagged pass is the
+# production build, the only one that type-checks `//go:build !test` files. The GO_TEST_TAGS pass
+# (default `test`, the tags go:test compiles with) reaches the test files and test-only seams behind
+# that tag, which the untagged pass never sees.
 go fix ./...
+go fix "-tags=$GO_TEST_TAGS" ./...
 
 if ! git diff --exit-code -- . >/dev/null; then
   echo ""
