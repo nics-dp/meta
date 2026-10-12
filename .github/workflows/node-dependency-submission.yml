@@ -14,7 +14,7 @@ on:
       bun_version:
         required: false
         type: string
-        default: "1.4.2"
+        default: "1.4.3"
         description: "Bun version supporting pm licenses --prod --json."
 
 permissions:
@@ -740,7 +740,7 @@ jobs:
         id: syft
         uses: anchore/sbom-action/download-syft@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
         with:
-          syft-version: v1.52.0
+          syft-version: v1.54.1
 
       - name: Build and validate production submission
         id: build
