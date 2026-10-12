@@ -3,6 +3,25 @@
 #MISE hide=true
 #MISE raw=true
 #MISE depends=["go:install"]
-#MISE tools={"github:securego/gosec"="v2.29.0"}
 
-gosec -quiet ./...
+# gosec is built from source with the Go toolchain that scans: a released gosec binary can carry a
+# golang.org/x/tools whose importer predates the export data that toolchain writes, and then every
+# package fails to load. The throwaway module pins gosec and adds an x/tools floor; MVS keeps
+# gosec's own requirement when that is higher. security-sarif.yml builds gosec the same way, and
+# its -require lines move together with these.
+# -terse, not -quiet: with no findings, -quiet exits 0 before gosec counts package load errors.
+set -euo pipefail
+
+gosec_build="$(mktemp -d "${TMPDIR:-/tmp}/go-sast.XXXXXXXX")"
+trap 'rm -rf -- "$gosec_build"' EXIT
+(
+  # The build targets the host and ignores the consumer's module settings; the scan keeps them.
+  unset GOEXPERIMENT GOOS GOARCH
+  export GOFLAGS='' GOWORK=off CGO_ENABLED=0
+  go -C "$gosec_build" mod init go-sast-gosec
+  go -C "$gosec_build" mod edit \
+    -require=github.com/securego/gosec/v2@v2.29.0 \
+    -require=golang.org/x/tools@v0.51.0
+  go -C "$gosec_build" build -mod=mod -o "$gosec_build/gosec" github.com/securego/gosec/v2/cmd/gosec
+)
+"$gosec_build/gosec" -terse ./...

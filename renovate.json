@@ -202,14 +202,13 @@
     },
     {
       "customType": "regex",
-      "description": "Update synchronized gosec pins in the SARIF workflow and local SAST task",
+      "description": "Update synchronized gosec pins: the -require line of the throwaway module that the SARIF workflow and the local SAST task each build gosec from. The golang.org/x/tools floor beside it has no manager; MVS lets gosec's own x/tools requirement win once it is higher.",
       "managerFilePatterns": [
         "/^\\.github/workflows/security-sarif\\.yml$/",
         "/^\\.mise/tasks/go/sast$/"
       ],
       "matchStrings": [
-        "go install github\\.com/securego/gosec/v2/cmd/gosec@(?<currentValue>v\\d+\\.\\d+\\.\\d+)",
-        "#MISE tools=\\{\\\"github:securego/gosec\\\"=\\\"(?<currentValue>v\\d+\\.\\d+\\.\\d+)\\\"\\}"
+        "-require=github\\.com/securego/gosec/v2@(?<currentValue>v\\d+\\.\\d+\\.\\d+)"
       ],
       "depNameTemplate": "securego/gosec",
       "datasourceTemplate": "github-releases"
