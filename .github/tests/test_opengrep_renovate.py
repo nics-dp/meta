@@ -122,6 +122,74 @@ class OpenGrepRenovateTests(unittest.TestCase):
                         },
                         (AGE,),
                     )
+            docker_null = {"matchDatasources": ["docker"], "minimumReleaseAge": None}
+            for index, rule in enumerate(
+                (docker_null, dict(reversed(list(docker_null.items()))))
+            ):
+                add(
+                    f"docker-null-{index}/renovate.json",
+                    {"minimumReleaseAge": "7 days", "packageRules": [rule]},
+                )
+            for index, rule in enumerate(
+                (
+                    {"matchDatasources": ["docker", "npm"], "minimumReleaseAge": None},
+                    {"matchDatasources": ["npm"], "minimumReleaseAge": None},
+                    {"matchPackageNames": ["docker"], "minimumReleaseAge": None},
+                    {"matchDatasources": ["docker"], "minimumReleaseAge": "1 day"},
+                    {"matchDatasources": ["docker"], "minimumReleaseAge": False},
+                    {**docker_null, "patch": {"minimumReleaseAge": False}},
+                    {**docker_null, "major": {"minimumReleaseAge": 0}},
+                    {"major": {"minimumReleaseAge": False}, **docker_null},
+                    {"matchDatasources": ["npm"], "major": docker_null},
+                    {**docker_null, "patch": {"minimumReleaseAge": None}},
+                    {"major": {"minimumReleaseAge": None}, **docker_null},
+                )
+            ):
+                add(
+                    f"bad-docker-exemption-{index}/renovate.json",
+                    {"minimumReleaseAge": "7 days", "packageRules": [rule]},
+                    (AGE,),
+                )
+            for index, others in enumerate(
+                (
+                    [{"matchDatasources": ["npm"], "minimumReleaseAge": None}, docker_null],
+                    [docker_null, {"matchPackageNames": ["*"], "minimumReleaseAge": None}],
+                )
+            ):
+                add(
+                    f"bad-docker-sibling-{index}/renovate.json",
+                    {"minimumReleaseAge": "7 days", "packageRules": others},
+                    (AGE,),
+                )
+            for index, extra in enumerate(
+                (
+                    {"ignoreDeps": [docker_null]},
+                    {"hostRules": [docker_null]},
+                    {"packageRules": [[docker_null]]},
+                    {"npm": {"packageRules": [docker_null]}},
+                    {"vulnerabilityAlerts": {"packageRules": [docker_null]}},
+                    {"hostRules": [{"packageRules": [docker_null]}]},
+                    {"packageRules": [{"packageRules": [docker_null]}]},
+                    {"hostRules": [[{"packageRules": [docker_null]}]]},
+                    {"npm": [{"packageRules": [docker_null]}]},
+                    {"npm": {"hostRules": [{"packageRules": [docker_null]}]}},
+                )
+            ):
+                add(
+                    f"bad-docker-outside-packagerules-{index}/renovate.json",
+                    {"minimumReleaseAge": "7 days", **extra},
+                    (AGE,),
+                )
+            add(
+                "bad-docker-exemption-root/renovate.json",
+                {**docker_null, "packageRules": [docker_null]},
+                (AGE,),
+            )
+            add_raw(
+                "bad-docker-array-root/renovate.json",
+                json.dumps([{"minimumReleaseAge": "7 days", "packageRules": [docker_null]}]),
+                (AGE,),
+            )
             add(
                 "missing-default/renovate.json",
                 {"packageRules": [{"matchPackageNames": ["example"]}]},

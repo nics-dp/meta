@@ -2,7 +2,7 @@
 #MISE description="Audit JS/TS deps; gate only advisories with a published fix"
 #MISE hide=true
 #MISE raw=true
-#MISE tools={bun="1.4.2"}
+#MISE tools={bun="1.4.3"}
 set -euo pipefail
 
 # An advisory with no published fixed version is not actionable, so it is reported

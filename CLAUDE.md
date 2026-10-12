@@ -34,10 +34,13 @@ and the polyrepo map before judging blast radius).
   `codeql-reusable.yml`, `security-sarif.yml`, `dependency-review.yml`,
   `scorecard.yml`, `go-dependency-submission.yml`,
   `node-dependency-submission.yml`, `artifacts-comment.yml`,
-  `pr-issue-check.yml`. Meta's own: `ci.yml`, `codeql.yml` and the `self-*.yml`
-  callers that dogfood the reusables. `.github/scripts/github-actions-scanner.sh`
-  is the wrapper `ci.yml`'s scanner job execs. Inputs, secrets, outputs and
-  defaults are the `workflow_call` declarations at the top of each file.
+  `pr-issue-check.yml`. Meta's own: `ci.yml`, `codeql.yml`, the `self-*.yml`
+  callers that dogfood the reusables, and `mise-tools-image.yml` (manual build of
+  the private `ghcr.io/nics-dp/mise-tools` image from the atoms' tool pins, whose
+  `[tools]` `.github/scripts/mise-tools-toml.py` generates).
+  `.github/scripts/github-actions-scanner.sh` is the wrapper `ci.yml`'s scanner
+  job execs. Inputs, secrets, outputs and defaults are the `workflow_call`
+  declarations at the top of each file.
 - `templates/facades/mise.<archetype>.toml` — `go-service`, `go-lib`,
   `frontend`, `python`, `image`. Facade vocabulary (`init`, `test`, `ci`,
   `release-check`, `all`, …) lives only here; a consumer copies one as its
@@ -153,9 +156,9 @@ before changing any of these; the mechanism is in the code, the history in
 - `MISE_MINIMUM_RELEASE_AGE: "0"` stays; `jdx/mise-action` pins an exact mise
   version, not `latest`; `MISE_USE_VERSIONS_HOST` is left at the mise default.
   The version pin is carried in `mise-task.yml`, `auto-release.yml`'s
-  `mise_version` default and `self-release.yml`, and the "synchronized mise
-  pins" custom manager in `renovate.json` bumps them together. → the `env:`
-  comment on the `run` job.
+  `mise_version` default, `self-release.yml` and `mise-tools-image.yml`, and the
+  "synchronized mise pins" custom manager in `renovate.json` bumps them together.
+  → the `env:` comment on the `run` job.
 - `inputs.task` reaches the shell through an env variable and `read -ra`, never
   an inline `${{ }}` (semgrep run-shell-injection). → the "Run" step comment.
 - The private-module App token is minted only when `private-modules` is set and

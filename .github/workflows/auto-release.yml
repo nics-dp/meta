@@ -66,7 +66,7 @@ on:
       mise_version:
         description: "Pinned mise version (kept in lockstep with mise-task.yml). >= 2026.7.0 required: older builds embed a Sigstore trust root that predates GitHub's 2026-06-12 TSA cert rotation and fail artifact-attestation verification during tool installs (jdx/mise#10680)."
         required: false
-        default: "2026.10.2"
+        default: "2026.10.8"
         type: string
     secrets:
       ci_read_app_private_key:
@@ -297,7 +297,7 @@ jobs:
 
       # Toolchain comes from the repo's mise.toml [tools] — no per-language setup step.
       - name: Set up mise
-        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+        uses: jdx/mise-action@2d8d4cafcbd33be2ea37d2b6f5ad595363d1f1ca # v5.1.1
         with:
           version: ${{ inputs.mise_version }}
           cache: true
