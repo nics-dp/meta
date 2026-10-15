@@ -71,6 +71,7 @@ class SubmissionTests(unittest.TestCase):
                 "sha512-AAAA",
             ],
         }
+        self.lock_version = 1
         self.context = {
             "sha": "a" * 40,
             "ref": "refs/heads/dev",
@@ -91,7 +92,7 @@ class SubmissionTests(unittest.TestCase):
     def fixture(self):
         h = self.helper
         lock = {
-            "lockfileVersion": 1,
+            "lockfileVersion": self.lock_version,
             "configVersion": 1,
             "workspaces": {"": self.manifest},
             "packages": self.entries,
@@ -533,6 +534,20 @@ class SubmissionTests(unittest.TestCase):
         for value in ("a\nb", "a\x00b", "a\rb", "a\x7fb", "a\x85b"):
             with self.subTest(value=value), self.assertRaises(ValueError):
                 self.helper.text(value)
+
+    def test_lock_versions_one_and_two_share_the_graph(self):
+        _, expected = self.normalized()
+        self.lock_version = 2
+        _, actual = self.normalized()
+        self.assertEqual(actual, expected)
+        for value in (0, 3, None, "2", True, 2.0):
+            self.lock_version = value
+            self.fixture()
+            with (
+                self.subTest(value=value),
+                self.assertRaisesRegex(ValueError, "unsupported Bun lock version"),
+            ):
+                self.helper.graph(self.project)
 
     def test_missing_malformed_native_and_required_edges_fail(self):
         raw = self.fixture()
