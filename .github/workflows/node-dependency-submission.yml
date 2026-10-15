@@ -201,7 +201,9 @@ jobs:
               check_tree(project)
               manifest = load(inside(project, project / 'package.json'))
               lock = load(inside(project, project / 'bun.lock'), jsonc=True)
-              require(lock.get('lockfileVersion') == 1, 'unsupported Bun lock version')
+              # Bun's v2 keeps v1's content format and only adds stricter parse-time checks.
+              version = lock.get('lockfileVersion')
+              require(type(version) is int and version in (1, 2), 'unsupported Bun lock version')
               require(set(lock['workspaces']) == {''}, 'workspace installs require a separate project root')
               for field in ('dependencies', 'devDependencies', 'optionalDependencies', 'peerDependencies'):
                   require((manifest.get(field) or {}) == (lock['workspaces'][''].get(field) or {}),
