@@ -257,10 +257,79 @@ jobs:
             go mod vendor
           fi
 
+      # gosec is the release binary of the pin below, installed by mise under a
+      # job-private root in RUNNER_TEMP. The install step keeps mise's data,
+      # cache, state and config directories there and stops config discovery
+      # at that root (MISE_CEILING_PATHS), so mise reads only the one-tool
+      # mise.toml written here: the caller's mise configuration and the runner
+      # user's global mise configuration never reach the install. go:sast pins
+      # the same release in its #MISE tools header; the two pins move together.
+      - name: Prepare gosec install
+        id: gosec-prep
+        if: env.EFFECTIVE_GOSEC == 'true'
+        continue-on-error: true
+        run: |
+          mise_root="${RUNNER_TEMP}/security-sarif-mise"
+          if [ -e "$mise_root" ] || [ -L "$mise_root" ]; then
+            rm -rf -- "$mise_root"
+          fi
+          if [ -e "$mise_root" ] || [ -L "$mise_root" ]; then
+            echo "::error::failed to remove stale scanner mise root"
+            exit 1
+          fi
+          umask 077
+          mkdir -m 0700 -- "$mise_root" "${mise_root}/work"
+          if [ ! -d "$mise_root" ] || [ -L "$mise_root" ] || [ "$(stat -c '%a' "$mise_root")" != "700" ]; then
+            echo "::error::scanner mise root is not a regular mode-0700 directory"
+            exit 1
+          fi
+          cat > "${mise_root}/work/mise.toml" <<'MISE_TOML'
+          [tools]
+          "github:securego/gosec" = "v2.30.0"
+          MISE_TOML
+
+      # Same action pin and mise version as mise-task.yml. The action runs mise
+      # in the private work directory only. Presetting MISE_TRUSTED_CONFIG_PATHS
+      # and MISE_YES in the step env keeps the action from exporting its own
+      # defaults for them (the checkout as a trusted config path, auto-confirm)
+      # to later steps; with env, export_path and add_shims_to_path off, later
+      # steps receive only the mise binary directory on PATH and MISE_LOG_LEVEL.
+      # cache: false, so the install never runs a mise or gosec binary restored
+      # from the Actions cache, which other workflow runs can write.
+      # github_token is the job token. The action hands it only to its own mise
+      # process (persist_github_token stays false), and mise attaches it only to
+      # requests for GitHub's API and raw-content hosts. The github backend's
+      # release lookup and attestation check can fall back to the GitHub REST
+      # API, whose anonymous limit is per IP address; without a token a
+      # rate-limited install would fail a blocking gate closed.
+      - name: Install gosec
+        id: gosec-install
+        if: env.EFFECTIVE_GOSEC == 'true' && steps.gosec-prep.outcome == 'success'
+        continue-on-error: true
+        uses: jdx/mise-action@2d8d4cafcbd33be2ea37d2b6f5ad595363d1f1ca # v5.1.1
+        env:
+          MISE_DATA_DIR: ${{ runner.temp }}/security-sarif-mise/data
+          MISE_CACHE_DIR: ${{ runner.temp }}/security-sarif-mise/cache
+          MISE_STATE_DIR: ${{ runner.temp }}/security-sarif-mise/state
+          MISE_CONFIG_DIR: ${{ runner.temp }}/security-sarif-mise/config
+          MISE_CEILING_PATHS: ${{ runner.temp }}/security-sarif-mise
+          MISE_TRUSTED_CONFIG_PATHS: ${{ runner.temp }}/security-sarif-mise/work
+          MISE_YES: "1"
+        with:
+          version: "2026.10.17"
+          cache: false
+          working_directory: ${{ runner.temp }}/security-sarif-mise/work
+          env: false
+          export_path: false
+          add_shims_to_path: false
+          github_token: ${{ github.token }}
+
       - name: Run gosec (SARIF)
         id: gosec
         if: env.EFFECTIVE_GOSEC == 'true'
         continue-on-error: true
+        env:
+          GOSEC_VERSIONS: ${{ steps.gosec-install.outputs.versions }}
         run: |
           rm -f -- gosec.sarif
           if [ -e gosec.sarif ] || [ -L gosec.sarif ]; then
@@ -288,26 +357,20 @@ jobs:
             exit 1
           fi
 
-          # gosec is built from source with the Go toolchain set up above: a
-          # released gosec can carry a golang.org/x/tools whose importer
-          # predates the export data that toolchain writes, and then every
-          # package fails to load. The throwaway module pins gosec and adds an
-          # x/tools floor; MVS keeps gosec's own requirement when that is
-          # higher. It sits under GOBIN, so the private-state cleanup removes
-          # it. go:sast builds gosec the same way; the -require lines move
-          # together.
-          gosec_module="${GOBIN}/gosec-module"
-          mkdir -m 0700 -- "$gosec_module"
-          (
-            unset GOEXPERIMENT GOOS GOARCH
-            export GOFLAGS='' GOWORK=off CGO_ENABLED=0
-            go -C "$gosec_module" mod init security-sarif-gosec
-            go -C "$gosec_module" mod edit \
-              -require=github.com/securego/gosec/v2@v2.29.0 \
-              -require=golang.org/x/tools@v0.51.0
-            go -C "$gosec_module" build -mod=mod -o "${GOBIN}/gosec" github.com/securego/gosec/v2/cmd/gosec
-          )
-          gosec_bin="${GOBIN}/gosec"
+          # The release binary type-checks with the go/types of the Go its
+          # release was built with: on a module whose go.mod declares a newer
+          # Go language version, every package reports an error until a gosec
+          # release built with that Go ships. Blocking mode fails on those
+          # errors; informational mode (-no-fail) only logs them.
+          gosec_dir="$(printf '%s' "${GOSEC_VERSIONS:-}" | jq -r '."github:securego/gosec"[0].install_path // empty' 2>/dev/null || true)"
+          case "$gosec_dir" in
+            "${RUNNER_TEMP}/security-sarif-mise/data/installs/"*) ;;
+            *)
+              echo "::error::gosec is not installed under the job-private mise root"
+              exit 1
+              ;;
+          esac
+          gosec_bin="${gosec_dir}/gosec"
           if [ ! -f "$gosec_bin" ] || [ -L "$gosec_bin" ] || [ ! -x "$gosec_bin" ]; then
             echo "::error::installed gosec is not a regular non-symlink executable"
             exit 1
@@ -426,6 +489,7 @@ jobs:
           esac
           gitconfig="${RUNNER_TEMP}/security-sarif-gitconfig"
           scanner_gobin="${RUNNER_TEMP}/security-sarif-bin"
+          scanner_mise="${RUNNER_TEMP}/security-sarif-mise"
           failed=0
           if [ "${GIT_CONFIG_GLOBAL:-}" != "$gitconfig" ] || [ "${GOBIN:-}" != "$scanner_gobin" ]; then
             echo "::error::workflow-owned cleanup overrides do not match"
@@ -437,7 +501,10 @@ jobs:
           if ! rm -rf -- "$scanner_gobin"; then
             failed=1
           fi
-          if [ -e "$gitconfig" ] || [ -L "$gitconfig" ] || [ -e "$scanner_gobin" ] || [ -L "$scanner_gobin" ]; then
+          if ! rm -rf -- "$scanner_mise"; then
+            failed=1
+          fi
+          if [ -e "$gitconfig" ] || [ -L "$gitconfig" ] || [ -e "$scanner_gobin" ] || [ -L "$scanner_gobin" ] || [ -e "$scanner_mise" ] || [ -L "$scanner_mise" ]; then
             echo "::error::private Go scan state remains after cleanup"
             failed=1
           fi
@@ -630,6 +697,8 @@ jobs:
         if: always() && env.EFFECTIVE_BLOCKING == 'true'
         env:
           VENDOR_OUTCOME: ${{ steps.vendor.outcome }}
+          GOSEC_PREP_OUTCOME: ${{ steps.gosec-prep.outcome }}
+          GOSEC_INSTALL_OUTCOME: ${{ steps.gosec-install.outcome }}
           GOSEC_OUTCOME: ${{ steps.gosec.outcome }}
           STRUCTURE_OUTCOME: ${{ steps.gosec-sarif-structure.outcome }}
           PRIVATE_CLEANUP_OUTCOME: ${{ steps.go-private-cleanup.outcome }}
@@ -639,6 +708,8 @@ jobs:
           failed=0
           for outcome in \
             "$VENDOR_OUTCOME" \
+            "$GOSEC_PREP_OUTCOME" \
+            "$GOSEC_INSTALL_OUTCOME" \
             "$GOSEC_OUTCOME" \
             "$STRUCTURE_OUTCOME" \
             "$PRIVATE_CLEANUP_OUTCOME" \
