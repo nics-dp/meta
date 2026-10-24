@@ -316,7 +316,7 @@ jobs:
           MISE_TRUSTED_CONFIG_PATHS: ${{ runner.temp }}/security-sarif-mise/work
           MISE_YES: "1"
         with:
-          version: "2026.10.17"
+          version: "2026.10.18"
           cache: false
           working_directory: ${{ runner.temp }}/security-sarif-mise/work
           env: false
