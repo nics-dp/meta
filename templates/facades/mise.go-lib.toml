@@ -99,3 +99,31 @@ run = ["mise run init", "mise run go:generate", "mise run go:api-fix", "mise run
 [tasks.sbom]
 description = "Generate enriched SBOM and scan"
 depends = ["sbom:trivy", "sbom:grype"]
+
+# ==============================================================================
+# Doctor checks — `mise doctor project`
+# ==============================================================================
+# Read-only checks of what local development needs. mise rejects [doctor] in a
+# config include, so each repo declares its checks here and each `run` calls a
+# shared doctor:* atom. mise discards check output; run the atom directly
+# (`mise run doctor:go-vendor`) to see why a check fails.
+[doctor.checks.go-replace]
+description = "Local replace directives in go.mod point at module directories"
+run = "mise run --quiet doctor:go-replace"
+hint = "Clone the module at the replace path, or run `mise run go:lib-remote`"
+
+[doctor.checks.go-private]
+description = "The github.com/nics-dp modules go.mod requires are in the Go module cache"
+run = "mise run --quiet doctor:go-private"
+hint = "Run `mise run init` with git access to github.com/nics-dp"
+
+[doctor.checks.go-vendor]
+description = "vendor/ matches go.mod"
+run = "mise run --quiet doctor:go-vendor"
+hint = "Run `mise run init`"
+depends = ["go-replace", "go-private"]
+
+[doctor.checks.go-cgo]
+description = "A C toolchain is available for cgo and the race detector"
+run = "mise run --quiet doctor:go-cgo"
+hint = "macOS: run `xcode-select --install`; Linux: install gcc or clang"

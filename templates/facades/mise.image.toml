@@ -49,3 +49,20 @@ depends = ["sbom:trivy", "sbom:grype"]
 silent = "stdout"
 description = "Refresh shared atoms"
 depends = ["meta:bump"]
+
+# ==============================================================================
+# Doctor checks — `mise doctor project`
+# ==============================================================================
+# Read-only checks of what local development needs. mise rejects [doctor] in a
+# config include, so each repo declares its checks here and each `run` calls a
+# shared doctor:* atom. mise discards check output; run the atom directly
+# (`mise run doctor:docker`) to see why a check fails.
+[doctor.checks.docker]
+description = "The Docker daemon answers"
+run = "mise run --quiet doctor:docker"
+hint = "Start the Docker daemon (Docker Desktop, OrbStack, Colima or the docker service)"
+
+[doctor.checks.submodules]
+description = "Git submodules are initialized"
+run = "mise run --quiet doctor:submodules"
+hint = "Run `mise run gs:clone`"
