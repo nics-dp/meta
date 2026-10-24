@@ -28,7 +28,7 @@ and the polyrepo map before judging blast radius).
   Each is hidden (`#MISE hide=true`); an atom that needs a tool beyond bash
   and the consumer's own toolchain declares it inline in `#MISE tools=`.
   `lib/` holds sourced helpers, not tasks (`ci-isolate`,
-  `fetch-config`, `go-env`, `go-version`, `logs`, `py-env`).
+  `fetch-config`, `go-env`, `go-mod`, `go-version`, `logs`, `py-env`).
 - `.github/workflows/` — the reusable workflows: `mise-task.yml` (the runner
   every consumer CI matrix calls), `auto-release.yml`, `go-release.yml`,
   `image-release.yml`, `sbom-source.yml`, `sbom-image.yml`,
@@ -145,16 +145,24 @@ before changing any of these; the mechanism is in the code, the history in
 - `doctor:*` atoms are the probes behind `mise doctor project`. mise rejects
   `[doctor]` in a config include, so each facade (and each consumer's
   `mise.toml`) declares its `[doctor.checks.<name>]` and the check's `run` is
-  `mise run --quiet doctor:<atom> …`; the logic stays in the atom. Atoms only
-  inspect state: they stat secret-bearing paths without opening them, fetch
-  nothing over the network, open no credential store, and never log in or
-  diagnose auth. mise renders `run`, `description` and `hint` through Tera, so
-  a literal Go-template `{{ }}` in `run` breaks the check, and it discards
-  check output, so the reason an atom prints shows only on a direct
-  `mise run doctor:<atom>`. An
-  agent sandbox that denies `.env` or the Docker socket fails those probes;
-  developers run `mise doctor project` themselves. → `.mise/tasks/doctor/`,
-  the doctor section at the end of `templates/facades/*.toml`.
+  `mise run --quiet --skip-tools doctor:<atom> …`; the logic stays in the atom.
+  `--skip-tools` keeps a doctor run from installing anything, so a missing tool
+  is reported once by the `tools` check (`doctor:tools`, which runs
+  `mise ls --local --missing`) and the checks whose atom runs a project tool
+  depend on it; without it the nested run's install failure shows under
+  another check's hint. It also never installs a missing task-level tool, so doctor atoms
+  declare no `#MISE tools` (`lib/go-mod` reads `go mod edit -json` with awk
+  instead of jq). Atoms only inspect state: they stat secret-bearing paths
+  without opening them, fetch nothing over the network, open no credential
+  store, and never log in or diagnose auth. Each check sets `timeout`: mise's
+  10s default leaves no room for a cold atom cache, when every check's nested
+  `mise run` clones the meta include at once. mise renders `run`,
+  `description` and `hint` through Tera, so a literal Go-template `{{ }}` in
+  `run` breaks the check, and it discards check output, so the reason an atom
+  prints shows only on a direct `mise run doctor:<atom>`. An agent sandbox
+  that denies `.env` or the Docker socket fails those probes; developers run
+  `mise doctor project` themselves. → `.mise/tasks/doctor/`, the doctor
+  section at the end of `templates/facades/*.toml`.
 
 **Shared configs** → `docs/design-notes/shared-config-resolution.md`
 
