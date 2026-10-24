@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+#MISE description="Check that node_modules/ is installed (doctor probe)"
+#MISE hide=true
+#MISE raw=true
+
+# Existence only; whether node_modules/ matches the lockfile is left to the install.
+set -euo pipefail
+
+if [ ! -d node_modules ]; then
+  echo "node_modules/ is missing in $PWD" >&2
+  exit 1
+fi

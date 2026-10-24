@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+#MISE description="Check that git submodules are initialized (doctor probe)"
+#MISE hide=true
+#MISE raw=true
+
+# Read-only. Only uninitialized submodules (status prefix `-`) fail; a submodule
+# checked out at another commit (`+`) is ordinary work in progress.
+set -euo pipefail
+
+[ -f .gitmodules ] || exit 0
+
+if ! status=$(git submodule status --recursive 2>&1); then
+  echo "git submodule status failed:" >&2
+  sed -n '1,3p' <<<"$status" >&2
+  exit 1
+fi
+missing=$(sed -n 's/^-[^ ]* //p' <<<"$status")
+if [ -n "$missing" ]; then
+  echo "uninitialized submodule(s):" >&2
+  sed 's/^/  /' <<<"$missing" >&2
+  exit 1
+fi

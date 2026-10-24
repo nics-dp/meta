@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+#MISE description="Check that Docker networks exist (doctor probe)"
+#MISE hide=true
+#MISE raw=true
+#USAGE arg "<names>" var=#true help="Network names, such as the external networks a compose file declares"
+
+set -euo pipefail
+
+if [ $# -eq 0 ]; then
+  echo "usage: doctor:docker-network <name>..." >&2
+  exit 2
+fi
+
+missing=()
+for name in "$@"; do
+  docker network inspect "$name" >/dev/null 2>&1 || missing+=("$name")
+done
+if [ ${#missing[@]} -gt 0 ]; then
+  echo "missing docker network(s): ${missing[*]}" >&2
+  exit 1
+fi

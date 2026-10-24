@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+#MISE description="Check that every tool the project's mise config requests is installed (doctor probe)"
+#MISE hide=true
+#MISE raw=true
+
+# Read-only: `mise ls` lists and never installs. The doctor checks run their atom
+# with `mise run --skip-tools`, so a missing tool is reported here once, under
+# its own name, and the checks whose atom calls it depend on this one. --local
+# keeps the project's config files, its parent directories' and idiomatic version
+# files such as go.mod, and leaves out the global config.
+set -euo pipefail
+
+missing=$(mise ls --local --missing)
+if [ -n "$missing" ]; then
+  echo "requested tools that are not installed:" >&2
+  printf '%s\n' "$missing" >&2
+  exit 1
+fi
