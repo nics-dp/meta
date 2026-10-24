@@ -197,6 +197,19 @@
       ]
     },
     {
+      "description": "Look mise `conda:` tools up in conda-forge, the channel mise installs them from by default. Renovate's mise manager hands the conda datasource the bare package name, which api.anaconda.org answers with 404, and mise rejects every mise.toml spelling that carries the channel in the name (https://github.com/renovatebot/renovate/discussions/46974). A name that already carries a channel is left alone; a repository whose mise `conda.channel` is not conda-forge overrides this rule in its own renovate.json.",
+      "matchManagers": [
+        "mise"
+      ],
+      "matchDatasources": [
+        "conda"
+      ],
+      "matchPackageNames": [
+        "!/\\//"
+      ],
+      "overridePackageName": "conda-forge/{{{packageName}}}"
+    },
+    {
       "description": "mise task-header tools (custom regex): strip leading v from release tags",
       "matchDepNames": [
         "golangci/golangci-lint",

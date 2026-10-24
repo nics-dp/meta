@@ -76,8 +76,9 @@ jobs:
     # invalid duration), and the self-hosted pool reuses cached mise binaries
     # of mixed versions, so the action below pins an exact mise version --
     # see its `version:` input, kept in lockstep with auto-release.yml's
-    # mise_version default, self-release.yml's explicit pass and mise-tools-image.yml
-    # (the jdx/mise custom manager in renovate.json bumps them together). Keep it at
+    # mise_version default, self-release.yml's explicit pass, mise-tools-image.yml
+    # and security-sarif.yml's gosec install (the jdx/mise custom manager in
+    # renovate.json bumps them together). Keep it at
     # or above the first build whose embedded Sigstore trust root carries GitHub's
     # current TSA cert: older builds fail artifact-attestation verification on
     # tool installs (jdx/mise#10680).
@@ -200,7 +201,7 @@ jobs:
 
       - uses: jdx/mise-action@2d8d4cafcbd33be2ea37d2b6f5ad595363d1f1ca # v5.1.1
         with:
-          version: "2026.10.8"
+          version: "2026.10.17"
           cache: true
 
       - name: Resolve Go cache
