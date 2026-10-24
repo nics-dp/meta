@@ -147,7 +147,9 @@ run = ["mise run init", "mise run go:generate", "mise run go:api-fix", "mise run
 # every check's nested `mise run` clones the meta include at the same time;
 # mise's 10s default is too tight for that on a slow link. mise discards check
 # output; run the atom directly (`mise run doctor:go-vendor`) to see why a check
-# fails.
+# fails. A check that chains `test -f` or `test -d` after doctor:path also
+# fails when a path exists with the wrong type; doctor:path alone passes then,
+# so check that path's type by hand.
 [doctor.checks.tools]
 description = "Every tool this repo's mise config requests is installed"
 run = "mise run --quiet --skip-tools doctor:tools"
