@@ -1,14 +1,34 @@
 #!/usr/bin/env bash
-#MISE description="Check that the project's .venv has a runnable python (doctor probe)"
+#MISE description="Check that the project's .venv has a runnable python and, with a uv.lock, its locked packages (doctor probe)"
 #MISE hide=true
 #MISE raw=true
 #USAGE arg "[dir]" default="." help="Directory holding .venv"
 
-# Read-only. A .venv whose python symlink points at a removed interpreter fails too.
+# Read-only. A .venv whose python symlink points at a removed interpreter fails.
+# A directory with a uv.lock must also pass `uv sync --check`, which reports what
+# a sync would change and never creates or modifies the environment: --frozen
+# reads the lockfile as it is, --offline and --no-python-downloads keep uv off the
+# network, and --inexact accepts packages outside the default groups, such as the
+# test group py:install adds. mise's python.uv_venv_auto = "create" can create
+# an empty .venv while it loads the environment for the doctor run itself; that
+# venv has a python but no packages, so it fails here. uv is a project tool, so a
+# check that runs this atom on a uv project depends on the tools check.
 set -euo pipefail
 
 dir=${1:-.}
 if [ ! -x "$dir/.venv/bin/python" ]; then
   echo "$dir/.venv/bin/python is missing or not executable" >&2
+  exit 1
+fi
+[ -f "$dir/uv.lock" ] || exit 0
+
+if ! command -v uv >/dev/null 2>&1; then
+  echo "$dir has a uv.lock but uv is not on PATH" >&2
+  exit 1
+fi
+if ! out=$(uv sync --check --frozen --offline --no-python-downloads --inexact \
+  --project "$dir" 2>&1); then
+  echo "$dir/.venv does not match uv.lock:" >&2
+  sed -n '1,6p' <<<"$out" >&2
   exit 1
 fi
