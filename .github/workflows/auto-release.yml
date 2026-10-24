@@ -64,9 +64,9 @@ on:
         default: 0
         type: number
       mise_version:
-        description: "Pinned mise version (kept in lockstep with mise-task.yml). >= 2026.7.0 required: older builds embed a Sigstore trust root that predates GitHub's 2026-06-12 TSA cert rotation and fail artifact-attestation verification during tool installs (jdx/mise#10680)."
+        description: "Pinned mise version (kept in lockstep with mise-task.yml). >= 2026.7.0 required: older builds embed a Sigstore trust root that predates GitHub's 2026-06-12 TSA cert rotation and fail artifact-attestation verification during tool installs (jdx/mise#10680). >= 2026.10.18 required: older builds reject `depends` in `[doctor.checks.*]`, which the facade templates and consumer mise.toml files declare, and then refuse the whole config."
         required: false
-        default: "2026.10.17"
+        default: "2026.10.18"
         type: string
     secrets:
       ci_read_app_private_key:
