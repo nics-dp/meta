@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+#MISE description="Check that a dotenv file exists, without reading it (doctor probe)"
+#MISE hide=true
+#MISE raw=true
+#USAGE arg "[file]" default=".env" help="Dotenv file"
+#USAGE arg "[example]" help="Template named in the failure message (default: <file>.example when it exists)"
+
+# Existence only: the file holds secrets, so it is never opened.
+set -euo pipefail
+
+file=${1:-.env}
+example=${2:-}
+if [ -z "$example" ] && [ -f "$file.example" ]; then
+  example="$file.example"
+fi
+
+if [ ! -f "$file" ]; then
+  if [ -n "$example" ]; then
+    echo "$file is missing; copy $example to $file and fill it in" >&2
+  else
+    echo "$file is missing" >&2
+  fi
+  exit 1
+fi

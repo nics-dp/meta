@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+#MISE description="Check that the project's .venv has a runnable python (doctor probe)"
+#MISE hide=true
+#MISE raw=true
+#USAGE arg "[dir]" default="." help="Directory holding .venv"
+
+# Read-only. A .venv whose python symlink points at a removed interpreter fails too.
+set -euo pipefail
+
+dir=${1:-.}
+if [ ! -x "$dir/.venv/bin/python" ]; then
+  echo "$dir/.venv/bin/python is missing or not executable" >&2
+  exit 1
+fi

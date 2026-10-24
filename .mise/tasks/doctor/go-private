@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+#MISE description="Check that go.mod's github.com/nics-dp requirements are in the module cache (doctor probe)"
+#MISE hide=true
+#MISE raw=true
+#MISE tools={"aqua:jqlang/jq"="1.8.2"}
+
+# Read-only and offline: each requirement, indirect ones included, must be in
+# $(go env GOMODCACHE) as an extracted module directory or a downloaded zip,
+# named with the cache's case encoding (an upper-case letter becomes `!` plus its
+# lower case). A requirement replaced by a directory is skipped, doctor:go-replace
+# covers it; one replaced by another module version is looked up as that version.
+set -euo pipefail
+# shellcheck disable=SC1091
+source "$(dirname "$0")/../lib/require-tool"
+require_tool jq
+export GOTOOLCHAIN=local
+
+if [ ! -f go.mod ]; then
+  echo "no go.mod in $PWD" >&2
+  exit 1
+fi
+
+modcache=$(go env GOMODCACHE)
+wanted=$(go mod edit -json | jq -r '
+  def enc: gsub("(?<c>[A-Z])"; "!" + (.c | ascii_downcase));
+  (.Replace // []) as $rep
+  | (.Require // [])[]
+  | select(.Path | startswith("github.com/nics-dp/"))
+  | . as $req
+  | ([$rep[] | select(.Old.Path == $req.Path and .Old.Version == $req.Version)]
+     + [$rep[] | select(.Old.Path == $req.Path and (.Old.Version // "") == "")])
+  | first as $r
+  | if $r == null then $req
+    elif ($r.New.Version // "") == "" then empty
+    else $r.New
+    end
+  | [.Path + "@" + .Version, (.Path | enc), (.Version | enc)]
+  | @tsv')
+
+missing=0
+while IFS=$'\t' read -r mod path version; do
+  [ -n "$mod" ] || continue
+  if [ ! -d "$modcache/$path@$version" ] &&
+    [ ! -f "$modcache/cache/download/$path/@v/$version.zip" ]; then
+    echo "$mod is not in the module cache" >&2
+    missing=1
+  fi
+done <<<"$wanted"
+exit "$missing"

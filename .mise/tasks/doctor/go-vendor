@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+#MISE description="Check that vendor/ matches go.mod (doctor probe)"
+#MISE hide=true
+#MISE raw=true
+
+# Read-only. The go command's own vendor consistency check decides the result, so
+# this fails exactly when a -mod=vendor build would reject vendor/; a go.mod or
+# go.sum edit that leaves the vendored set unchanged still passes.
+# GOTOOLCHAIN=local keeps a newer go.mod `go` line from downloading a toolchain.
+set -euo pipefail
+export GOTOOLCHAIN=local
+
+if [ ! -f go.mod ]; then
+  echo "no go.mod in $PWD" >&2
+  exit 1
+fi
+if [ ! -f vendor/modules.txt ]; then
+  echo "vendor/modules.txt is missing" >&2
+  exit 1
+fi
+if ! err=$(go list -mod=vendor -m 2>&1 >/dev/null); then
+  echo "vendor/ does not match go.mod:" >&2
+  sed -n '1,4p' <<<"$err" >&2
+  exit 1
+fi

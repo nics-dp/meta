@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+#MISE description="Check that every local replace in go.mod points at a module directory (doctor probe)"
+#MISE hide=true
+#MISE raw=true
+#MISE tools={"aqua:jqlang/jq"="1.8.2"}
+
+# Read-only. A replace whose target starts with `.` or `/` is a directory
+# replacement (what go:lib-local writes); the go command needs a go.mod there.
+# Relative targets resolve from the directory holding go.mod, the task's cwd.
+set -euo pipefail
+# shellcheck disable=SC1091
+source "$(dirname "$0")/../lib/require-tool"
+require_tool jq
+export GOTOOLCHAIN=local
+
+if [ ! -f go.mod ]; then
+  echo "no go.mod in $PWD" >&2
+  exit 1
+fi
+
+targets=$(go mod edit -json | jq -r '
+  (.Replace // [])[]
+  | .New.Path
+  | select(startswith(".") or startswith("/"))')
+
+missing=0
+while IFS= read -r dir; do
+  [ -n "$dir" ] || continue
+  if [ ! -f "$dir/go.mod" ]; then
+    echo "replace target $dir has no go.mod" >&2
+    missing=1
+  fi
+done <<<"$targets"
+exit "$missing"

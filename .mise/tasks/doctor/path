@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+#MISE description="Check that files or directories exist, without reading them (doctor probe)"
+#MISE hide=true
+#MISE raw=true
+#USAGE arg "<paths>" var=#true help="Paths to stat; a leading ~/ expands to $HOME"
+
+# Existence only: a path such as a certificate directory may hold key material.
+set -euo pipefail
+
+if [ $# -eq 0 ]; then
+  echo "usage: doctor:path <path>..." >&2
+  exit 2
+fi
+
+missing=()
+for path in "$@"; do
+  case $path in
+    \~/*) path="$HOME/${path#\~/}" ;;
+  esac
+  [ -e "$path" ] || missing+=("$path")
+done
+if [ ${#missing[@]} -gt 0 ]; then
+  echo "missing: ${missing[*]}" >&2
+  exit 1
+fi
