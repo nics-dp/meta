@@ -208,8 +208,11 @@ timeout = "60s"
 # depends = ["docker"]
 # timeout = "60s"
 #
+# List every certificate file compose.yml bind-mounts. doctor:path passes a
+# directory, and Docker creates one at a missing bind-mount source, so each
+# path also gets `test -f`, which stats the file without opening it.
 # [doctor.checks.certs]
-# description = "The client certificates compose.yml mounts exist"
-# run = "mise run --quiet --skip-tools doctor:path ~/.config/dcf/certs"
-# hint = "dcf-local-env's `install` task provisions ~/.config/dcf/certs"
+# description = "The client certificates compose.yml mounts exist as files"
+# run = "mise run --quiet --skip-tools doctor:path ~/.config/dcf/certs/ca.crt ~/.config/dcf/certs/client.crt ~/.config/dcf/certs/client.key && test -f ~/.config/dcf/certs/ca.crt && test -f ~/.config/dcf/certs/client.crt && test -f ~/.config/dcf/certs/client.key"
+# hint = "Run `mise run setup --env dev` in dcf-local-env, then copy ca.crt, client.crt and client.key from its certs/ to ~/.config/dcf/certs; if one of them is a directory (Docker creates one for a missing mount source), remove it first"
 # timeout = "60s"
