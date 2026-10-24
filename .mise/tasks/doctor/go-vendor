@@ -14,10 +14,6 @@ if [ ! -f go.mod ]; then
   echo "no go.mod in $PWD" >&2
   exit 1
 fi
-if [ ! -f vendor/modules.txt ]; then
-  echo "vendor/modules.txt is missing" >&2
-  exit 1
-fi
 if ! err=$(go list -mod=vendor -m 2>&1 >/dev/null); then
   echo "vendor/ does not match go.mod:" >&2
   sed -n '1,4p' <<<"$err" >&2
