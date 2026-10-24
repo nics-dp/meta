@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+#MISE description="Check that a C toolchain is available for cgo and the race detector (doctor probe)"
+#MISE hide=true
+#MISE raw=true
+
+# Read-only. The compiler is the one cgo uses, `go env CC`. On macOS the Command
+# Line Tools are checked first: without them the /usr/bin compiler shims open the
+# GUI install prompt instead of failing.
+set -euo pipefail
+export GOTOOLCHAIN=local
+
+if [ "$(uname -s)" = Darwin ] && ! xcode-select -p >/dev/null 2>&1; then
+  echo "the Xcode Command Line Tools are not installed" >&2
+  exit 1
+fi
+
+read -r cc _ <<<"$(go env CC)"
+if [ -z "${cc:-}" ] || ! command -v "$cc" >/dev/null 2>&1; then
+  echo "C compiler '${cc:-}' (go env CC) is not on PATH" >&2
+  exit 1
+fi
+if ! "$cc" --version >/dev/null 2>&1; then
+  echo "C compiler '$cc' (go env CC) does not run" >&2
+  exit 1
+fi

@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+#MISE description="Check that vendor/ matches go.mod (doctor probe)"
+#MISE hide=true
+#MISE raw=true
+
+# Read-only. A module that requires other modules needs vendor/modules.txt: with a
+# go.mod `go` line below 1.14 the go command skips its vendor consistency check
+# when that file is missing, while a -mod=vendor build of the module still fails.
+# A module with nothing to vendor has no such file and passes. Past that, the go
+# command's own vendor consistency check decides, so a go.mod or go.sum edit that
+# leaves the vendored set unchanged still passes.
+# GOTOOLCHAIN=local keeps a newer go.mod `go` line from downloading a toolchain.
+set -euo pipefail
+export GOTOOLCHAIN=local
+# shellcheck source=../lib/go-mod
+source "$(dirname "$0")/../lib/go-mod"
+
+if [ ! -f go.mod ]; then
+  echo "no go.mod in $PWD" >&2
+  exit 1
+fi
+rows=$(go_mod_rows)
+if [ ! -f vendor/modules.txt ] && grep -q '^require' <<<"$rows"; then
+  echo "vendor/modules.txt is missing, but go.mod requires modules" >&2
+  exit 1
+fi
+if ! err=$(go list -mod=vendor -m 2>&1 >/dev/null); then
+  echo "vendor/ does not match go.mod:" >&2
+  sed -n '1,4p' <<<"$err" >&2
+  exit 1
+fi

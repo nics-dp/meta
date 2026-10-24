@@ -3,6 +3,9 @@
 [settings]
 jobs = 16
 task.output = "keep-order"
+# mise reads the git:: entry in [task_config] includes only with experimental on;
+# without it the shared meta tasks are skipped.
+experimental = true
 
 # ------------------------------------------------------------------------------
 # All required tools are declared inline by the shared tasks under
@@ -46,3 +49,33 @@ depends = ["sbom:trivy", "sbom:grype"]
 silent = "stdout"
 description = "Refresh shared atoms"
 depends = ["meta:bump"]
+
+# ==============================================================================
+# Doctor checks — `mise doctor project`
+# ==============================================================================
+# Read-only checks of what local development needs. mise rejects [doctor] in a
+# config include, so each repo declares its checks here and each `run` calls a
+# shared doctor:* atom with `--skip-tools`: a doctor run installs nothing, the
+# `tools` check names a missing tool once, and the checks whose atom runs a
+# project tool depend on it. `timeout` leaves room for a cold atom cache, when
+# every check's nested `mise run` clones the meta include at the same time;
+# mise's 10s default is too tight for that on a slow link. mise discards check
+# output; run the atom directly (`mise run doctor:docker`) to see why a check
+# fails.
+[doctor.checks.tools]
+description = "Every tool this repo's mise config requests is installed"
+run = "mise run --quiet --skip-tools doctor:tools"
+hint = "Run `mise install`"
+timeout = "60s"
+
+[doctor.checks.docker]
+description = "The Docker daemon answers"
+run = "mise run --quiet --skip-tools doctor:docker"
+hint = "Start the Docker daemon (Docker Desktop, OrbStack, Colima or the docker service)"
+timeout = "60s"
+
+[doctor.checks.submodules]
+description = "Git submodules are initialized"
+run = "mise run --quiet --skip-tools doctor:submodules"
+hint = "Run `mise run gs:clone`"
+timeout = "60s"

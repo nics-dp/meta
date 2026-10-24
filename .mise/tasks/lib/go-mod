@@ -1,0 +1,71 @@
+#!/usr/bin/env bash
+# Sourced helper. go_mod_rows prints the require and replace directives of the
+# go.mod in the current directory, one row each, fields separated by \037 (ASCII
+# unit separator) so empty fields survive `IFS=$'\037' read`:
+#   require <path> <version>
+#   replace <old path> <old version> <new path> <new version>
+# A version the directive leaves out is an empty field; a replace with an empty
+# new version is a directory replacement.
+#
+# It reads `go mod edit -json` with awk instead of jq, so the doctor atoms that
+# source it declare no task-level tool and run under `mise run --skip-tools`. The
+# parser relies on the layout the go command writes (one key per line, tab
+# indentation) and decodes the escapes it emits in strings: \" \\ \/ and the
+# & < > HTML escapes.
+go_mod_rows() {
+  local json
+  json=$(go mod edit -json) || return 1
+  awk '
+    function depth(line) { match(line, /^\t*/); return RLENGTH }
+    function value(line,   s, out, i, c, u) {
+      s = line
+      sub(/^\t*"[^"]*": "/, "", s)
+      sub(/",?$/, "", s)
+      out = ""
+      for (i = 1; i <= length(s); i++) {
+        c = substr(s, i, 1)
+        if (c == "\\") {
+          c = substr(s, ++i, 1)
+          if (c == "u") {
+            u = substr(s, i + 1, 4)
+            i += 4
+            if (u == "0026") c = "&"
+            else if (u == "003c") c = "<"
+            else if (u == "003e") c = ">"
+            else c = "\\u" u
+          }
+        }
+        out = out c
+      }
+      return out
+    }
+    {
+      d = depth($0)
+      if (d == 1) {
+        section = ""
+        if ($0 ~ /^\t"Require": \[$/) section = "require"
+        if ($0 ~ /^\t"Replace": \[$/) section = "replace"
+        next
+      }
+      if (section == "") next
+      if (d == 2 && $0 ~ /^\t\t\{$/) { path = version = side = ""; old = oldv = new = newv = ""; next }
+      if (d == 2 && $0 ~ /^\t\t\},?$/) {
+        if (section == "require") print "require\037" path "\037" version
+        else print "replace\037" old "\037" oldv "\037" new "\037" newv
+        next
+      }
+      if (section == "require" && d == 3) {
+        if ($0 ~ /^\t\t\t"Path": "/) path = value($0)
+        else if ($0 ~ /^\t\t\t"Version": "/) version = value($0)
+      } else if (section == "replace") {
+        if (d == 3 && $0 ~ /^\t\t\t"Old": \{$/) side = "old"
+        else if (d == 3 && $0 ~ /^\t\t\t"New": \{$/) side = "new"
+        else if (d == 4 && $0 ~ /^\t\t\t\t"Path": "/) {
+          if (side == "old") old = value($0); else new = value($0)
+        } else if (d == 4 && $0 ~ /^\t\t\t\t"Version": "/) {
+          if (side == "old") oldv = value($0); else newv = value($0)
+        }
+      }
+    }
+  ' <<<"$json"
+}

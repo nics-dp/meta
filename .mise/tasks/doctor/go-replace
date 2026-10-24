@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+#MISE description="Check that every local replace in go.mod points at a module directory (doctor probe)"
+#MISE hide=true
+#MISE raw=true
+
+# Read-only. A replace without a new version is a directory replacement (what
+# go:lib-local writes); the go command needs a go.mod there. Relative targets
+# resolve from the directory holding go.mod, the task's cwd.
+set -euo pipefail
+# shellcheck disable=SC1091
+source "$(dirname "$0")/../lib/go-mod"
+export GOTOOLCHAIN=local
+
+if [ ! -f go.mod ]; then
+  echo "no go.mod in $PWD" >&2
+  exit 1
+fi
+
+rows=$(go_mod_rows)
+
+missing=0
+while IFS=$'\037' read -r kind _ _ dir new_version; do
+  if [ "$kind" != replace ] || [ -n "$new_version" ]; then
+    continue
+  fi
+  if [ ! -f "$dir/go.mod" ]; then
+    echo "replace target $dir has no go.mod" >&2
+    missing=1
+  fi
+done <<<"$rows"
+exit "$missing"

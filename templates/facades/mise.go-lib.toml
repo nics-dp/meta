@@ -3,6 +3,9 @@
 [settings]
 jobs = 16
 task.output = "keep-order"
+# mise reads the git:: entry in [task_config] includes only with experimental on;
+# without it the shared meta tasks are skipped.
+experimental = true
 # Go comes from the `toolchain goX.Y.Z` line of go.mod, or of go.work when the repo
 # has one (see [tools]). CI's mise-action reads this file, so the setting lives
 # here, not only in a developer's config.
@@ -96,3 +99,49 @@ run = ["mise run init", "mise run go:generate", "mise run go:api-fix", "mise run
 [tasks.sbom]
 description = "Generate enriched SBOM and scan"
 depends = ["sbom:trivy", "sbom:grype"]
+
+# ==============================================================================
+# Doctor checks — `mise doctor project`
+# ==============================================================================
+# Read-only checks of what local development needs. mise rejects [doctor] in a
+# config include, so each repo declares its checks here and each `run` calls a
+# shared doctor:* atom with `--skip-tools`: a doctor run installs nothing, the
+# `tools` check names a missing tool once, and the checks whose atom runs a
+# project tool depend on it. `timeout` leaves room for a cold atom cache, when
+# every check's nested `mise run` clones the meta include at the same time;
+# mise's 10s default is too tight for that on a slow link. mise discards check
+# output; run the atom directly (`mise run doctor:go-vendor`) to see why a check
+# fails.
+[doctor.checks.tools]
+description = "Every tool this repo's mise config requests is installed"
+run = "mise run --quiet --skip-tools doctor:tools"
+hint = "Run `mise install`"
+timeout = "60s"
+
+[doctor.checks.go-replace]
+description = "Local replace directives in go.mod point at module directories"
+run = "mise run --quiet --skip-tools doctor:go-replace"
+hint = "Clone the module at the replace path, or run `mise run go:lib-remote`"
+depends = ["tools"]
+timeout = "60s"
+
+[doctor.checks.go-private]
+description = "The github.com/nics-dp modules go.mod requires are in the Go module cache"
+run = "mise run --quiet --skip-tools doctor:go-private"
+hint = "Run `mise run init` with git access to github.com/nics-dp"
+depends = ["tools"]
+timeout = "60s"
+
+[doctor.checks.go-vendor]
+description = "vendor/ matches go.mod"
+run = "mise run --quiet --skip-tools doctor:go-vendor"
+hint = "Run `mise run init`"
+depends = ["go-replace", "go-private"]
+timeout = "60s"
+
+[doctor.checks.go-cgo]
+description = "A C toolchain is available for cgo and the race detector"
+run = "mise run --quiet --skip-tools doctor:go-cgo"
+hint = "macOS: run `xcode-select --install`; Linux: install gcc or clang"
+depends = ["tools"]
+timeout = "60s"

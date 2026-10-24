@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+#MISE description="Check that the Docker daemon answers (doctor probe)"
+#MISE hide=true
+#MISE raw=true
+
+set -euo pipefail
+
+if ! command -v docker >/dev/null 2>&1; then
+  echo "docker CLI is not on PATH" >&2
+  exit 1
+fi
+if ! err=$(docker info 2>&1 >/dev/null); then
+  echo "docker info failed:" >&2
+  sed -n '1,3p' <<<"$err" >&2
+  exit 1
+fi
