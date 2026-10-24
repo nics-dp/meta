@@ -124,15 +124,28 @@ run = ["mise run init", "mise run build ::: test ::: release-check"]
 # ==============================================================================
 # Read-only checks of what local development needs. mise rejects [doctor] in a
 # config include, so each repo declares its checks here and each `run` calls a
-# shared doctor:* atom. mise discards check output; run the atom directly
-# (`mise run doctor:node-deps`) to see why a check fails.
+# shared doctor:* atom with `--skip-tools`: a doctor run installs nothing, the
+# `tools` check names a missing tool once, and the checks whose atom runs a
+# project tool depend on it. `timeout` leaves room for a cold atom cache, when
+# every check's nested `mise run` clones the meta include at the same time;
+# mise's 10s default is too tight for that on a slow link. mise discards check
+# output; run the atom directly (`mise run doctor:node-deps`) to see why a check
+# fails.
+[doctor.checks.tools]
+description = "Every tool this repo's mise config requests is installed"
+run = "mise run --quiet --skip-tools doctor:tools"
+hint = "Run `mise install`"
+timeout = "60s"
+
 [doctor.checks.node-deps]
 description = "node_modules/ is installed"
-run = "mise run --quiet doctor:node-deps"
+run = "mise run --quiet --skip-tools doctor:node-deps"
 hint = "Run `mise run init`"
+timeout = "60s"
 
 # Repo-specific checks: uncomment and name the env files this repo reads.
 # [doctor.checks.dotenv]
 # description = ".env exists"
-# run = "mise run --quiet doctor:dotenv .env .env.example"
+# run = "mise run --quiet --skip-tools doctor:dotenv .env .env.example"
 # hint = "Copy .env.example to .env and fill it in"
+# timeout = "60s"

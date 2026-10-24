@@ -141,52 +141,75 @@ run = ["mise run init", "mise run go:generate", "mise run go:api-fix", "mise run
 # ==============================================================================
 # Read-only checks of what local development needs. mise rejects [doctor] in a
 # config include, so each repo declares its checks here and each `run` calls a
-# shared doctor:* atom. mise discards check output; run the atom directly
-# (`mise run doctor:go-vendor`) to see why a check fails.
+# shared doctor:* atom with `--skip-tools`: a doctor run installs nothing, the
+# `tools` check names a missing tool once, and the checks whose atom runs a
+# project tool depend on it. `timeout` leaves room for a cold atom cache, when
+# every check's nested `mise run` clones the meta include at the same time;
+# mise's 10s default is too tight for that on a slow link. mise discards check
+# output; run the atom directly (`mise run doctor:go-vendor`) to see why a check
+# fails.
+[doctor.checks.tools]
+description = "Every tool this repo's mise config requests is installed"
+run = "mise run --quiet --skip-tools doctor:tools"
+hint = "Run `mise install`"
+timeout = "60s"
+
 [doctor.checks.go-replace]
 description = "Local replace directives in go.mod point at module directories"
-run = "mise run --quiet doctor:go-replace"
+run = "mise run --quiet --skip-tools doctor:go-replace"
 hint = "Clone the module at the replace path, or run `mise run lib:remote`"
+depends = ["tools"]
+timeout = "60s"
 
 [doctor.checks.go-private]
 description = "The github.com/nics-dp modules go.mod requires are in the Go module cache"
-run = "mise run --quiet doctor:go-private"
+run = "mise run --quiet --skip-tools doctor:go-private"
 hint = "Run `mise run init` with git access to github.com/nics-dp"
+depends = ["tools"]
+timeout = "60s"
 
 [doctor.checks.go-vendor]
 description = "vendor/ matches go.mod"
-run = "mise run --quiet doctor:go-vendor"
+run = "mise run --quiet --skip-tools doctor:go-vendor"
 hint = "Run `mise run init`"
 depends = ["go-replace", "go-private"]
+timeout = "60s"
 
 [doctor.checks.go-cgo]
 description = "A C toolchain is available for cgo and the race detector"
-run = "mise run --quiet doctor:go-cgo"
+run = "mise run --quiet --skip-tools doctor:go-cgo"
 hint = "macOS: run `xcode-select --install`; Linux: install gcc or clang"
+depends = ["tools"]
+timeout = "60s"
 
 [doctor.checks.submodules]
 description = "Git submodules are initialized"
-run = "mise run --quiet doctor:submodules"
+run = "mise run --quiet --skip-tools doctor:submodules"
 hint = "Run `mise run init`"
+timeout = "60s"
 
 [doctor.checks.docker]
 description = "The Docker daemon answers"
-run = "mise run --quiet doctor:docker"
+run = "mise run --quiet --skip-tools doctor:docker"
 hint = "Start the Docker daemon (Docker Desktop, OrbStack, Colima or the docker service)"
+timeout = "60s"
 
 # Repo-specific checks: uncomment what this repo's compose file needs.
 # [doctor.checks.dotenv]
 # description = ".env exists"
-# run = "mise run --quiet doctor:dotenv .env .env.example"
+# run = "mise run --quiet --skip-tools doctor:dotenv .env .env.example"
 # hint = "Copy .env.example to .env and fill it in"
+# timeout = "60s"
 #
 # [doctor.checks.docker-network]
 # description = "The external networks compose.yml joins exist"
-# run = "mise run --quiet doctor:docker-network reverse-proxy dcf-vpc"
+# run = "mise run --quiet --skip-tools doctor:docker-network reverse-proxy dcf-vpc"
 # hint = "Run `mise run setup --env dev` in dcf-local-env"
 # depends = ["docker"]
+# timeout = "60s"
 #
 # [doctor.checks.certs]
 # description = "The client certificates compose.yml mounts exist"
-# run = "mise run --quiet doctor:path ~/.config/dcf/certs"
+# run = "mise run --quiet --skip-tools doctor:path ~/.config/dcf/certs"
 # hint = "dcf-local-env's `install` task provisions ~/.config/dcf/certs"
+# timeout = "60s"
