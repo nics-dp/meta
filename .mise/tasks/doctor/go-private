@@ -2,17 +2,16 @@
 #MISE description="Check that go.mod's github.com/nics-dp requirements are in the module cache (doctor probe)"
 #MISE hide=true
 #MISE raw=true
-#MISE tools={"aqua:jqlang/jq"="1.8.2"}
 
 # Read-only and offline: each requirement, indirect ones included, must be in
 # $(go env GOMODCACHE) as an extracted module directory or a downloaded zip,
 # named with the cache's case encoding (an upper-case letter becomes `!` plus its
 # lower case). A requirement replaced by a directory is skipped, doctor:go-replace
-# covers it; one replaced by another module version is looked up as that version.
+# covers it; one replaced by another module version is looked up as that version,
+# a version-specific replace winning over one for every version.
 set -euo pipefail
 # shellcheck disable=SC1091
-source "$(dirname "$0")/../lib/require-tool"
-require_tool jq
+source "$(dirname "$0")/../lib/go-mod"
 export GOTOOLCHAIN=local
 
 if [ ! -f go.mod ]; then
@@ -21,24 +20,38 @@ if [ ! -f go.mod ]; then
 fi
 
 modcache=$(go env GOMODCACHE)
-wanted=$(go mod edit -json | jq -r '
-  def enc: gsub("(?<c>[A-Z])"; "!" + (.c | ascii_downcase));
-  (.Replace // []) as $rep
-  | (.Require // [])[]
-  | select(.Path | startswith("github.com/nics-dp/"))
-  | . as $req
-  | ([$rep[] | select(.Old.Path == $req.Path and .Old.Version == $req.Version)]
-     + [$rep[] | select(.Old.Path == $req.Path and (.Old.Version // "") == "")])
-  | first as $r
-  | if $r == null then $req
-    elif ($r.New.Version // "") == "" then empty
-    else $r.New
-    end
-  | [.Path + "@" + .Version, (.Path | enc), (.Version | enc)]
-  | @tsv')
+rows=$(go_mod_rows)
+wanted=$(awk -F '\037' '
+  function enc(s,   out, i, c) {
+    out = ""
+    for (i = 1; i <= length(s); i++) {
+      c = substr(s, i, 1)
+      if (index("ABCDEFGHIJKLMNOPQRSTUVWXYZ", c)) c = "!" tolower(c)
+      out = out c
+    }
+    return out
+  }
+  $1 == "replace" {
+    if ($3 == "") any[$2] = $4 "\037" $5
+    else exact[$2 "\037" $3] = $4 "\037" $5
+    next
+  }
+  $1 == "require" && index($2, "github.com/nics-dp/") == 1 { req[++n] = $2 "\037" $3 }
+  END {
+    for (i = 1; i <= n; i++) {
+      split(req[i], r, "\037")
+      if ((r[1] "\037" r[2]) in exact) target = exact[r[1] "\037" r[2]]
+      else if (r[1] in any) target = any[r[1]]
+      else target = req[i]
+      split(target, m, "\037")
+      if (m[2] == "") continue
+      print m[1] "@" m[2] "\037" enc(m[1]) "\037" enc(m[2])
+    }
+  }
+' <<<"$rows")
 
 missing=0
-while IFS=$'\t' read -r mod path version; do
+while IFS=$'\037' read -r mod path version; do
   [ -n "$mod" ] || continue
   if [ ! -d "$modcache/$path@$version" ] &&
     [ ! -f "$modcache/cache/download/$path/@v/$version.zip" ]; then
