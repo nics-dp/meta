@@ -147,7 +147,9 @@ run = ["mise run init", "mise run go:generate", "mise run go:api-fix", "mise run
 # every check's nested `mise run` clones the meta include at the same time;
 # mise's 10s default is too tight for that on a slow link. mise discards check
 # output; run the atom directly (`mise run doctor:go-vendor`) to see why a check
-# fails.
+# fails. A check that chains `test -f` or `test -d` after doctor:path also
+# fails when a path exists with the wrong type; doctor:path alone passes then,
+# so check that path's type by hand.
 [doctor.checks.tools]
 description = "Every tool this repo's mise config requests is installed"
 run = "mise run --quiet --skip-tools doctor:tools"
@@ -157,7 +159,7 @@ timeout = "60s"
 [doctor.checks.go-replace]
 description = "Local replace directives in go.mod point at module directories"
 run = "mise run --quiet --skip-tools doctor:go-replace"
-hint = "Clone the module at the replace path, or run `mise run lib:remote`"
+hint = "Clone the module at the replace path, or remove its replace directive from go.mod (`mise run lib:remote` does that for the modules GO_LIB_REMOTE lists)"
 depends = ["tools"]
 timeout = "60s"
 
@@ -208,8 +210,11 @@ timeout = "60s"
 # depends = ["docker"]
 # timeout = "60s"
 #
+# List every certificate file compose.yml bind-mounts. doctor:path passes a
+# directory, and Docker creates one at a missing bind-mount source, so each
+# path also gets `test -f`, which stats the file without opening it.
 # [doctor.checks.certs]
-# description = "The client certificates compose.yml mounts exist"
-# run = "mise run --quiet --skip-tools doctor:path ~/.config/dcf/certs"
-# hint = "dcf-local-env's `install` task provisions ~/.config/dcf/certs"
+# description = "The client certificates compose.yml mounts exist as files"
+# run = "mise run --quiet --skip-tools doctor:path ~/.config/dcf/certs/ca.crt ~/.config/dcf/certs/client.crt ~/.config/dcf/certs/client.key && test -f ~/.config/dcf/certs/ca.crt && test -f ~/.config/dcf/certs/client.crt && test -f ~/.config/dcf/certs/client.key"
+# hint = "Run `mise run setup --env dev` in dcf-local-env, then copy ca.crt, client.crt and client.key from its certs/ to ~/.config/dcf/certs; if one of them is a directory (Docker creates one for a missing mount source), remove it first"
 # timeout = "60s"
