@@ -81,7 +81,10 @@ jobs:
     # renovate.json bumps them together). Keep it at
     # or above the first build whose embedded Sigstore trust root carries GitHub's
     # current TSA cert: older builds fail artifact-attestation verification on
-    # tool installs (jdx/mise#10680).
+    # tool installs (jdx/mise#10680). Keep it also at or above the first build
+    # that accepts `depends` in `[doctor.checks.*]`: the facade templates and
+    # consumer mise.toml files declare it, and an older build rejects the whole
+    # config as invalid TOML, so `mise install` fails before any task runs.
     #
     # The mise-versions.jdx.dev host (CDN cache of version listings) is kept
     # ENABLED (mise default). It occasionally 403s, but mise falls back to
@@ -201,7 +204,7 @@ jobs:
 
       - uses: jdx/mise-action@2d8d4cafcbd33be2ea37d2b6f5ad595363d1f1ca # v5.1.1
         with:
-          version: "2026.10.17"
+          version: "2026.10.18"
           cache: true
 
       - name: Resolve Go cache
