@@ -121,7 +121,7 @@ timeout = "60s"
 [doctor.checks.go-replace]
 description = "Local replace directives in go.mod point at module directories"
 run = "mise run --quiet --skip-tools doctor:go-replace"
-hint = "Clone the module at the replace path, or run `mise run go:lib-remote`"
+hint = "Clone the module at the replace path, or remove its replace directive from go.mod (`mise run go:lib-remote` does that for the modules GO_LIB_REMOTE lists)"
 depends = ["tools"]
 timeout = "60s"
 
