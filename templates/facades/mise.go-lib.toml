@@ -3,6 +3,9 @@
 [settings]
 jobs = 16
 task.output = "keep-order"
+# mise reads the git:: entry in [task_config] includes only with experimental on;
+# without it the shared meta tasks are skipped.
+experimental = true
 # Go comes from the `toolchain goX.Y.Z` line of go.mod, or of go.work when the repo
 # has one (see [tools]). CI's mise-action reads this file, so the setting lives
 # here, not only in a developer's config.

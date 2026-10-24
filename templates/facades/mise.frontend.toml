@@ -3,6 +3,9 @@
 [settings]
 jobs = 16
 task.output = "keep-order"
+# mise reads the git:: entry in [task_config] includes only with experimental on;
+# without it the shared meta tasks are skipped.
+experimental = true
 
 # ------------------------------------------------------------------------------
 [tools]
