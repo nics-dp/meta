@@ -23,7 +23,8 @@ and the polyrepo map before judging blast radius).
 ## Where things are
 
 - `.mise/tasks/<category>/<name>` — one executable bash file per atom under
-  `ci/`, `iac/`, `go/`, `node/`, `py/`, `sbom/`, `gs/`, `dc/`, `meta/`, `mise/`.
+  `ci/`, `iac/`, `go/`, `node/`, `py/`, `sbom/`, `gs/`, `dc/`, `doctor/`, `meta/`,
+  `mise/`.
   Each is hidden (`#MISE hide=true`); an atom that needs a tool beyond bash
   and the consumer's own toolchain declares it inline in `#MISE tools=`.
   `lib/` holds sourced helpers, not tasks (`ci-isolate`,
@@ -141,6 +142,19 @@ before changing any of these; the mechanism is in the code, the history in
 - File-mutating lint / format atoms are named `*-fix` and paired with a
   `*-check`; the facade templates define `release-check` as `ci` minus the
   `*-fix` atoms on that basis. → `templates/facades/*.toml`.
+- `doctor:*` atoms are the probes behind `mise doctor project`. mise rejects
+  `[doctor]` in a config include, so each facade (and each consumer's
+  `mise.toml`) declares its `[doctor.checks.<name>]` and the check's `run` is
+  `mise run --quiet doctor:<atom> …`; the logic stays in the atom. Atoms only
+  inspect state: they stat secret-bearing paths without opening them, fetch
+  nothing over the network, open no credential store, and never log in or
+  diagnose auth. mise renders `run`, `description` and `hint` through Tera, so
+  a literal Go-template `{{ }}` in `run` breaks the check, and it discards
+  check output, so the reason an atom prints shows only on a direct
+  `mise run doctor:<atom>`. An
+  agent sandbox that denies `.env` or the Docker socket fails those probes;
+  developers run `mise doctor project` themselves. → `.mise/tasks/doctor/`,
+  the doctor section at the end of `templates/facades/*.toml`.
 
 **Shared configs** → `docs/design-notes/shared-config-resolution.md`
 

@@ -7,7 +7,7 @@ nics-dp 組織共用 mise tasks + reusable GitHub Actions workflows + 共用設�
 | 目錄/檔案              | 說明                                                                                                                                                                                       |
 | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `.github/workflows/`   | Reusable GitHub Actions workflows (`mise-task.yml` 為核心；release / sbom-image / codeql / utility 等)                                                                                       |
-| `.mise/tasks/`         | 共用 mise atomic tasks (`ci/`, `iac/`, `go/`, `node/`, `py/`, `sbom/`, `gs/`, `dc/`, `meta/`, `lib/`)，consumer 透過 `git::` remote includes 引用                                             |
+| `.mise/tasks/`         | 共用 mise atomic tasks (`ci/`, `iac/`, `go/`, `node/`, `py/`, `sbom/`, `gs/`, `dc/`, `doctor/`, `meta/`, `mise/`, `lib/`)，consumer 透過 `git::` remote includes 引用                                             |
 | `templates/facades/`   | mise.toml facade templates (`mise.go-service.toml`, `mise.go-lib.toml`, `mise.frontend.toml`, `mise.python.toml`, `mise.image.toml`) — copy 後依需求加 repo-specific 即可使用 |
 | `configs/`             | 共用設定檔 (`eslint.config.js`, `.prettierrc.json`, `.prettierignore`, `.oxfmtrc.json`, `lighthouserc.json`, `playwright.config.ts`)。`vitest.config.ts` / `knip.json` 改為 repo-local（各 consumer commit 自家 root 檔，工具自動發現）；`.golangci.yml` 亦非共享（見下方例外） |
 | `renovate-preset.json` | Org-level Renovate preset (`extends` from consumer `renovate.json`)                                                                                                                        |
@@ -37,6 +37,7 @@ Facade templates 於 `templates/facades/`，包含 `[settings]` / `[tools]` / `[
 | `sbom:*`  | source, enrich, trivy, grype                                                                                                                                                                   | Source SBOM 產生與漏洞掃描                                                                                                                                                                                                                                                                                                                                                                          |
 | `gs:*`    | clone, update                                                                                                                                                                                  | Git submodules                                                                                                                                                                                                                                                                                                                                                                                      |
 | `dc:*`    | up, down, pull, rec, clean                                                                                                                                                                      | Docker Compose 生命週期（本機 dev stack 起／停／拉取／重建／清除）                                                                                                                                                                                                                                                                                                                                  |
+| `doctor:*` | go-vendor, go-replace, go-private, go-cgo, dotenv, docker, docker-network, path, submodules, node-deps, py-venv                                                                              | `mise doctor project` 的唯讀探針，由 facade 的 `[doctor.checks]` 以 `mise run --quiet doctor:<atom>` 呼叫；通過 exit 0，失敗 exit 非 0 並在 stderr 印出原因。`go-vendor` 以 `go list -mod=vendor -m` 確認 `vendor/` 與 `go.mod` 一致（go 指令自己的 vendor 一致性檢查）；`go-replace` 確認 `go.mod` 中以 `.` 或 `/` 開頭的 replace 目標有 `go.mod`；`go-private` 離線確認 `go.mod` 要求的 `github.com/nics-dp/*` 模組已在 `GOMODCACHE`（解壓目錄或 zip，套用大小寫編碼，目錄 replace 略過）；`go-cgo` 確認 `go env CC` 可執行（macOS 先確認 Command Line Tools）；`dotenv [file] [example]`、`path <path...>` 只確認存在、不讀內容；`docker` 確認 `docker info` 成功；`docker-network <name...>` 確認網路存在；`submodules` 確認沒有未初始化的 submodule；`node-deps` 確認 `node_modules/` 存在；`py-venv [dir]` 確認 `.venv/bin/python` 可執行。Go atoms 設 `GOTOOLCHAIN=local`，不會下載 toolchain |
 | `meta:*`  | bump                                                                                                                                                                                           | 清 mise tasks cache 強制重抓 atom includes                                                                                                                                                                                                                                                                                                                                                          |
 | `mise:*`  | validate                                                                                                                                                                                       | 驗證 mise 目前載入的完整 task graph（循環、缺少 dependency、usage 等）                                                                                                                                                                                                                                                                                                                              |
 | `lib/*`   | logs, go-env, go-version, py-env, ci-isolate                                                                                                                                                   | 內部 sourced helper library；`ci-isolate` 在 definition checks 啟動外部命令前隔離 Git config 並移除 GitHub/private-module token env                                                                                                                                                                                                                                                                                                                                                                         |
@@ -63,6 +64,25 @@ Repo-specific concepts (`stg:*`, `pgroll:*`, `benchmark:*`, `spec`, `example:*` 
 ### Override 規則
 
 Consumer 在自家 `mise.toml` 定義同名 task 即覆寫（mise 偏好近檔）。`update` facade 用 `meta:bump` 清 mise cache 強制下次 run 重抓 `main`；一旦 ref 改成 tag (`v1`)，`meta:bump` 變 no-op，須手動改 ref。
+
+### 本機前置檢查（`mise doctor project`）
+
+`mise doctor project` 執行 `mise.toml` 宣告的 `[doctor.checks.<name>]`，一次列出本機開發還缺什麼。每份 facade 範本結尾都依 archetype 宣告了適用於該類所有 repo 的檢查；`.env`、compose 的外部網路（`reverse-proxy`、`dcf-vpc`）與 `~/.config/dcf/certs` 這類依 repo 而定的檢查附為註解範例，依 repo 需要取消註解。
+
+| Facade       | 啟用的檢查                                                                      | 註解範例                                        |
+| ------------ | ------------------------------------------------------------------------------- | ----------------------------------------------- |
+| `go-service` | go-replace、go-private、go-vendor（depends 前兩者）、go-cgo、submodules、docker | dotenv、docker-network（depends docker）、certs |
+| `go-lib`     | go-replace、go-private、go-vendor（depends 前兩者）、go-cgo                     | —                                               |
+| `frontend`   | node-deps                                                                       | dotenv                                          |
+| `python`     | py-venv                                                                         | dotenv                                          |
+| `image`      | docker、submodules                                                              | —                                               |
+
+- `[doctor]` 不能放進設定層級的 `include`（mise 回 `` `doctor` is not supported in a config include ``），所以檢查宣告在各 repo 自己的 `mise.toml`，`run` 呼叫 `mise run --quiet doctor:<atom> …`，判斷邏輯集中在 atom。
+- `description`、`run`、`hint` 經 Tera 渲染，可用 `{{ vars.x }}`；`run` 內不能直接寫 Go template 的 `{{ }}`。
+- mise 會丟棄檢查的輸出，報告只顯示 PASS／FAIL／BLOCKED、exit status 與 `hint`。要看失敗原因，直接執行 atom，例如 `mise run doctor:go-vendor`。
+- `depends` 指向的檢查沒通過時，該檢查顯示 BLOCKED，不執行，也不顯示 `hint`。
+- 檢查只看狀態：不讀 `.env`、token 或憑證檔的內容，不連網，不做登入或認證診斷。
+- Agent 的 sandbox 若拒絕存取 `.env` 或 Docker socket（Claude Code 的 sandbox 會擋 `.env`），對應檢查會判為失敗，所以 `mise doctor project` 由開發者自己在終端機執行。
 
 ### Go atoms 之 env 覆寫
 
@@ -312,7 +332,7 @@ Consumer repo 之 `renovate.json` 引用 org preset：
    - org **secret** `CI_READ_APP_PRIVATE_KEY`（caller 以 `secrets:` 顯式傳 `ci_read_app_private_key`：Go 私模 + CodeQL private repo + release/snapshot）
    - `DOCKERHUB_USERNAME` + `DOCKERHUB_TOKEN` (Docker image repos)
 
-驗證：`mise tasks ls` 應只顯示範本內的 facade 名 + repo-specific extras（atoms hidden）；`mise run --dry-run ci test sbom` resolve 無誤。
+驗證：`mise tasks ls` 應只顯示範本內的 facade 名 + repo-specific extras（atoms hidden）；`mise run --dry-run ci test sbom` resolve 無誤；`mise doctor project` 列出本機還缺的前置條件（見「本機前置檢查」）。
 
 ### 本機 git hooks（hk）
 
