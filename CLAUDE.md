@@ -116,15 +116,18 @@ before changing any of these; the mechanism is in the code, the history in
   before the exit code is decided (not fail-fast): `run` reaches formatting only
   where a repo declares `formatters:`, with test scope controlled by `run.tests`.
   → the header comment in `.mise/tasks/go/lint-check`.
-- `go:sast` and `security-sarif.yml` each build gosec from source with the
-  scanning Go toolchain, in a throwaway module carrying the gosec pin and a
-  `golang.org/x/tools` floor (`-require=` lines), because a released gosec can
-  carry an x/tools whose importer predates that toolchain's export data, and
-  then every package fails to load. The "synchronized gosec pins" custom manager
-  in `renovate.json` moves both gosec lines together; do not bump one alone. The
-  floor has no manager: MVS lets gosec's own requirement win once it is higher.
-  `go:sast` runs `-terse`, not `-quiet`, which exits 0 on zero findings before
-  load errors count. → the comments above the build in both files.
+- `go:sast` and `security-sarif.yml` each run the gosec release binary that
+  mise installs from a `github:securego/gosec` pin: the atom's `#MISE tools=`
+  header, and in the workflow a one-tool `mise.toml` in a job-private mise root
+  that never reads the caller's mise configuration. The "synchronized gosec
+  pins" custom manager in `renovate.json` moves both pins together; do not bump
+  one alone. The release binary type-checks with the `go/types` of the Go its
+  release was built with, so on a module that declares a newer Go language
+  version every package errors until a gosec release built with that Go ships.
+  `go:sast` runs `-terse`, not `-quiet` (which exits 0 on zero findings before
+  load errors count), and blocking `security-sarif.yml` runs without
+  `-no-fail`, so that case fails instead of passing green. → the comments above
+  the install in both files.
 - `meta:bump` is `mise cache clear` + `mise install` and nothing else; it is
   unconditional — pinning a tag instead of `?ref=main` bounds which revision
   the include resolves to, it does not make the task a no-op.
@@ -162,8 +165,9 @@ before changing any of these; the mechanism is in the code, the history in
 - `MISE_MINIMUM_RELEASE_AGE: "0"` stays; `jdx/mise-action` pins an exact mise
   version, not `latest`; `MISE_USE_VERSIONS_HOST` is left at the mise default.
   The version pin is carried in `mise-task.yml`, `auto-release.yml`'s
-  `mise_version` default, `self-release.yml` and `mise-tools-image.yml`, and the
-  "synchronized mise pins" custom manager in `renovate.json` bumps them together.
+  `mise_version` default, `self-release.yml`, `mise-tools-image.yml` and
+  `security-sarif.yml`'s gosec install, and the "synchronized mise pins" custom
+  manager in `renovate.json` bumps them together.
   → the `env:` comment on the `run` job.
 - `inputs.task` reaches the shell through an env variable and `read -ra`, never
   an inline `${{ }}` (semgrep run-shell-injection). → the "Run" step comment.
@@ -305,10 +309,11 @@ before changing any of these; the mechanism is in the code, the history in
   `mise-task.yml` by local path and the `self-*.yml` callers use `@main`, the
   same mutable ref every consumer uses. Workflow inputs cross into `run:`
   through `env:`, not inline expressions. Private job state — the gitconfigs
-  that carry App tokens, `security-sarif.yml`'s `GOBIN`, `mise-task.yml`'s
-  job-local Go cache roots — lives under `RUNNER_TEMP` and is removed under
-  `always()`; scanner outputs meant for upload (`results.filtered.sarif`,
-  `semgrep.sarif`) stay in the workspace. → each workflow's cleanup steps.
+  that carry App tokens, `security-sarif.yml`'s `GOBIN` and gosec mise root,
+  `mise-task.yml`'s job-local Go cache roots — lives under `RUNNER_TEMP` and is
+  removed under `always()`; scanner outputs meant for upload
+  (`results.filtered.sarif`, `semgrep.sarif`) stay in the workspace. → each
+  workflow's cleanup steps.
 - No hard-coded counts, line numbers or duplicated version literals in
   `CLAUDE.md` / `docs/design-notes/`; point at the file that holds the pin.
 
