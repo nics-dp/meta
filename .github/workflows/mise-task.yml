@@ -115,7 +115,7 @@ jobs:
       - name: Setup | Mint private-module token
         id: priv-token
         if: ${{ env.HAS_CI_APP == 'true' && inputs.private-modules && env.UNTRUSTED_TRIGGER != 'true' }}
-        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
         with:
           client-id: ${{ vars.CI_READ_APP_CLIENT_ID }}
           private-key: ${{ secrets.ci_read_app_private_key }}
@@ -202,7 +202,7 @@ jobs:
             echo "GOMODCACHE=$cache_root/mod"
           } >> "$GITHUB_ENV"
 
-      - uses: jdx/mise-action@2d8d4cafcbd33be2ea37d2b6f5ad595363d1f1ca # v5.1.1
+      - uses: jdx/mise-action@fc42bcc7ddbf51124c30f95a877a0c5168a3bfde # v5.2.1
         with:
           version: "2026.10.19"
           cache: true

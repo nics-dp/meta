@@ -59,7 +59,7 @@ jobs:
       - name: Setup | Mint private-module token
         id: priv-token
         if: env.HAS_CI_APP == 'true'
-        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
         with:
           client-id: ${{ vars.CI_READ_APP_CLIENT_ID }}
           private-key: ${{ secrets.ci_read_app_private_key }}
@@ -74,7 +74,7 @@ jobs:
           token: ${{ inputs.submodules != 'false' && steps.priv-token.outputs.token || github.token }}
 
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@24c54180a607b1449ed407dd24f251e4e9147c8d # v4.38.3
+        uses: github/codeql-action/init@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4.39.0
         with:
           languages: ${{ matrix.language }}
           build-mode: ${{ matrix.build-mode }}
@@ -143,6 +143,6 @@ jobs:
           git config --global --remove-section "url.https://x-access-token:${GH_PAT}@github.com/nics-dp/" 2>/dev/null || true
 
       - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@24c54180a607b1449ed407dd24f251e4e9147c8d # v4.38.3
+        uses: github/codeql-action/analyze@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4.39.0
         with:
           category: "/language:${{matrix.language}}"
