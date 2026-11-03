@@ -1,0 +1,15 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "description": "Run `go mod tidy` after gomod updates. renovate-preset extends this preset instead of setting the option inline because postUpdateOptions is a mergeable array: a consumer packageRule can only add to it, never remove gomodTidy. A consumer whose go.mod has no Go package (a Hugo module) lists this preset in ignorePresets, because tidy cannot see Hugo imports and deletes their requires and go.sum entries.",
+  "packageRules": [
+    {
+      "description": "go mod tidy after every gomod update",
+      "matchManagers": [
+        "gomod"
+      ],
+      "postUpdateOptions": [
+        "gomodTidy"
+      ]
+    }
+  ]
+}
