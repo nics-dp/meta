@@ -317,6 +317,8 @@ Consumer repo 之 `renovate.json` 引用 org preset：
 - `go.work` 的 `toolchain goX.Y.Z` 行（workspace 模式下 Go 與 mise 以 `go.work` 選 toolchain，gomod manager 只讀 `go.mod`；抽成 `go` 進 `go toolchain` 群組，`go` 指令不動）
 - `jdx/hk` — `hk.pkl` 的 `Config.pkl`（`amends`）／`Builtins.pkl`（`import`）`package://` 釘版；兩個 URL 必須同版，URL 內的 release tag 與 `hk@` 版本一起更新（放在 preset 是因為 consumer 直接複製 `hk.pkl`）
 
+gomod 更新後的 `go mod tidy` 放在獨立 preset `renovate-gomod-tidy.json`，由 `renovate-preset.json` 的 `extends` 引入。`postUpdateOptions` 是可合併的陣列，consumer 的 packageRule 只能追加、拿不掉 `gomodTidy`；`go.mod` 沒有 Go package 的 consumer（Hugo module）要在自家 `renovate.json` 加 `"ignorePresets": ["github>nics-dp/meta:renovate-gomod-tidy"]`，否則 tidy 看不到 Hugo 的 import，會刪掉主題的 require 與 `go.sum` 紀錄。
+
 > workflow（`.github/workflows/**`）內以 `go install …@vX` 釘版的工具（quill、parlay、govulncheck）、gosec 的 `github:securego/gosec` pin（`go:sast` header 與 `security-sarif.yml` 寫入的 `mise.toml` 行都帶 `v` 前綴，preset 的 task-header manager 只比對數字開頭的版本）與各 workflow 的 `jdx/mise-action` `version:` pin **不在「org preset」customManager 覆蓋範圍**（preset 只含上列 regex customManagers，供 consumer extend），而是由 meta repo 自家 `renovate.json` 的 self customManagers 追蹤。Self managers 也同步抽取 ShellCheck atom pin、Zizmor atom + official-action CLI input，以及 Grype workflow input；package rules 將 Zizmor action+CLI 與 Anchore action+Grype 各自分組且禁止 automerge，因 image `support/versions` digest 或 scanner policy 必須人工覆核。Snyk Labs scanner commit 刻意沒有 manager，只能手動驗 signed source、support/lock diff 與完整 baseline。consumer repo 無此類 workflow/self-validation 工具釘版，故 preset 不需涵蓋。
 
 ---
