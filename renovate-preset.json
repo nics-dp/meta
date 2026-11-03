@@ -4,7 +4,8 @@
   "extends": [
     "config:recommended",
     ":timezone(Asia/Taipei)",
-    "schedule:earlyMondays"
+    "schedule:earlyMondays",
+    "github>nics-dp/meta:renovate-gomod-tidy"
   ],
   "registryAliases": {
     "dhi.io": "dhi.io"
@@ -100,10 +101,7 @@
         "go"
       ],
       "automerge": false,
-      "dependencyDashboardApproval": true,
-      "postUpdateOptions": [
-        "gomodTidy"
-      ]
+      "dependencyDashboardApproval": true
     },
     {
       "description": "Group GitHub Actions updates",
