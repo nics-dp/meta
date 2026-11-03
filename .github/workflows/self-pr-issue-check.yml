@@ -3,7 +3,7 @@
 name: pr-issue-check
 
 # PR gate: the PR must have a linked same-repo issue (Closes #N) and every
-# linked issue must have the `version` field set on its Project 3 item. See
+# linked issue must have the `version` field set on its Project 6 item. See
 # nics-dp/meta/.github/workflows/pr-issue-check.yml for scope and details.
 # Intended to back an org-ruleset required status check
 # (`pr-issue-check / pr-issue-check`); keep the job id stable.

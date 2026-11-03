@@ -8,7 +8,7 @@ name: PR Issue Check
 #   1. has at least one linked issue (GitHub "closing references", i.e. the
 #      `Closes #N` keywords in the PR body), and
 #   2. every linked issue has the `version` custom field set on its item in
-#      the org-wide Projects v2 board (nics-dp Project 3 by default).
+#      the org-wide Projects v2 board (nics-dp Project 6 by default).
 #
 # GitHub rulesets have no native rule for either condition, so this workflow
 # is meant to be wired as a REQUIRED STATUS CHECK: callers run it on
@@ -79,7 +79,7 @@ on:
       project_number:
         required: false
         type: number
-        default: 3
+        default: 6
         description: "Projects v2 board number (on the repository owner org) holding the version field."
       version_field:
         required: false
