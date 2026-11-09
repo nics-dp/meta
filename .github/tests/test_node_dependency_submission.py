@@ -636,37 +636,55 @@ class SubmissionTests(unittest.TestCase):
         with self.assertRaises(FileNotFoundError):
             self.helper.prepare(self.project, ".")
 
-    def test_sha_event_allowlist(self):
-        expected_events = (
+    def test_snapshot_trigger_allowlist(self):
+        allowed = ("push", "schedule", "workflow_dispatch")
+        self.assertEqual(self.helper.SNAPSHOT_EVENTS, set(allowed))
+        for event in allowed:
+            self.assertEqual(self.helper.snapshot_sha(event, "a" * 40), "a" * 40)
+        for event in (
             "pull_request",
             "pull_request_review",
             "pull_request_review_comment",
-        )
-        self.assertEqual(self.helper.PR_EVENTS, set(expected_events))
-        for event in expected_events:
-            self.assertEqual(
-                self.helper.selected_sha(
-                    event, {"pull_request": {"head": {"sha": "b" * 40}}}, "a" * 40
-                ),
-                "b" * 40,
+            "pull_request_target",
+            "issue_comment",
+            "workflow_run",
+            "merge_group",
+            "",
+        ):
+            with (
+                self.subTest(event=event),
+                self.assertRaisesRegex(ValueError, "unsupported trigger"),
+            ):
+                self.helper.snapshot_sha(event, "a" * 40)
+        for sha in ("not-a-sha", "A" * 40, "a" * 39, None):
+            with self.subTest(sha=sha), self.assertRaisesRegex(ValueError, "SHA"):
+                self.helper.snapshot_sha("push", sha)
+
+    def test_guard_refuses_pull_request_runs_before_checkout(self):
+        source = WORKFLOW.read_text()
+        guard = "python3 -I \"$state/helper.py\" guard\n"
+        checkout = source.split("      - name: Checkout snapshot commit\n")
+        self.assertEqual(len(checkout), 2)
+        self.assertIn(guard, checkout[0])
+        step = checkout[1].split("      - name:")[0]
+        self.assertIn("          ref: ${{ github.sha }}\n", step)
+        self.assertNotIn("steps.", step)
+        helper = self.state / "helper.py"
+        helper.write_text(helper_source())
+
+        def run_guard(event):
+            return subprocess.run(
+                [sys.executable, "-I", "-B", str(helper), "guard"],
+                env={"EVENT_NAME": event, "CONTEXT_SHA": "a" * 40},
+                capture_output=True,
+                timeout=10,
+                check=False,
             )
-        for event in ("push", "schedule", "pull_request_target", "workflow_dispatch"):
-            self.assertEqual(self.helper.selected_sha(event, {}, "a" * 40), "a" * 40)
-        issue_comment = {
-            "action": "created",
-            "issue": {
-                "number": 42,
-                "pull_request": {
-                    "url": "https://api.github.com/repos/org/repo/pulls/42"
-                },
-            },
-        }
-        self.assertEqual(
-            self.helper.selected_sha("issue_comment", issue_comment, "a" * 40),
-            "a" * 40,
-        )
-        with self.assertRaises(ValueError):
-            self.helper.selected_sha("push", {}, "not-a-sha")
+
+        self.assertEqual(run_guard("push").returncode, 0)
+        refused = run_guard("pull_request")
+        self.assertNotEqual(refused.returncode, 0)
+        self.assertIn(b"unsupported trigger 'pull_request'", refused.stderr)
 
     def test_jsonc_duplicates_and_unsafe_metadata(self):
         path = self.state / "input.json"
@@ -954,7 +972,7 @@ class SubmissionTests(unittest.TestCase):
                 [shutil.which("node"), "-e", wrapper],
                 env={
                     "STATE": str(self.state),
-                    "SELECTED_SHA": "a" * 40,
+                    "SNAPSHOT_SHA": "a" * 40,
                     "CODE": code,
                     "RESPONSE": json.dumps(response),
                     "REJECT": "1" if reject else "0",
