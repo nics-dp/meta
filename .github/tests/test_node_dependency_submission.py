@@ -667,7 +667,8 @@ class SubmissionTests(unittest.TestCase):
         self.assertEqual(len(checkout), 2)
         self.assertIn(guard, checkout[0])
         step = checkout[1].split("      - name:")[0]
-        self.assertIn("          ref: ${{ github.sha }}\n", step)
+        self.assertNotIn("ref:", step)
+        self.assertNotIn("repository:", step)
         self.assertNotIn("steps.", step)
         helper = self.state / "helper.py"
         helper.write_text(helper_source())

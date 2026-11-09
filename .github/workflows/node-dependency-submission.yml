@@ -727,12 +727,12 @@ jobs:
           SUBMISSION_PY
           python3 -I "$state/helper.py" guard
 
-      # The guard above fails every trigger outside SNAPSHOT_EVENTS, so github.sha
-      # is never pull-request code here; no event-payload ref reaches checkout.
+      # The guard above fails every trigger outside SNAPSHOT_EVENTS, so the run's own commit is
+      # never pull-request code. No ref input: checkout's default fetches github.sha, the build
+      # step asserts HEAD == SNAPSHOT_SHA, and CodeQL has no ref expression to treat as untrusted.
       - name: Checkout snapshot commit
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ github.sha }}
           fetch-depth: 1
           persist-credentials: false
 
