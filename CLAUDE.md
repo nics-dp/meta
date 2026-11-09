@@ -233,8 +233,10 @@ before changing any of these; the mechanism is in the code, the history in
 - `dependency-review.yml` must be called from a `pull_request`- or
   `pull_request_target`-triggered workflow (the action needs the PR base/head
   refs); `node-dependency-submission.yml` exists apart from the Go one
-  because GitHub's dependency graph does not parse `bun.lock`. → the header
-  comments.
+  because GitHub's dependency graph does not parse `bun.lock`, and admits only
+  `push` / `schedule` / `workflow_dispatch` callers: any other trigger fails
+  before checkout, so its `contents: write` job never checks out pull-request
+  code. → the header comments, `SNAPSHOT_EVENTS`.
 - `auto-release.yml` runs `mise run all` and fails if the tree changed; the
   secret / license scans run as separate steps after it. → "Run mise run all".
 
