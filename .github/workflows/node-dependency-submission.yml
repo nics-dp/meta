@@ -3,6 +3,9 @@ name: Node Dependency Submission
 
 # Native Bun production membership gates the version/location-aware npm graph.
 # Non-npm findings remain in the submitted snapshot and corrected SPDX artifact.
+# Callers trigger it on push, schedule or workflow_dispatch only: any other
+# event fails before checkout, so this contents: write job never checks out
+# pull-request code and always snapshots github.sha.
 on:
   workflow_call:
     inputs:
@@ -56,8 +59,9 @@ jobs:
           import tempfile
           from urllib.parse import quote, unquote
 
-          PR_EVENTS = {'pull_request', 'pull_request_review',
-                       'pull_request_review_comment'}
+          # Triggers whose github.sha is a branch or tag commit that a repository writer put there.
+          # Pull-request events point it at contributor code and are refused, not redirected.
+          SNAPSHOT_EVENTS = {'push', 'schedule', 'workflow_dispatch'}
           EXCLUDE = '**/node_modules/**/.github/workflows/**'
 
           def require(condition, message):
@@ -123,10 +127,14 @@ jobs:
                   if os.path.exists(temporary):
                       os.unlink(temporary)
 
-          def selected_sha(event, payload, context_sha):
-              sha = payload['pull_request']['head']['sha'] if event in PR_EVENTS else context_sha
+          def commit_sha(sha):
               require(isinstance(sha, str) and re.fullmatch(r'[0-9a-f]{40}', sha), 'invalid SHA')
               return sha
+
+          def snapshot_sha(event, context_sha):
+              require(event in SNAPSHOT_EVENTS, 'unsupported trigger ' + repr(event) + '; allowed: ' +
+                      ', '.join(sorted(SNAPSHOT_EVENTS)))
+              return commit_sha(context_sha)
 
           def package_name(name):
               text(name)
@@ -471,7 +479,7 @@ jobs:
                           for node in by_key[dependent]:
                               node['dependencies'] = sorted(set(node['dependencies']) | {dependency})
               result['manifests'] = manifests
-              result['sha'] = selected_sha('push', {}, context['sha'])
+              result['sha'] = commit_sha(context['sha'])
               result['ref'] = text(context['ref'])
               result['job'] = {'id': text(context['run_id']),
                                'correlator': text(strip_emojis(text(context['workflow']) + '_' +
@@ -655,14 +663,13 @@ jobs:
 
           def main():
               parser = argparse.ArgumentParser()
-              parser.add_argument('command', choices=['select', 'prepare', 'run', 'finish'])
+              parser.add_argument('command', choices=['guard', 'prepare', 'run', 'finish'])
               for name in ('state', 'workspace', 'wd', 'sha', 'bun', 'syft', 'project', 'source',
                            'raw', 'inventory', 'inventory-stderr', 'context', 'parent'):
                   parser.add_argument('--' + name)
               args = parser.parse_args()
-              if args.command == 'select':
-                  print('sha=' + selected_sha(os.environ['EVENT_NAME'], load(os.environ['GITHUB_EVENT_PATH']),
-                                             os.environ['CONTEXT_SHA']))
+              if args.command == 'guard':
+                  snapshot_sha(os.environ['EVENT_NAME'], os.environ['CONTEXT_SHA'])
               elif args.command == 'prepare':
                   prepare(args.workspace, args.wd)
               elif args.command == 'finish':
@@ -672,7 +679,7 @@ jobs:
                   state = Path(args.state).resolve(strict=True)
                   root = prepare(args.workspace, args.wd)
                   head = execute(['/usr/bin/git', '-C', args.workspace, 'rev-parse', 'HEAD'], state, state)
-                  require(head.decode().strip() == selected_sha('push', {}, args.sha), 'checkout SHA mismatch')
+                  require(head.decode().strip() == commit_sha(args.sha), 'checkout SHA mismatch')
                   configs(state)
                   project = state / 'project'
                   project.mkdir()
@@ -718,12 +725,14 @@ jobs:
           if __name__ == '__main__':
               main()
           SUBMISSION_PY
-          python3 -I "$state/helper.py" select >> "$GITHUB_OUTPUT"
+          python3 -I "$state/helper.py" guard
 
-      - name: Checkout selected snapshot commit
+      # The guard above fails every trigger outside SNAPSHOT_EVENTS, so the run's own commit is
+      # never pull-request code. No ref input: checkout's default fetches github.sha, the build
+      # step asserts HEAD == SNAPSHOT_SHA, and CodeQL has no ref expression to treat as untrusted.
+      - name: Checkout snapshot commit
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ steps.state.outputs.sha }}
           fetch-depth: 1
           persist-credentials: false
 
@@ -749,7 +758,7 @@ jobs:
         env:
           STATE: ${{ steps.state.outputs.root }}
           RAW_WD: ${{ inputs.working_directory }}
-          SELECTED_SHA: ${{ steps.state.outputs.sha }}
+          SNAPSHOT_SHA: ${{ github.sha }}
           SYFT: ${{ steps.syft.outputs.cmd }}
           REPOSITORY: ${{ github.repository }}
           WORKFLOW: ${{ github.workflow }}
@@ -759,13 +768,13 @@ jobs:
         run: |
           set -euo pipefail
           python3 -I "$STATE/helper.py" run --state "$STATE" --workspace "$GITHUB_WORKSPACE" \
-            --wd "$RAW_WD" --sha "$SELECTED_SHA" --bun "$(command -v bun)" --syft "$SYFT"
+            --wd "$RAW_WD" --sha "$SNAPSHOT_SHA" --bun "$(command -v bun)" --syft "$SYFT"
 
       - name: Submit validated snapshot
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
           STATE: ${{ steps.state.outputs.root }}
-          SELECTED_SHA: ${{ steps.state.outputs.sha }}
+          SNAPSHOT_SHA: ${{ github.sha }}
         with:
           script: |
             const fs = require('node:fs');
@@ -780,7 +789,7 @@ jobs:
             const receipt = JSON.parse(fs.readFileSync(path.join(root, 'published', 'receipt.json')));
             const snapshot = JSON.parse(bytes);
             if (crypto.createHash('sha256').update(bytes).digest('hex') !== receipt.sha256 ||
-                snapshot.sha !== process.env.SELECTED_SHA || receipt.sha !== snapshot.sha) {
+                snapshot.sha !== process.env.SNAPSHOT_SHA || receipt.sha !== snapshot.sha) {
               throw new Error('snapshot publication validation failed');
             }
             const response = await github.request('POST /repos/{owner}/{repo}/dependency-graph/snapshots', {
