@@ -77,9 +77,10 @@ and the polyrepo map before judging blast radius).
   run all" step in `auto-release.yml`.
 - `mise run ci` is `iac:trivy` + `ci:meta-semgrep` alone. The meta-local scanner
   keeps `p/ci` except its Renovate age rule, replaced by `.opengrep/renovate.yml`;
-  the shared `ci:semgrep` atom keeps its consumer defaults. `iac:trivy` runs with
-  `--exit-code 0`, so findings do not fail the gate; a Trivy operational
-  error (bad config, scan or DB failure) still exits non-zero and does.
+  the shared `ci:semgrep` atom keeps its consumer defaults. `iac:trivy` fails the gate
+  on HIGH or CRITICAL misconfigurations (`--severity HIGH,CRITICAL`) and on a
+  Trivy operational error (bad config, scan or DB failure); lower severities
+  are not reported.
 - Single workflow file: `mise exec -- actionlint <file>`; then `mise run all`
   before committing a workflow change.
 - Secret scans are not in `all`: `ci.yml` runs `ci:betterleaks` on every PR and
