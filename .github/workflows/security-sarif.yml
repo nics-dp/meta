@@ -48,6 +48,11 @@ on:
         type: boolean
         default: false
         description: "Fail closed on gosec findings and operational failures"
+      gosec_on_pull_request:
+        required: false
+        type: boolean
+        default: true
+        description: "Run gosec on pull_request events; false runs it only on other events (for callers whose pull-request gosec gate is a separate mise-task go:sast job)"
       run_dockerfile:
         required: false
         type: boolean
@@ -89,11 +94,13 @@ jobs:
       # org variable (client-id) plus the ci_read_app_private_key secret.
       HAS_CI_APP: ${{ vars.CI_READ_APP_CLIENT_ID != '' && secrets.ci_read_app_private_key != '' }}
       # Fixed derived predicates. run_go remains the master switch: child inputs
-      # cannot re-enable a Go scanner when it is false.
-      EFFECTIVE_GOSEC: ${{ inputs.run_go && inputs.run_gosec }}
+      # cannot re-enable a Go scanner when it is false. gosec_on_pull_request
+      # false drops gosec (and its blocking mode) on pull_request events only; job
+      # env cannot reference sibling env, so the event term is repeated.
+      EFFECTIVE_GOSEC: ${{ inputs.run_go && inputs.run_gosec && (inputs.gosec_on_pull_request || github.event_name != 'pull_request') }}
       EFFECTIVE_GOVULNCHECK: ${{ inputs.run_go && inputs.run_govulncheck }}
-      EFFECTIVE_ANY_GO: ${{ inputs.run_go && (inputs.run_gosec || inputs.run_govulncheck) }}
-      EFFECTIVE_BLOCKING: ${{ inputs.run_go && inputs.run_gosec && inputs.gosec_blocking }}
+      EFFECTIVE_ANY_GO: ${{ inputs.run_go && ((inputs.run_gosec && (inputs.gosec_on_pull_request || github.event_name != 'pull_request')) || inputs.run_govulncheck) }}
+      EFFECTIVE_BLOCKING: ${{ inputs.run_go && inputs.run_gosec && inputs.gosec_blocking && (inputs.gosec_on_pull_request || github.event_name != 'pull_request') }}
       # Only these caller events may receive the ci-read App token. Reusable
       # workflows observe the caller's event name here.
       SUPPORTED_TOKEN_EVENT: ${{ github.event_name == 'push' || github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' }}
