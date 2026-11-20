@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-#MISE description="Find unreachable functions in production code; --whole-program also analyzes tests (golang.org/x/tools/cmd/deadcode)"
+#MISE description="Find unreachable functions in production code and fail when any is reported; --whole-program also analyzes tests (golang.org/x/tools/cmd/deadcode)"
 #MISE hide=true
 #MISE raw=true
 #MISE depends=["go:install"]
@@ -29,4 +29,11 @@ if [ "${usage_whole_program:-false}" = "true" ]; then
 fi
 cmd+=("$entry")
 
-"${cmd[@]}"
+# deadcode 回報 unreachable func 時仍 exit 0，所以以輸出判斷：有任何一行就失敗。
+# deadcode 自身錯誤（套件載入、編譯失敗）在 command substitution 中由 set -e 照常中止。
+out=$("${cmd[@]}")
+if [ -n "$out" ]; then
+  printf '%s\n' "$out"
+  echo "✗ deadcode reported unreachable functions: delete them, or narrow the report with --filter." >&2
+  exit 1
+fi
