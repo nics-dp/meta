@@ -208,6 +208,7 @@ jobs:
 | `runs_on`         | string  | `'"ubuntu-latest"'` | runner（JSON 經 `fromJSON()` 解析；可傳 `'{"group":"X"}'`） |
 | `fetch-depth`     | number  | `1`              | git fetch depth                                               |
 | `private-modules` | boolean | `false`          | 啟用 ci-read App token git config for private modules         |
+| `pull_request_only` | boolean | `false`        | 只在 `pull_request` 事件執行，其他事件整個 job skip（PR gate 專用，push 時的結果由其他 workflow 提供） |
 
 App 認證（nics-dp-ci-read，用於 `private-modules=true`）：client-id 由 org **變數** `CI_READ_APP_CLIENT_ID` 提供（reusable workflow 經 `vars` context 自動取得，毋須傳遞）；caller 僅需以 secret 傳 `ci_read_app_private_key`（org secret `CI_READ_APP_PRIVATE_KEY`）。legacy `ci_read_app_id` 輸入已移除（不再宣告,請勿再傳）。
 
@@ -249,7 +250,7 @@ Go 與 Node 的 dependency-submission 拆成兩支：`go.mod` GitHub 原生解�
 | `go-dependency-submission.yml`    | 送 Go 相依圖至 Dependency Submission API；用 ci-read App token 做 org-scoped 私模 git rewrite                                                          |
 | `node-dependency-submission.yml`  | 預設送 Bun production npm 圖（含 optional、peer 與 transitive；排除 dev-only）；完整 frozen、ignore-scripts 安裝後，以原生 inventory 驗證版本／位置相依圖，保留非 npm 與第一方 workflow findings；封存校正後 SPDX；套件安裝不使用 token；僅接受 `push`／`schedule`／`workflow_dispatch` 觸發，其他事件（含 PR）在 checkout 前即失敗 |
 
-`security-sarif.yml` 的 `run_gosec` / `run_govulncheck` 會在 `run_go` 開啟時分別選擇 Go scanner，三者預設皆為 `true`；`run_go: false` 仍是總開關。`gosec_blocking` 預設為 `false`，只有 `run_go && run_gosec && gosec_blocking` 才會讓 gosec fail closed，涵蓋 vendor 準備、gosec 安裝、gosec finding 或執行失敗、本機 SARIF 結構預檢、私有 Go 狀態清理、SARIF upload action（包含 `wait-for-processing: true` 回報 terminal `failed`）及 artifact 清理。upload polling API error 或 timeout 只會 warning，處理狀態視為 unknown；govulncheck、semgrep、trivy config、hadolint 仍是 informational。caller 設定錯誤或安全檢查（例如不合法的 `scan_path`）仍可獨立讓 workflow 失敗，因此不可將整支 workflow 視為永不失敗。
+`security-sarif.yml` 的 `run_gosec` / `run_govulncheck` 會在 `run_go` 開啟時分別選擇 Go scanner，三者預設皆為 `true`；`run_go: false` 仍是總開關。`gosec_on_pull_request` 預設 `true`；設為 `false` 時 gosec（含 blocking 模式）只在非 `pull_request` 事件執行，搭配 `ci.yml` 中 `pull_request_only: true` 的 `go:sast`，讓每個事件只跑一次 gosec：PR 由 `go:sast` 擋，push 上傳 SARIF。`gosec_blocking` 預設為 `false`，只有 `run_go && run_gosec && gosec_blocking` 才會讓 gosec fail closed，涵蓋 vendor 準備、gosec 安裝、gosec finding 或執行失敗、本機 SARIF 結構預檢、私有 Go 狀態清理、SARIF upload action（包含 `wait-for-processing: true` 回報 terminal `failed`）及 artifact 清理。upload polling API error 或 timeout 只會 warning，處理狀態視為 unknown；govulncheck、semgrep、trivy config、hadolint 仍是 informational。caller 設定錯誤或安全檢查（例如不合法的 `scan_path`）仍可獨立讓 workflow 失敗，因此不可將整支 workflow 視為永不失敗。
 
 本機 `go:sast` atom 維持 blocking。`go:sast` 與 `security-sarif.yml` 都執行 mise 依 `github:securego/gosec` pin 安裝的 gosec release binary：atom 以 `#MISE tools=` header 釘版；workflow 在 `RUNNER_TEMP` 下的 job 私有 mise root 寫入只含 gosec 的 `mise.toml` 再安裝，不讀 caller 的 mise 設定，並於 `always()` 清除（code is truth，文件不重複版本）。meta repo 自家的 Renovate custom manager 會同步更新這兩處 gosec pin。release binary 以建置該 release 的 Go 版本之 `go/types` 做型別檢查，因此 consumer 的 `go.mod` 宣告更新的 Go 語言版本後，在 gosec 發布以該版 Go 建置的 release 之前，每個 package 都會報錯。`go:sast` 用 `-terse` 而非 `-quiet`（`-quiet` 在沒有 finding 時會在計入載入錯誤前以 exit 0 結束），blocking 模式的 `security-sarif.yml` 不帶 `-no-fail`，所以這種情況會失敗而不是假綠燈；informational 模式只會在 log 留下錯誤。
 
