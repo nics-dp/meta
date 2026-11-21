@@ -71,7 +71,7 @@ jobs:
           TITLE: "License inventory: denied licenses or unreadable SBOMs"
         run: |
           existing="$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --limit 100 \
-            --json number,title --jq '.[] | select(.title == env.TITLE) | .number' | head -n 1)"
+            --search "\"$TITLE\" in:title" --json number,title --jq '.[] | select(.title == env.TITLE) | .number' | head -n 1)"
           if [ "$HITS" != "0" ] || [ "$SKIPPED" != "0" ]; then
             if [ -n "$existing" ]; then
               gh issue edit "$existing" --repo "$GITHUB_REPOSITORY" --body-file "$RUNNER_TEMP/license-inventory.md"
