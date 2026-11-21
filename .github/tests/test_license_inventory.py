@@ -28,6 +28,23 @@ class AllowedTests(unittest.TestCase):
         self.assertFalse(inventory.allowed("MIT", {"mit"}))
         self.assertTrue(inventory.allowed("gpl-2.0-or-later", DENY))
 
+    def test_deprecated_with_exception_ids_match_their_replacement(self):
+        deny = {"GPL-2.0-only", "GPL-3.0-only"}
+        pairs = {
+            "GPL-2.0-with-autoconf-exception": "GPL-2.0-only WITH Autoconf-exception-2.0",
+            "GPL-2.0-with-bison-exception": "GPL-2.0-only WITH Bison-exception-2.2",
+            "GPL-2.0-with-classpath-exception": "GPL-2.0-only WITH Classpath-exception-2.0",
+            "GPL-2.0-with-font-exception": "GPL-2.0-only WITH Font-exception-2.0",
+            "GPL-2.0-with-GCC-exception": "GPL-2.0-only WITH GCC-exception-2.0",
+            "GPL-3.0-with-autoconf-exception": "GPL-3.0-only WITH Autoconf-exception-3.0",
+            "GPL-3.0-with-GCC-exception": "GPL-3.0-only WITH GCC-exception-3.1",
+        }
+        self.assertEqual(set(pairs), {k for k in pairs if k.casefold() in inventory.DEPRECATED_WITH})
+        for deprecated, replacement in pairs.items():
+            self.assertFalse(inventory.allowed(deprecated, deny), deprecated)
+            self.assertEqual(inventory.allowed(deprecated, deny), inventory.allowed(replacement, deny))
+            self.assertTrue(inventory.allowed(deprecated, {"MIT"}), deprecated)
+
     def test_unknown_values_are_not_denied(self):
         for value in ("", "NOASSERTION", "LicenseRef-NVIDIA-Proprietary", None):
             self.assertTrue(inventory.allowed(value, DENY), value)

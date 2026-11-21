@@ -7,6 +7,9 @@ package's `licenseConcluded` SPDX expression: an `OR` passes when any operand is
 allowed, an `AND` only when every operand is, and `X WITH exception` follows X.
 A deprecated bare id such as GPL-2.0 counts as its "-only" form; "+" and
 "-or-later" stay distinct, so GPL-2.0-or-later passes a GPL-2.0-only entry.
+A deprecated id that embeds an exception, such as
+GPL-2.0-with-classpath-exception, counts as its base "-only" license, the same
+as the "GPL-2.0-only WITH Classpath-exception-2.0" form it stands for.
 Identifiers match without regard to case (SPDX 2.3 Annex D.2), on both the
 expression and the deny entries. Unknown values (NOASSERTION, empty,
 LicenseRef-*) are not denied.
@@ -33,6 +36,19 @@ import subprocess
 import sys
 
 TOKEN_RE = re.compile(r"\(|\)|[^\s()]+")
+
+# Deprecated SPDX ids that embed an exception, keyed casefolded, mapped to the
+# base license of their "<base> WITH <exception>" replacement. The WITH branch
+# judges only the base license, so both spellings give the same result.
+DEPRECATED_WITH = {
+    "gpl-2.0-with-autoconf-exception": "gpl-2.0-only",
+    "gpl-2.0-with-bison-exception": "gpl-2.0-only",
+    "gpl-2.0-with-classpath-exception": "gpl-2.0-only",
+    "gpl-2.0-with-font-exception": "gpl-2.0-only",
+    "gpl-2.0-with-gcc-exception": "gpl-2.0-only",
+    "gpl-3.0-with-autoconf-exception": "gpl-3.0-only",
+    "gpl-3.0-with-gcc-exception": "gpl-3.0-only",
+}
 
 
 def parse_list(value):
@@ -63,7 +79,7 @@ def allowed(expression, deny):
             if peek() == ")":
                 take()
             return value
-        folded = tok.casefold()
+        folded = DEPRECATED_WITH.get(tok.casefold(), tok.casefold())
         value = folded not in denied and f"{folded}-only" not in denied
         if peek() is not None and peek().upper() == "WITH":
             take()
