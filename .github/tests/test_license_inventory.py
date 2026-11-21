@@ -22,6 +22,12 @@ class AllowedTests(unittest.TestCase):
         self.assertTrue(inventory.allowed("GPL-2.0+", DENY))
         self.assertTrue(inventory.allowed("GPL-3.0", DENY))
 
+    def test_identifiers_match_without_regard_to_case(self):
+        self.assertFalse(inventory.allowed("MIT AND sspl-1.0", DENY))
+        self.assertFalse(inventory.allowed("gpl-2.0", DENY))
+        self.assertFalse(inventory.allowed("MIT", {"mit"}))
+        self.assertTrue(inventory.allowed("gpl-2.0-or-later", DENY))
+
     def test_unknown_values_are_not_denied(self):
         for value in ("", "NOASSERTION", "LicenseRef-NVIDIA-Proprietary", None):
             self.assertTrue(inventory.allowed(value, DENY), value)

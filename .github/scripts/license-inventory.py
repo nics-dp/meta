@@ -7,7 +7,9 @@ package's `licenseConcluded` SPDX expression: an `OR` passes when any operand is
 allowed, an `AND` only when every operand is, and `X WITH exception` follows X.
 A deprecated bare id such as GPL-2.0 counts as its "-only" form; "+" and
 "-or-later" stay distinct, so GPL-2.0-or-later passes a GPL-2.0-only entry.
-Unknown values (NOASSERTION, empty, LicenseRef-*) are not denied.
+Identifiers match without regard to case (SPDX 2.3 Annex D.2), on both the
+expression and the deny entries. Unknown values (NOASSERTION, empty,
+LicenseRef-*) are not denied.
 
 This is plain SPDX semantics, which differs from dependency-review-action's
 satisfiesAny: the action rejects a dependency only when one OR alternative is a
@@ -42,6 +44,7 @@ def allowed(expression, deny):
     tokens = TOKEN_RE.findall(expression or "")
     if not tokens:
         return True
+    denied = {item.casefold() for item in deny}
     pos = 0
 
     def peek():
@@ -60,7 +63,8 @@ def allowed(expression, deny):
             if peek() == ")":
                 take()
             return value
-        value = tok not in deny and f"{tok}-only" not in deny
+        folded = tok.casefold()
+        value = folded not in denied and f"{folded}-only" not in denied
         if peek() is not None and peek().upper() == "WITH":
             take()
             if peek() is not None:
