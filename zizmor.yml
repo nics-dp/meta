@@ -14,6 +14,7 @@ rules:
       - go-release.yml:195
       - image-release.yml:220
       - image-release.yml:224
+      - license-inventory.yml:45
       - mise-task.yml:118
       - mise-task.yml:122
       - pr-issue-check.yml:247

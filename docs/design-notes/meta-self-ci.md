@@ -29,3 +29,5 @@ Edits since the move:
 **`self-supply-chain.yml`** — meta consumes its own `scorecard.yml` (filtered, `publish: false`). No dependency-submission job: meta has no compiled-language manifests.
 
 **`self-dependency-review.yml`** / **`self-pr-issue-check.yml`** — meta consuming its own `dependency-review.yml` / `pr-issue-check.yml` reusables.
+
+**`license-inventory.yml`** — weekly org-wide license check: a ci-read App token scoped to `contents: read` reads every installation repository's dependency-graph SBOM, `.github/scripts/license-inventory.py` evaluates each SPDX expression against the `deny_licenses` default in `dependency-review.yml` plus the workflow's `INVENTORY_ONLY_DENY`, and one issue in this repository is opened or updated when a dependency hits or a repository's SBOM cannot be read (skipped, not clean), and closed when neither happens.

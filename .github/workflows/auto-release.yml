@@ -323,9 +323,6 @@ jobs:
           fi
           echo "No drift — committed code is canonical."
 
-      - name: License scan
-        run: mise run ci:trivy-license
-
       - name: Secret scan
         run: mise run ci:betterleaks
 

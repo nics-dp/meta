@@ -188,7 +188,6 @@ jobs:
           - { name: "Semgrep",       task: "ci:semgrep golang" }
           - { name: "Trivy IaC",     task: "iac:trivy" }
           - { name: "Hadolint",      task: "iac:img:hadolint" }
-          - { name: "Trivy License", task: "ci:trivy-license" }
     uses: nics-dp/meta/.github/workflows/mise-task.yml@main
     with:
       name: ${{ matrix.name }}
@@ -244,7 +243,7 @@ Go 與 Node 的 dependency-submission 拆成兩支：`go.mod` GitHub 原生解�
 | Workflow                          | 用途                                                                                                                                                  |
 | --------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `security-sarif.yml`              | Gate-only scanners（gosec、govulncheck、semgrep、trivy config、hadolint），各自上傳獨立 code-scanning SARIF category；預設為 informational/non-blocking，可選擇讓 gosec fail closed |
-| `dependency-review.yml`           | PR-time `dependency-review-action` 掃 GitHub dependency graph；引入帶已知漏洞（≥ `fail_on_severity`，default `high`）或禁用授權的相依時 **擋 PR**；須由 `pull_request` 觸發的 workflow 呼叫 |
+| `dependency-review.yml`           | PR-time `dependency-review-action` 掃 GitHub dependency graph；引入帶已知漏洞（≥ `fail_on_severity`，default `high`）或禁用授權（`deny_licenses` 預設為 org 授權政策）的相依時 **擋 PR**；須由 `pull_request` 觸發的 workflow 呼叫 |
 | `scorecard.yml`                   | OpenSSF Scorecard（唯一變體，不 publish）；filter 掉 posture 噪音後將 SARIF 上傳至 code scanning（`category: scorecard`，non-blocking）；用 nics-dp-scorecard App 對私有 repo 評分；`publish_results: false` |
 | `go-dependency-submission.yml`    | 送 Go 相依圖至 Dependency Submission API；用 ci-read App token 做 org-scoped 私模 git rewrite                                                          |
 | `node-dependency-submission.yml`  | 預設送 Bun production npm 圖（含 optional、peer 與 transitive；排除 dev-only）；完整 frozen、ignore-scripts 安裝後，以原生 inventory 驗證版本／位置相依圖，保留非 npm 與第一方 workflow findings；封存校正後 SPDX；套件安裝不使用 token；僅接受 `push`／`schedule`／`workflow_dispatch` 觸發，其他事件（含 PR）在 checkout 前即失敗 |
@@ -275,6 +274,7 @@ Go 與 Node 的 dependency-submission 拆成兩支：`go.mod` GitHub 原生解�
 - Scanner-only rollback 會移除 hosted scanner jobs（`Zizmor Action`、`Grype Path`、`GitHub Actions Scanner`）、scanner wrapper、scanner Renovate/docs，並恢復 matrix `Zizmor` check；local E2 atoms、`zizmor.yml` 與 `mise run all` gate 保留。若 required-check policy 仍引用舊 `Zizmor`，必須先協調改為 `Zizmor Action`，不可直接發布。
 - `self-supply-chain.yml` — meta 消費自家 `scorecard.yml`（`publish: false`，改走 filtered 路徑）；無 dependency-submission job（meta 無編譯語言 manifest，純配置）。
 - `self-dependency-review.yml` — meta 的 PR-time dependency review，透過 `dependency-review.yml` reusable。
+- `license-inventory.yml` — 每週（與 `workflow_dispatch`）以 ci-read App 讀取 org 內各 repo 的 dependency graph SBOM，以 `dependency-review.yml` 的 `deny_licenses` 預設值，加上 `license-inventory.yml` 的 `INVENTORY_ONLY_DENY`，檢查既有相依（`.github/scripts/license-inventory.py`）；有命中或有 repo 讀不到 SBOM 時開立或更新本 repo 的 issue，兩者皆無時關閉該 issue。
 - `mise-tools-image.yml` — 手動（`workflow_dispatch`）建置並推送私有 image `ghcr.io/nics-dp/mise-tools`，僅 linux/amd64：以 `mise oci build` 打包 mise 本體、`atoms` input 指定之 atom（逗號分隔的 task 名稱，空值為全部 atom）的 `#MISE tools=` pin 聯集（由 `.github/scripts/mise-tools-toml.py` 產生；同一工具在不同 atom 釘不同版本即失敗，指定不存在的 atom 也失敗；只收錄所指定 atom 自身的 pin，不追蹤 `#MISE depends=`，須一併列出被相依的 atom，例如 `sbom:grype` 需加上 `sbom:enrich,sbom:source`）與 `go_version` input 指定的 Go toolchain，base image 是 `Build image` step 的 `--from` 值，必須帶 git 與 CA 憑證（container job 的 checkout、mise 的 `git::` task include 與 Go module 下載都需要）。每次建置以 `mise oci push` 推到可變的 `tag` input（預設 `experiment`），並以 runner 內建的 Docker Buildx 確認遠端 manifest digest 與本地 layout 一致；每次重建都會產生新 digest；job summary 與 job output 的 digest 才是不可變的引用，consumer 應釘 `ghcr.io/nics-dp/mise-tools@<digest>`。registry 憑證只存在 `RUNNER_TEMP` 並於 `always()` 清除。每個推送的 digest 會以 `actions/attest-build-provenance` 產生 build provenance attestation（存於本 repo 的 attestations，不推到 registry）；consumer 以 `gh attestation verify oci://<image>@<digest> --repo nics-dp/meta --signer-workflow nics-dp/meta/.github/workflows/mise-tools-image.yml` 確認 image 由本 workflow 建出。
 
 ---
