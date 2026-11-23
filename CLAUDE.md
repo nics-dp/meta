@@ -38,7 +38,10 @@ and the polyrepo map before judging blast radius).
   `pr-issue-check.yml`. Meta's own: `ci.yml`, `codeql.yml`, the `self-*.yml`
   callers that dogfood the reusables, and `mise-tools-image.yml` (manual build of
   the private `ghcr.io/nics-dp/mise-tools` image from the atoms' tool pins, whose
-  `[tools]` `.github/scripts/mise-tools-toml.py` generates).
+  `[tools]` `.github/scripts/mise-tools-toml.py` generates), and
+  `license-inventory.yml` (weekly org-wide license check of every repository's
+  dependency-graph SBOM with `.github/scripts/license-inventory.py`; policy in
+  the `deny_licenses` comment of `dependency-review.yml`).
   `.github/scripts/github-actions-scanner.sh` is the wrapper `ci.yml`'s scanner
   job execs. Inputs, secrets, outputs and defaults are the `workflow_call`
   declarations at the top of each file.
@@ -84,8 +87,8 @@ and the polyrepo map before judging blast radius).
   before committing a workflow change.
 - Secret scans are not in `all`: `ci.yml` runs `ci:betterleaks` on every PR and
   `ci:trufflehog` only on PRs whose base is `main` or `release/**`;
-  `auto-release.yml` runs `ci:trivy-license`, `ci:betterleaks` and
-  `ci:trufflehog` as separate steps after `all`.
+  `auto-release.yml` runs `ci:betterleaks` and `ci:trufflehog` as separate
+  steps after `all`.
 - Consumers refresh `?ref=main` atoms with `mise run meta:bump`
   (`mise cache clear` + `mise install`); each facade template chains it into
   `init` and `update`, except `mise.image.toml`, whose `init` is a no-op and
@@ -245,7 +248,7 @@ before changing any of these; the mechanism is in the code, the history in
   PRs to `main`. → the `source_branch` input and the "Back-merge main into
   source branch" step.
 - `auto-release.yml` runs `mise run all` and fails if the tree changed; the
-  secret / license scans run as separate steps after it. → "Run mise run all".
+  secret scans run as separate steps after it. → "Run mise run all".
 
 **GitHub Apps and secrets** → `docs/design-notes/github-apps-and-secrets.md`
 
@@ -366,7 +369,7 @@ consumer uses a contract.
 | `go-release.yml` / `artifacts-comment.yml`                                                                          | dcf-platform, dcf-platform-cli, dcf-proxy, dcf-access, dcf-access-cli, dcf-catalog, dcf-service, dcf-synth, dcf-mcp, otel-bundle                                                                                                                                                                           |
 | `image-release.yml` + `sbom-image.yml`                                                                              | dcf-platform, dcf-proxy, dcf-access, dcf-catalog, dcf-service, dcf-synth, dcf-mcp, otel-bundle, patroni                                                                                                                                                                                                    |
 | `security-sarif.yml` / `scorecard.yml`                                                                              | libdcf, ZenQuery, dcf-platform, dcf-platform-web, dcf-platform-cli, dcf-proxy, dcf-access, dcf-access-web, dcf-access-cli, dcf-service, dcf-synth, otel-bundle, dcf-local-env, dcf-smoke, patroni (not dcf-catalog or dcf-mcp)                                                                             |
-| `dependency-review.yml`                                                                                             | libdcf, ZenQuery, dcf-platform, dcf-platform-web, dcf-platform-cli, dcf-proxy, dcf-access, dcf-access-web, dcf-access-cli, dcf-service, dcf-synth, otel-bundle                                                                                                                                             |
+| `dependency-review.yml`                                                                                             | libdcf, ZenQuery, dcf-platform, dcf-platform-web, dcf-platform-cli, dcf-proxy, dcf-access, dcf-access-web, dcf-access-cli, dcf-catalog, dcf-catalog-web, dcf-service, dcf-synth, dcf-mcp, otel-bundle, dcf-local-env, patroni                                                                              |
 | `go-dependency-submission.yml` / `node-dependency-submission.yml`                                                   | Go: libdcf, ZenQuery, dcf-platform, dcf-platform-cli, dcf-proxy, dcf-access, dcf-access-cli, dcf-service, dcf-synth, otel-bundle. Node: dcf-platform-web, dcf-access-web                                                                                                                                   |
 | `configs/*` fetched at atom runtime (`META_CONFIG_BASE`)                                                            | dcf-platform-web and dcf-catalog `web/` set `META_CONFIG_BASE` explicitly to the default; dcf-access-web relies on the default; dcf-platform-web, dcf-access-web and dcf-catalog `web/` commit the vitest / vite config and knip config that `node:test` / `node:knip` require                             |
 | `renovate-preset.json` via `github>nics-dp/meta:renovate-preset`                                                    | every consumer above except dcf-mcp, dcf-autoCICD and dcf-cfg-templates, which had no `renovate.json` on `origin/dev`; plus dcf-claude-plugins, which consumes the preset only (no `mise.toml`, no workflow calls)                                                                                         |

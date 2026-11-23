@@ -1,0 +1,83 @@
+# yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
+name: license-inventory
+
+# Weekly license inventory across every repository the nics-dp-ci-read App can
+# read. dependency-review.yml only judges dependencies a pull request adds or
+# changes; this run checks every dependency already in each repository's
+# dependency-graph SBOM against the deny_licenses default in
+# dependency-review.yml plus INVENTORY_ONLY_DENY below. A hit or an unreadable
+# SBOM opens or updates one issue in this repository; a run with neither closes
+# it. Scheduled runs use the default branch's copy of dependency-review.yml.
+on:
+  schedule:
+    - cron: "0 1 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: license-inventory
+  cancel-in-progress: false
+
+jobs:
+  inventory:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      # Org-wide read: the SBOM export endpoint needs contents read on each
+      # repository, and /installation/repositories lists what the App can see.
+      - name: Mint ci-read token
+        id: token
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          client-id: ${{ vars.CI_READ_APP_CLIENT_ID }}
+          private-key: ${{ secrets.CI_READ_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          permission-contents: read
+
+      - name: Scan dependency-graph SBOMs
+        id: scan
+        shell: bash
+        env:
+          GH_TOKEN: ${{ steps.token.outputs.token }}
+          OWNER: ${{ github.repository_owner }}
+          # Incompatible with AGPL-3.0, but kept out of the PR gate's list (see
+          # the deny_licenses comment in dependency-review.yml). This script
+          # evaluates SPDX expressions exactly, so "-or-later" still passes.
+          INVENTORY_ONLY_DENY: "GPL-2.0-only,LGPL-2.0-only"
+        run: |
+          deny="$(yq -e '.on.workflow_call.inputs.deny_licenses.default' .github/workflows/dependency-review.yml),$INVENTORY_ONLY_DENY"
+          python3 -B .github/scripts/license-inventory.py \
+            --owner "$OWNER" --deny "$deny" --report "$RUNNER_TEMP/license-inventory.md" \
+            | tee -a "$GITHUB_OUTPUT"
+          cat "$RUNNER_TEMP/license-inventory.md" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Open, update or close the inventory issue
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HITS: ${{ steps.scan.outputs.hits }}
+          SKIPPED: ${{ steps.scan.outputs.skipped }}
+          TITLE: "License inventory: denied licenses or unreadable SBOMs"
+        run: |
+          existing="$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --limit 100 \
+            --search "\"$TITLE\" in:title" --json number,title --jq '.[] | select(.title == env.TITLE) | .number' | head -n 1)"
+          if [ "$HITS" != "0" ] || [ "$SKIPPED" != "0" ]; then
+            if [ -n "$existing" ]; then
+              gh issue edit "$existing" --repo "$GITHUB_REPOSITORY" --body-file "$RUNNER_TEMP/license-inventory.md"
+            else
+              gh issue create --repo "$GITHUB_REPOSITORY" --title "$TITLE" --body-file "$RUNNER_TEMP/license-inventory.md"
+            fi
+          elif [ -n "$existing" ]; then
+            gh issue close "$existing" --repo "$GITHUB_REPOSITORY" --comment "最新一次盤點所有 repo 都讀得到 SBOM,且沒有依賴命中黑名單。"
+          fi

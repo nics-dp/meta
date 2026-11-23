@@ -37,11 +37,18 @@ on:
         required: false
         type: string
         default: ""
+      # The default is the org license policy's non-free part: licenses that
+      # restrict use, commercial use or modification and so cannot ship in an
+      # AGPL-3.0 project. GPL-2.0-only / LGPL-2.0-only are deliberately absent:
+      # the action's satisfiesAny treats a "-or-later" license as matching the
+      # "-only" entry, so it would also reject AGPL-compatible GPL-2.0-or-later
+      # dependencies. license-inventory.yml reads this default and adds those
+      # two for its weekly check, so this list lives only here.
       deny_licenses:
-        description: "Comma-separated SPDX denylist; these licenses are rejected. Empty = unset (no denylist). Mutually exclusive with allow_licenses."
+        description: "Comma-separated SPDX denylist; these licenses are rejected. Defaults to the org policy; ignored when allow_licenses is set (the two are mutually exclusive)."
         required: false
         type: string
-        default: ""
+        default: "SSPL-1.0,BUSL-1.1,Elastic-2.0,FSL-1.1-MIT,FSL-1.1-ALv2,PolyForm-Noncommercial-1.0.0,Hippocratic-2.1,JSON,CC-BY-NC-4.0,CC-BY-NC-SA-4.0,CC-BY-ND-4.0,CC-BY-NC-ND-4.0,CC-BY-NC-3.0,CC-BY-NC-SA-3.0,CC-BY-ND-3.0,CC-BY-NC-ND-3.0,CC-BY-NC-2.5,CC-BY-NC-SA-2.5,CC-BY-ND-2.5,CC-BY-NC-ND-2.5"
 
 permissions:
   contents: read
@@ -74,9 +81,8 @@ jobs:
           fail-on-severity: ${{ inputs.fail_on_severity }}
           comment-summary-in-pr: ${{ inputs.comment_summary_in_pr }}
           # The action reads these via getOptionalInput + parseList: an empty
-          # string is coerced to "unset" (not "allow/deny nothing"), so passing
-          # the empty default through is equivalent to omitting the key. When
-          # both are left empty the action's "cannot set both" guard stays off;
-          # callers set at most one.
+          # string is coerced to "unset" (not "allow/deny nothing"). The action
+          # rejects setting both, so a caller's allowlist replaces the default
+          # denylist instead of colliding with it.
           allow-licenses: ${{ inputs.allow_licenses }}
-          deny-licenses: ${{ inputs.deny_licenses }}
+          deny-licenses: ${{ inputs.allow_licenses == '' && inputs.deny_licenses || '' }}
