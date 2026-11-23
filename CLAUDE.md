@@ -241,6 +241,12 @@ before changing any of these; the mechanism is in the code, the history in
   `push` / `schedule` / `workflow_dispatch` callers: any other trigger fails
   before checkout, so its `contents: write` job never checks out pull-request
   code. → the header comments, `SNAPSHOT_EVENTS`.
+- `auto-release.yml` snapshots `source_branch` (default `dev`) and back-merges
+  main into it after tagging. meta has no `dev` branch and works on `main`
+  directly: `self-release.yml` passes `source_branch: main`, which makes the
+  merge a no-op and skips the back-merge, and `self-pr-issue-check.yml` gates
+  PRs to `main`. → the `source_branch` input and the "Back-merge main into
+  source branch" step.
 - `auto-release.yml` runs `mise run all` and fails if the tree changed; the
   secret scans run as separate steps after it. → "Run mise run all".
 

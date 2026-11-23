@@ -20,5 +20,8 @@ jobs:
       pull-requests: read
       issues: read
     uses: nics-dp/meta/.github/workflows/pr-issue-check.yml@main
+    with:
+      # meta works on main directly (no dev branch), so main is the base to gate.
+      enforce_base: main
     secrets:
       ci_read_app_private_key: ${{ secrets.CI_READ_APP_PRIVATE_KEY }}
