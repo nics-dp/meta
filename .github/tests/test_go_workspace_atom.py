@@ -108,8 +108,20 @@ class GoWorkspaceAtomTest(unittest.TestCase):
         solo = self.module("solo", "example.com/solo")
         result = self.run_atom(root=self.root, out=solo / "go.work")
         self.assertEqual(result.returncode, 1)
-        self.assertIn(f"from {solo}", result.stderr)
+        self.assertIn(f"from module {solo}", result.stderr)
         self.assertFalse((solo / "go.work").exists())
+
+    def test_refuses_a_go_work_inside_a_package_of_a_module(self):
+        self.module("lib", "example.com/lib")
+        app = self.module("app", "example.com/app", ["example.com/lib"])
+        solo = self.module("solo", "example.com/solo")
+        for module in (solo, app):
+            with self.subTest(module=module.name):
+                out = module / "pkg" / "go.work"
+                result = self.run_atom(root=self.root, out=out)
+                self.assertEqual(result.returncode, 1)
+                self.assertIn(f"from module {module}", result.stderr)
+                self.assertFalse(out.exists())
 
     def test_refuses_a_go_work_at_the_filesystem_root(self):
         self.module("lib", "example.com/lib")
