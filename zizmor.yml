@@ -2,10 +2,10 @@ rules:
   github-app:
     ignore:
       # Existing App trust and permissions rely on job-local credential cleanup.
-      - auto-release.yml:179
-      - auto-release.yml:183
-      - auto-release.yml:212
-      - auto-release.yml:216
+      - auto-release.yml:193
+      - auto-release.yml:197
+      - auto-release.yml:226
+      - auto-release.yml:230
       - codeql-reusable.yml:62
       - codeql-reusable.yml:66
       - go-dependency-submission.yml:51
@@ -27,5 +27,5 @@ rules:
       # Same-repo self-consumption follows protected main as the promotion boundary.
       - self-dependency-review.yml:19
       - self-pr-issue-check.yml:22
-      - self-release.yml:27
+      - self-release.yml:28
       - self-supply-chain.yml:24

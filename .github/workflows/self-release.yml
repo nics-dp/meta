@@ -1,7 +1,8 @@
 # yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
 # meta dogfoods its own reusable auto-release driver. This self-caller lets meta
-# cut its own patch release (snapshot dev -> `mise run all` validate -> merge to
-# main -> tag -> GitHub Release) the same way consumer repos do.
+# cut its own patch release (snapshot main -> `mise run all` validate -> tag ->
+# GitHub Release) with the same driver consumer repos use; source_branch: main
+# makes the merge to main a no-op and skips the back-merge.
 name: Self-Release
 
 on:
@@ -28,11 +29,12 @@ jobs:
     with:
       version: ${{ inputs.version }}
       dry_run: ${{ inputs.dry_run }}
-      # Explicit (not relying on auto-release.yml's default): this self-caller
-      # runs auto-release.yml@main, so a default bumped on dev only takes
-      # effect after the NEXT promotion -- passing it here lets the promotion
-      # that carries the bump release itself. Keep in lockstep with
-      # mise-task.yml.
+      # meta has no dev branch: it works on main directly, so the release
+      # snapshot is main itself and there is no back-merge.
+      source_branch: main
+      # Explicit, in lockstep with mise-task.yml: the "synchronized mise pins"
+      # custom manager in renovate.json bumps this value together with the
+      # others.
       mise_version: "2026.10.25"
     secrets:
       ci_read_app_private_key:     ${{ secrets.CI_READ_APP_PRIVATE_KEY }}
