@@ -111,6 +111,13 @@ class GoWorkspaceAtomTest(unittest.TestCase):
         self.assertIn(f"from {solo}", result.stderr)
         self.assertFalse((solo / "go.work").exists())
 
+    def test_refuses_a_go_work_at_the_filesystem_root(self):
+        self.module("lib", "example.com/lib")
+        self.module("app", "example.com/app", ["example.com/lib"])
+        result = self.run_atom(root=self.root, out="/go.work")
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("would be found by the go command", result.stderr)
+
     def test_refuses_a_directory_as_out(self):
         self.module("lib", "example.com/lib")
         app = self.module("app", "example.com/app", ["example.com/lib"])

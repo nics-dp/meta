@@ -116,10 +116,12 @@ fi
 
 # Every module directory counts, joined or not: one left out of the workspace
 # would still find this file and stop building.
+# The prefix ends in exactly one slash so out_dir=/ matches every directory.
 if [ "$(basename "$out")" = go.work ]; then
+  prefix="${out_dir%/}/"
   while IFS= read -r dir; do
     case "$dir/" in
-      "$out_dir"/*)
+      "$prefix"*)
         echo "Error: $out would be found by the go command from $dir and put every module below $out_dir in workspace mode. Write it outside the module tree (default: <root>/.go-workspace/go.work)." >&2
         exit 1 ;;
     esac
