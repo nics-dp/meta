@@ -47,10 +47,11 @@ if ! eval "args=(${usage_args:-})"; then
   echo "Error: failed to parse arguments: ${usage_args:-}" >&2
   exit 1
 fi
-# Module mode by repo layout (mirrors lib/go-env): -mod=vendor only when a
-# vendor/ tree exists, else -mod=mod — hard-coding vendor breaks a non-vendored
-# repo with "inconsistent vendoring".
-if [ -d vendor ]; then go_mod="vendor"; else go_mod="mod"; fi
+# Module mode from lib/go-workspace: readonly in workspace mode, else vendor
+# when a vendor/ tree exists, else mod.
+# shellcheck source=../lib/go-workspace
+source "$(dirname "$0")/../lib/go-workspace"
+go_mod="$GO_MOD_FLAG"
 # ${VERSION_LDFLAGS} stays double-quoted (unlike go:dev's single-quote): this
 # `go run` is exec'd directly by this shell, so the value is expanded once and
 # NOT re-parsed by a second shell — there is no command-substitution stage to

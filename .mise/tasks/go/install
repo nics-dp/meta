@@ -1,8 +1,20 @@
 #!/usr/bin/env bash
-#MISE description="Tidy and vendor Go modules"
+#MISE description="Tidy and vendor Go modules (skipped in Go workspace mode)"
 #MISE hide=true
 #MISE raw=true
 #MISE silent="stdout"
+
+# shellcheck source=../lib/go-workspace
+source "$(dirname "$0")/../lib/go-workspace"
+
+# In workspace mode the go command refuses `go mod vendor`, and `go mod tidy`
+# alone would leave vendor/ out of step with go.mod. Skip both so the atoms
+# that depend on go:install still run against the workspace; tidy and vendor
+# the module with GOWORK=off before committing.
+if [ -n "$GO_WORKSPACE" ]; then
+  echo "go:install: workspace mode ($GO_WORKSPACE): skipped go mod tidy and go mod vendor; run 'GOWORK=off mise run go:install' to tidy and vendor this module" >&2
+  exit 0
+fi
 
 go mod tidy
 go mod vendor

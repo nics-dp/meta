@@ -55,11 +55,12 @@ if [ ! -f "cmd/$usage_name/main.go" ]; then
   exit 1
 fi
 
-# Pick the module mode the same way lib/go-env does: -mod=vendor only when a
-# vendor/ tree exists, otherwise -mod=mod. Hard-coding -mod=vendor would make
-# `go build` fail with "inconsistent vendoring" on a non-vendored repo, which
-# contradicts the "any Go repo" claim below.
-if [ -d vendor ]; then go_mod="vendor"; else go_mod="mod"; fi
+# Module mode from lib/go-workspace (readonly in workspace mode, else vendor
+# when a vendor/ tree exists, else mod), so the "any Go repo" claim below
+# holds for vendored, non-vendored and workspace builds alike.
+# shellcheck source=../lib/go-workspace
+source "$(dirname "$0")/../lib/go-workspace"
+go_mod="$GO_MOD_FLAG"
 
 # Config-free fallback: drive air via flags so the task works in any Go repo
 # without committing an .air.toml. Use -build.entrypoint (the deprecated

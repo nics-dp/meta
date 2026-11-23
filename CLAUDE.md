@@ -28,7 +28,8 @@ and the polyrepo map before judging blast radius).
   Each is hidden (`#MISE hide=true`); an atom that needs a tool beyond bash
   and the consumer's own toolchain declares it inline in `#MISE tools=`.
   `lib/` holds sourced helpers, not tasks (`ci-isolate`,
-  `fetch-config`, `go-env`, `go-mod`, `go-version`, `logs`, `py-env`).
+  `fetch-config`, `go-env`, `go-mod`, `go-version`, `go-workspace`, `logs`,
+  `py-env`).
 - `.github/workflows/` — the reusable workflows: `mise-task.yml` (the runner
   every consumer CI matrix calls), `auto-release.yml`, `go-release.yml`,
   `image-release.yml`, `sbom-source.yml`, `sbom-image.yml`,
@@ -132,6 +133,13 @@ before changing any of these; the mechanism is in the code, the history in
   load errors count), and blocking `security-sarif.yml` runs without
   `-no-fail`, so that case fails instead of passing green. → the comments above
   the install in both files.
+- Go atoms take their `-mod` value from `lib/go-workspace`: `readonly` under an
+  active `go.work` (the go command rejects `vendor` and `mod` there and never
+  reads a module's `vendor/`), else `vendor` when `vendor/` exists, else `mod`.
+  In workspace mode `go:install` skips `go mod tidy` / `go mod vendor` so its
+  dependents still run, and `doctor:go-vendor` checks with `GOWORK=off`.
+  → `.mise/tasks/lib/go-workspace`; regression suite
+  `python3 .github/tests/test_go_workspace.py`.
 - `meta:bump` is `mise cache clear` + `mise install` and nothing else; it is
   unconditional — pinning a tag instead of `?ref=main` bounds which revision
   the include resolves to, it does not make the task a no-op.

@@ -3,7 +3,9 @@
 # Vars (override via env if needed):
 #   GO_TEST_TAGS     build tags                   default: test
 #   GO_TEST_PATHS    test target paths            default: ./test/... if test/ exists, else ./...
-#   GO_TEST_MOD      module mode                  default: vendor if vendor/ exists, else mod
+#   GO_TEST_MOD      module mode                  default: GO_MOD_FLAG from lib/go-workspace
+#                                                 (readonly in workspace mode, else vendor
+#                                                 if vendor/ exists, else mod)
 #   GO_COVERPKG      coverage instrumentation     default: <module>/internal/... if internal/ exists, else empty
 #   CGO_ENABLED      cgo on/off                   default: 1 (only when unset/empty;
 #                                                 `go:test --race|--full` force-sets it to 1)
@@ -21,11 +23,9 @@ if [ -z "${GO_TEST_PATHS:-}" ]; then
 fi
 
 if [ -z "${GO_TEST_MOD:-}" ]; then
-  if [ -d "vendor" ]; then
-    GO_TEST_MOD="vendor"
-  else
-    GO_TEST_MOD="mod"
-  fi
+  # shellcheck source=go-workspace
+  source "$(dirname "${BASH_SOURCE[0]}")/go-workspace"
+  GO_TEST_MOD="$GO_MOD_FLAG"
 fi
 
 if [ -z "${GO_COVERPKG:-}" ]; then
