@@ -10,8 +10,11 @@
 # command's own vendor consistency check decides, so a go.mod or go.sum edit that
 # leaves the vendored set unchanged still passes.
 # GOTOOLCHAIN=local keeps a newer go.mod `go` line from downloading a toolchain.
+# GOWORK=off checks this module's own vendor/ even under an active go.work,
+# where the go command rejects -mod=vendor.
 set -euo pipefail
 export GOTOOLCHAIN=local
+export GOWORK=off
 # shellcheck source=../lib/go-mod
 source "$(dirname "$0")/../lib/go-mod"
 

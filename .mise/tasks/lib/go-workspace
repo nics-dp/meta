@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+# Sourced helper. Detects Go workspace mode and picks the -mod value the go
+# command accepts for the current module.
+#   GO_WORKSPACE  path of the active go.work; empty outside workspace mode
+#                 (GOWORK=off, or no go.work in this directory or a parent)
+#   GO_MOD_FLAG   readonly in workspace mode, where the go command rejects
+#                 -mod=vendor and -mod=mod and never reads a module's vendor/;
+#                 else vendor when vendor/ exists; else mod (a non-vendored
+#                 repo fails -mod=vendor with "inconsistent vendoring")
+
+GO_WORKSPACE=$(go env GOWORK 2>/dev/null || true)
+if [ "$GO_WORKSPACE" = "off" ]; then
+  GO_WORKSPACE=""
+fi
+
+# shellcheck disable=SC2034 # consumed by sourcing scripts (lib/go-env, go/install, go/run, go/dev)
+if [ -n "$GO_WORKSPACE" ]; then
+  GO_MOD_FLAG="readonly"
+elif [ -d vendor ]; then
+  GO_MOD_FLAG="vendor"
+else
+  GO_MOD_FLAG="mod"
+fi
