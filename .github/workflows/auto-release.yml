@@ -1,13 +1,16 @@
 # yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
 # Reusable workflow: one-shot release driver (no PR, no approval).
 #
-# Validates dev, snapshots it, merges to main, tags, and creates the GitHub
-# Release — which triggers the repo's release.yml to build/publish — then
-# back-merges main into dev so the release's merge commit (and thus its tag)
-# enters dev's ancestry (gitflow close-out). Without that back-merge dev never
-# sees the tag and `git describe --tags` on dev reports the PREVIOUS version,
-# leaving dev-deployed environments a version behind. main/dev writes use a
-# release App that must be in the main/dev ruleset bypass_actors.
+# Validates source_branch (default dev), snapshots it, merges to main, tags, and
+# creates the GitHub Release — which triggers the repo's release.yml to
+# build/publish — then back-merges main into source_branch so the release's
+# merge commit (and thus its tag) enters that branch's ancestry (gitflow
+# close-out). Without that back-merge dev never sees the tag and `git describe
+# --tags` on dev reports the PREVIOUS version, leaving dev-deployed environments
+# a version behind. With source_branch: main (a repo without a dev branch) the
+# snapshot is main itself: the merge is a no-op, the snapshot commit is tagged
+# and there is no back-merge. main/dev writes use a release App that must be in
+# the main/dev ruleset bypass_actors.
 #
 # LANGUAGE-AGNOSTIC: there is no actions/setup-go here. The toolchain (go,
 # python, node, uv, …) comes entirely from the repo's mise.toml [tools] via
@@ -53,6 +56,11 @@ on:
         required: false
         default: false
         type: boolean
+      source_branch:
+        description: "Branch to snapshot, validate and release (dev for gitflow repos; main for a repo that works on main directly, which skips the back-merge)"
+        required: false
+        default: "dev"
+        type: string
       runs_on:
         description: 'Runner as JSON (e.g. ''"ubuntu-latest"'' or ''{"group":"releasers"}'')'
         required: false
@@ -100,6 +108,7 @@ jobs:
     env:
       VERSION: ${{ inputs.version }}
       DRY_RUN: ${{ inputs.dry_run }}
+      SOURCE_BRANCH: ${{ inputs.source_branch }}
       # mise's minimum_release_age supply-chain control is forwarded to the pipx
       # backend as a pip-only flag that the uv-backed pipx installer rejects,
       # breaking tool installs (e.g. semgrep). "0" disables that injection and
@@ -135,6 +144,11 @@ jobs:
         run: |
           if [[ ! "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(\.[0-9]+)?$ ]]; then
             echo "::error::Invalid version format: '$VERSION'. Expected: v<major>.<minor>.<patch>[.<hotfix>]"
+            exit 1
+          fi
+          # SOURCE_BRANCH goes into REST paths and the back-merge base.
+          if [[ ! "$SOURCE_BRANCH" =~ ^[A-Za-z0-9._/-]+$ ]] || [[ "$SOURCE_BRANCH" == *..* ]]; then
+            echo "::error::Invalid source_branch: '$SOURCE_BRANCH'."
             exit 1
           fi
 
@@ -215,28 +229,28 @@ jobs:
           private-key: ${{ secrets.pre_release_app_private_key }}
           owner: ${{ github.repository_owner }}
 
-      # Snapshot the exact dev commit being released into TARGET_BRANCH (unprotected
+      # Snapshot the exact source_branch commit being released into TARGET_BRANCH (unprotected
       # namespace; auto-release/* and ci/auto-release/* are not in the main/dev ruleset).
       # GITHUB_TOKEN (contents: write) suffices. Idempotent.
       # NOTE on partial-failure recovery: a real run that fails AFTER "Merge to main"
       # but before the release is created leaves main advanced without a release.
       # Recovery is manual (create the release for the merged commit, or revert).
-      - name: Create snapshot branch from dev
+      - name: Create snapshot branch from source branch
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           # Use singular git/ref/<ref> (exact "get a single reference", 404 if absent),
           # not plural git/refs/<ref> which prefix-matches and would return an array
           # for a longer sibling (e.g. heads/auto-release/v0.3.0 matching auto-release/v0.3.0.1).
-          sha="$(gh api "repos/${GH_REPO}/git/ref/heads/dev" --jq .object.sha)"
+          sha="$(gh api "repos/${GH_REPO}/git/ref/heads/${SOURCE_BRANCH}" --jq .object.sha)"
           if gh api "repos/${GH_REPO}/git/ref/heads/${TARGET_BRANCH}" >/dev/null 2>&1; then
             gh api -X PATCH "repos/${GH_REPO}/git/refs/heads/${TARGET_BRANCH}" \
               -f "sha=${sha}" -F force=true
-            echo "Reset ${TARGET_BRANCH} to dev@${sha}."
+            echo "Reset ${TARGET_BRANCH} to ${SOURCE_BRANCH}@${sha}."
           else
             gh api -X POST "repos/${GH_REPO}/git/refs" \
               -f "ref=refs/heads/${TARGET_BRANCH}" -f "sha=${sha}"
-            echo "Created ${TARGET_BRANCH} from dev@${sha}."
+            echo "Created ${TARGET_BRANCH} from ${SOURCE_BRANCH}@${sha}."
           fi
 
       - name: Checkout snapshot branch
@@ -472,15 +486,17 @@ jobs:
       #     manual fix, never exit non-zero.
       #   - Real runs only (`!inputs.dry_run`): dry-run mints no release-app token and
       #     never sets MAIN_SHA, so the step is skipped and dev is left untouched.
-      - name: Back-merge main into dev
-        if: ${{ !inputs.dry_run && success() }}
+      #   - source_branch: main has nothing to back-merge into: the release commit is
+      #     already on main, so the step is skipped.
+      - name: Back-merge main into source branch
+        if: ${{ !inputs.dry_run && success() && inputs.source_branch != 'main' }}
         env:
           GH_TOKEN: ${{ steps.release-app.outputs.token }}
         run: |
           # Combined stdout+stderr capture (2>&1), keyed on the `if`'s exit status —
           # the same inline-capture idiom as "Delete snapshot branch", extended to keep
           # stdout too. On SUCCESS the Merges API returns the merge-commit JSON (201) or
-          # an empty body (204, dev already contains main) on stdout and writes nothing
+          # an empty body (204, the source branch already contains main) on stdout and writes nothing
           # to stderr; on FAILURE it writes the reason (e.g. "HTTP 409") to stderr. One
           # capture thus separates every outcome, with NO temp file and NO follow-up
           # `cat` — deliberately: a standalone `err=$(cat …)` is a plain assignment whose
@@ -493,26 +509,26 @@ jobs:
           # bash runs `-eo pipefail` WITHOUT inherit_errexit, so a command substitution's
           # failure inside a successful command does not propagate. head=main (not
           # MAIN_SHA) is the standard back-merge: it makes all of main an ancestor of
-          # dev, satisfying `git merge-base --is-ancestor origin/main dev`.
+          # the source branch, satisfying `git merge-base --is-ancestor origin/main dev`.
           if resp="$(gh api -X POST "repos/${GH_REPO}/merges" \
-            -f base=dev \
+            -f "base=${SOURCE_BRANCH}" \
             -f head=main \
-            -f "commit_message=chore: back-merge main into dev after ${VERSION}" 2>&1)"; then
+            -f "commit_message=chore: back-merge main into ${SOURCE_BRANCH} after ${VERSION}" 2>&1)"; then
             if [ -n "$resp" ]; then
-              echo "Back-merged main → dev (merge commit $(printf '%s' "$resp" | jq -r '.sha // "?"' 2>/dev/null))."
+              echo "Back-merged main → ${SOURCE_BRANCH} (merge commit $(printf '%s' "$resp" | jq -r '.sha // "?"' 2>/dev/null))."
               echo "BACKMERGE_RESULT=merged" >> "$GITHUB_ENV"
             else
-              # 204: dev already contains main — nothing to do.
-              echo "dev already contains main — no back-merge needed."
+              # 204: the source branch already contains main — nothing to do.
+              echo "${SOURCE_BRANCH} already contains main — no back-merge needed."
               echo "BACKMERGE_RESULT=up-to-date" >> "$GITHUB_ENV"
             fi
           else
             case "$resp" in
               *"HTTP 409"*)
-                echo "::warning::Back-merge main → dev conflicted — open a PR merging main into dev manually. Release ${VERSION} itself SUCCEEDED; this only restores dev's tag ancestry."
+                echo "::warning::Back-merge main → ${SOURCE_BRANCH} conflicted — open a PR merging main into ${SOURCE_BRANCH} manually. Release ${VERSION} itself SUCCEEDED; this only restores ${SOURCE_BRANCH}'s tag ancestry."
                 echo "BACKMERGE_RESULT=conflict" >> "$GITHUB_ENV" ;;
               *)
-                echo "::warning::Back-merge main → dev failed (release ${VERSION} succeeded; merge main into dev manually to restore dev's version lineage): ${resp}"
+                echo "::warning::Back-merge main → ${SOURCE_BRANCH} failed (release ${VERSION} succeeded; merge main into ${SOURCE_BRANCH} manually to restore its version lineage): ${resp}"
                 echo "BACKMERGE_RESULT=failed" >> "$GITHUB_ENV" ;;
             esac
           fi
@@ -565,12 +581,16 @@ jobs:
               echo "Merged \`${TARGET_BRANCH}\` → \`main\`, tagged \`${VERSION}\`, created the Release."
               echo "Build/publish is running via \`release.yml\` (triggered by the release)."
               # Back-merge outcome (BACKMERGE_RESULT is exported by the back-merge step).
-              case "${BACKMERGE_RESULT:-}" in
-                merged)     echo "Back-merged \`main\` → \`dev\` — the release tag is now on dev's ancestry." ;;
-                up-to-date) echo "\`dev\` already contained \`main\` — no back-merge needed." ;;
-                conflict)   echo "⚠️ Back-merge \`main\` → \`dev\` conflicted — merge it manually (the release still succeeded)." ;;
-                failed)     echo "⚠️ Back-merge \`main\` → \`dev\` failed — merge it manually (the release still succeeded)." ;;
-                *)          echo "⚠️ Back-merge \`main\` → \`dev\` status unknown — verify \`dev\` contains \`main\`." ;;
-              esac
+              if [ "${SOURCE_BRANCH}" = "main" ]; then
+                echo "Released from \`main\` directly — no back-merge."
+              else
+                case "${BACKMERGE_RESULT:-}" in
+                  merged)     echo "Back-merged \`main\` → \`${SOURCE_BRANCH}\` — the release tag is now on its ancestry." ;;
+                  up-to-date) echo "\`${SOURCE_BRANCH}\` already contained \`main\` — no back-merge needed." ;;
+                  conflict)   echo "⚠️ Back-merge \`main\` → \`${SOURCE_BRANCH}\` conflicted — merge it manually (the release still succeeded)." ;;
+                  failed)     echo "⚠️ Back-merge \`main\` → \`${SOURCE_BRANCH}\` failed — merge it manually (the release still succeeded)." ;;
+                  *)          echo "⚠️ Back-merge \`main\` → \`${SOURCE_BRANCH}\` status unknown — verify \`${SOURCE_BRANCH}\` contains \`main\`." ;;
+                esac
+              fi
             fi
           } >> "$GITHUB_STEP_SUMMARY"

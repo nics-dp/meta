@@ -7,7 +7,7 @@ name: self-supply-chain
 # No dependency-submission: meta has no compiled-language manifests (config only).
 on:
   push:
-    branches: [dev]
+    branches: [main, dev]
   schedule:
     - cron: "39 11 * * 1"
   workflow_dispatch:
