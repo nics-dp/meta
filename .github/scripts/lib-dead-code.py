@@ -231,7 +231,9 @@ def write_go_work(dirs, work, go, toolchain):
     lines = [f"go {version_text(go)}", ""]
     if toolchain > go:
         lines += [f"toolchain go{version_text(toolchain)}", ""]
-    lines += ["use (", *(f"\t{d}" for d in sorted(map(str, dirs))), ")", ""]
+    # Quoted as Go string literals (JSON escaping is a subset), so a path with
+    # spaces stays one `use` entry.
+    lines += ["use (", *(f"\t{json.dumps(d)}" for d in sorted(map(str, dirs))), ")", ""]
     target.write_text("\n".join(lines), encoding="utf-8")
     return target
 
@@ -349,22 +351,59 @@ def is_lib_test(pkg, libs):
     return any(pkg == f"{l}/test" or pkg.startswith(f"{l}/test/") for l in libs)
 
 
+IGNORE_BUILD = re.compile(r"^//go:build\s+ignore\s*$", re.MULTILINE)
+
+
 def lib_packages(libs, env, cwd):
-    """The libraries' non-main packages, without their own test support."""
-    listed = run(
-        [
-            "go",
-            "list",
-            "-f",
-            '{{if ne .Name "main"}}{{.ImportPath}}{{end}}',
-            *[f"{p}/..." for p in libs],
-        ],
-        env,
-        cwd,
+    """The libraries' non-main packages, without their own test support.
+
+    Maps each package to its non-test source files, including those a build
+    constraint excludes from the default build (`IgnoredGoFiles`), but not
+    `//go:build ignore` files, which no build ever compiles.
+    """
+    template = (
+        '{{if ne .Name "main"}}{{.ImportPath}}\t{{.Dir}}\t{{join .GoFiles ","}}'
+        '\t{{join .CgoFiles ","}}\t{{join .IgnoredGoFiles ","}}{{end}}'
     )
+    listed = run(["go", "list", "-f", template, *[f"{p}/..." for p in libs]], env, cwd)
     if listed.returncode != 0:
         sys.exit(f"cannot list library packages: {last_error(listed)}")
-    return [l for l in listed.stdout.splitlines() if l and not is_lib_test(l, libs)]
+    packages = {}
+    for line in listed.stdout.splitlines():
+        if not line:
+            continue
+        pkg, pkg_dir, *groups = (line.split("\t") + ["", "", "", ""])[:5]
+        if is_lib_test(pkg, libs):
+            continue
+        files = set()
+        for name in ",".join(groups).split(","):
+            if not name or name.endswith("_test.go"):
+                continue
+            path = os.path.realpath(os.path.join(pkg_dir, name))
+            if IGNORE_BUILD.search(pathlib.Path(path).read_text(encoding="utf-8")):
+                continue
+            files.add(path)
+        packages[pkg] = files
+    return packages
+
+
+def uncompiled(packages, runs, unimported):
+    """Files of imported library packages that no successful build compiled.
+
+    deadcode judges only compiled functions, so these are outside the analysis
+    rather than used.
+    """
+    compiled_any = (
+        set().union(*(compiled for _, _, compiled in runs)) if runs else set()
+    )
+    skip = set(unimported)
+    return sorted(
+        f
+        for pkg, files in packages.items()
+        if pkg not in skip
+        for f in files
+        if f not in compiled_any
+    )
 
 
 def link(owner, src, shas, name, file, line):
@@ -396,7 +435,10 @@ def report(owner, src, shas, libs, consumers, dead, unimported, skipped):
         lines += [
             "## 未分析",
             "",
-            "下列 build 載入失敗，沒有算進去，只有它們用到的函式也會出現在下面的清單裡。",
+            (
+                "下列 repo、build 或檔案沒有分析到：只有失敗的 build 用到的函式會出現在下面的清單裡，"
+                "沒有任何 build 編入的檔案裡的函式則完全沒有判斷。"
+            ),
             "",
             "| 對象 | 原因 |",
             "|---|---|",
@@ -512,8 +554,16 @@ def main():
             )
             for label, e in errors
         ]
-    dead, unimported = aggregate(runs, lib_packages(libs, env, cwd))
+    packages = lib_packages(libs, env, cwd)
+    dead, unimported = aggregate(runs, list(packages))
     dead = {key: pos for key, pos in dead.items() if not is_lib_test(key[0], libs)}
+    skipped += [
+        (
+            f"`{f.replace(os.path.realpath(src) + '/', '')}`",
+            "沒有任何成功的 build 編入這個檔案（build tag 或平台限制）",
+        )
+        for f in uncompiled(packages, runs, unimported)
+    ]
 
     used_repos = {
         d.relative_to(src).parts[0] for d in [*lib_dirs.values(), *consumers.values()]

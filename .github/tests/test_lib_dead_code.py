@@ -131,8 +131,28 @@ class GoModTests(unittest.TestCase):
             )
             text = target.read_text(encoding="utf-8")
         self.assertEqual(
-            text, "go 1.27.0\n\ntoolchain go1.27.4\n\nuse (\n\t/src/a\n\t/src/b\n)\n"
+            text,
+            'go 1.27.0\n\ntoolchain go1.27.4\n\nuse (\n\t"/src/a"\n\t"/src/b"\n)\n',
         )
+
+    def test_go_work_keeps_a_path_with_spaces_as_one_entry(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            target = dead.write_go_work(
+                ["/tmp/dead code/src/libdcf"], pathlib.Path(tmp), (1, 27, 0), (1, 27, 0)
+            )
+            text = target.read_text(encoding="utf-8")
+        self.assertIn('\t"/tmp/dead code/src/libdcf"\n', text)
+
+
+class UncompiledTests(unittest.TestCase):
+    def test_file_no_build_compiled_is_listed(self):
+        packages = {UTILS: {"/u/a.go", "/u/cgroup_linux.go"}}
+        runs = [({}, {UTILS}, {"/u/a.go"}), ({}, {UTILS}, {"/u/a.go"})]
+        self.assertEqual(dead.uncompiled(packages, runs, []), ["/u/cgroup_linux.go"])
+
+    def test_unimported_package_files_are_not_listed_again(self):
+        packages = {f"{LIB}/settle": {"/s/s.go"}}
+        self.assertEqual(dead.uncompiled(packages, [], [f"{LIB}/settle"]), [])
 
 
 class ReportTests(unittest.TestCase):
