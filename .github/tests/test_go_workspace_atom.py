@@ -102,6 +102,40 @@ class GoWorkspaceAtomTest(unittest.TestCase):
         self.assertIn("would be found by the go command", result.stderr)
         self.assertFalse(out.exists())
 
+    def test_refuses_a_go_work_inside_a_module_left_out(self):
+        self.module("lib", "example.com/lib")
+        self.module("app", "example.com/app", ["example.com/lib"])
+        solo = self.module("solo", "example.com/solo")
+        result = self.run_atom(root=self.root, out=solo / "go.work")
+        self.assertEqual(result.returncode, 1)
+        self.assertIn(f"from {solo}", result.stderr)
+        self.assertFalse((solo / "go.work").exists())
+
+    def test_refuses_a_directory_as_out(self):
+        self.module("lib", "example.com/lib")
+        app = self.module("app", "example.com/app", ["example.com/lib"])
+        result = self.run_atom(root=self.root, out=app)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("is a directory", result.stderr)
+        self.assertFalse((app / "go.work").exists())
+
+    def test_enable_hint_survives_spaces_in_the_path(self):
+        self.root = self.tmp / "Work dcf"
+        self.module("lib", "example.com/lib")
+        self.module("app", "example.com/app", ["example.com/lib"])
+        result = self.run_atom(root=self.root)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        hint = next(
+            line.split(": ", 1)[1]
+            for line in result.stderr.splitlines()
+            if line.startswith("Enable it")
+        )
+        echoed = subprocess.run(
+            [BASH, "-c", f'{hint}; printf "%s" "$GOWORK"'],
+            capture_output=True, text=True, check=True,
+        ).stdout
+        self.assertEqual(echoed, str(self.root / ".go-workspace" / "go.work"))
+
     def test_requires_a_root(self):
         result = self.run_atom()
         self.assertEqual(result.returncode, 1)

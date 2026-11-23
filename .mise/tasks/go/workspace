@@ -32,6 +32,12 @@ if [ -z "$root" ] || [ ! -d "$root" ]; then
 fi
 root=$(cd "$root" && pwd -P)
 out="${usage_out:-$root/.go-workspace/go.work}"
+# mv into an existing directory would write <dir>/go.work, a path the checks
+# below never saw.
+if [ -d "$out" ]; then
+  echo "Error: --out $out is a directory; pass the path of the go.work file to write." >&2
+  exit 1
+fi
 mkdir -p "$(dirname "$out")"
 out_dir=$(cd "$(dirname "$out")" && pwd -P)
 out="$out_dir/$(basename "$out")"
@@ -39,7 +45,9 @@ out="$out_dir/$(basename "$out")"
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 modules="$tmp/modules" # <module path>\t<dir>, one per module path
+all_dirs="$tmp/all_dirs" # every module directory seen, joined or not
 : >"$modules"
+: >"$all_dirs"
 : >"$tmp/selected"
 
 module_path() {
@@ -50,6 +58,7 @@ module_path() {
 # unless force (--use) replaces it.
 add_module() {
   local dir=$1 force=${2:-} path taken
+  printf '%s\n' "$dir" >>"$all_dirs"
   path=$(module_path "$dir")
   if [ -z "$path" ]; then
     echo "skip $dir: go.mod has no module line" >&2
@@ -105,14 +114,16 @@ if [ ${#dirs[@]} -eq 0 ]; then
   exit 1
 fi
 
+# Every module directory counts, joined or not: one left out of the workspace
+# would still find this file and stop building.
 if [ "$(basename "$out")" = go.work ]; then
-  for dir in "${dirs[@]}"; do
+  while IFS= read -r dir; do
     case "$dir/" in
       "$out_dir"/*)
         echo "Error: $out would be found by the go command from $dir and put every module below $out_dir in workspace mode. Write it outside the module tree (default: <root>/.go-workspace/go.work)." >&2
         exit 1 ;;
     esac
-  done
+  done <"$all_dirs"
 fi
 
 mkdir "$tmp/work"
@@ -123,5 +134,5 @@ echo "Wrote $out with ${#dirs[@]} modules:" >&2
 for dir in "${dirs[@]}"; do
   printf '  %s  %s\n' "$(module_path "$dir")" "$dir" >&2
 done
-echo "Enable it for a shell with: export GOWORK=$out" >&2
+printf 'Enable it for a shell with: export GOWORK=%q\n' "$out" >&2
 echo "Tidy, vendor and commit go.mod with GOWORK=off; CI never uses this file." >&2
