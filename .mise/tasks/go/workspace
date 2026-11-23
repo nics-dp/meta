@@ -114,17 +114,21 @@ if [ ${#dirs[@]} -eq 0 ]; then
   exit 1
 fi
 
-# Every module directory counts, joined or not: one left out of the workspace
-# would still find this file and stop building.
-# The prefix ends in exactly one slash so out_dir=/ matches every directory.
+# The go command finds this file from out_dir and every directory below it.
+# Refuse when that reaches any module directory, joined or not (one left out of
+# the workspace would stop building): out_dir at or above a module, or inside
+# one (a package directory of that module). The prefix ends in exactly one
+# slash so out_dir=/ matches every directory.
 if [ "$(basename "$out")" = go.work ]; then
   prefix="${out_dir%/}/"
   while IFS= read -r dir; do
-    case "$dir/" in
-      "$prefix"*)
-        echo "Error: $out would be found by the go command from $dir and put every module below $out_dir in workspace mode. Write it outside the module tree (default: <root>/.go-workspace/go.work)." >&2
-        exit 1 ;;
-    esac
+    found=""
+    case "$dir/" in "$prefix"*) found=1 ;; esac
+    case "$prefix" in "$dir/"*) found=1 ;; esac
+    if [ -n "$found" ]; then
+      echo "Error: $out would be found by the go command from module $dir without GOWORK. Write it outside every module directory and its parents (default: <root>/.go-workspace/go.work)." >&2
+      exit 1
+    fi
   done <"$all_dirs"
 fi
 
