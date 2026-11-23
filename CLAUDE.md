@@ -42,7 +42,9 @@ and the polyrepo map before judging blast radius).
   `[tools]` `.github/scripts/mise-tools-toml.py` generates), and
   `license-inventory.yml` (weekly org-wide license check of every repository's
   dependency-graph SBOM with `.github/scripts/license-inventory.py`; policy in
-  the `deny_licenses` comment of `dependency-review.yml`).
+  the `deny_licenses` comment of `dependency-review.yml`), and
+  `lib-dead-code.yml` (weekly report of library functions no consumer reaches,
+  with `.github/scripts/lib-dead-code.py`).
   `.github/scripts/github-actions-scanner.sh` is the wrapper `ci.yml`'s scanner
   job execs. Inputs, secrets, outputs and defaults are the `workflow_call`
   declarations at the top of each file.
@@ -148,6 +150,14 @@ before changing any of these; the mechanism is in the code, the history in
   and runs under macOS's bash 3.2 (no associative arrays or `mapfile`).
   → `.mise/tasks/go/workspace`; regression suite
   `python3 .github/tests/test_go_workspace_atom.py`.
+- `lib-dead-code.yml` is a report, never a gate: a library function counts as
+  used when any consumer's production or `-test` build reaches it, so a
+  consumer change alone can move it. It clones repositories rather than reading
+  GitHub source archives, because `.gitattributes` `export-ignore` strips tests
+  and assets the build needs; the deadcode version is read from the
+  `go:dead-code` atom header. → the module docstring of
+  `.github/scripts/lib-dead-code.py`; regression suite
+  `python3 .github/tests/test_lib_dead_code.py`.
 - `meta:bump` is `mise cache clear` + `mise install` and nothing else; it is
   unconditional — pinning a tag instead of `?ref=main` bounds which revision
   the include resolves to, it does not make the task a no-op.
