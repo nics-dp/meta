@@ -31,7 +31,7 @@ Facade templates 於 `templates/facades/`，包含 `[settings]` / `[tools]` / `[
 | --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `ci:*`    | semgrep, trivy-license, betterleaks, trufflehog, toolchain-pins                                                                                                                                | 通用 CI 檢查（語言中立）。`ci:semgrep` 引擎已改為 OpenGrep（原生 single-binary semgrep fork，無 Python；CLI/registry packs drop-in 相容，task 名與簽名不變）。`ci:betterleaks`＝快速 secret 掃描 PR gate（Gitleaks fork，PR 上優先掃 base..HEAD，base ref fetch 失敗則 fallback 全歷史）；`ci:trufflehog`＝deep/release scan，只報經驗證的 live secrets；`ci:toolchain-pins`＝檢查 go/python/node/bun 版本在 mise.toml、go.mod、Dockerfile、workflows `*_version`/`*-version`、.python-version、.nvmrc 間一致（與 Renovate preset 的 `<lang> toolchain` 群組共用這些主要來源），另檢查 repo-local `.mise/tasks` 內的映像參照（preset 無對應 manager，由 consumer 自備 manager 或人工更新，gate 只負責比對）；每個 pin 都必須是同一個完整 `X.Y.Z`，只到 `X.Y` 或 `X` 的短 pin 直接判失敗（SHORT）；README 一律不寫版本，只寫「版本見 `mise.toml`」（Go 見 `go.mod` 的 `toolchain` 行；有已追蹤的 `go.work` 時它也是版本來源，一樣比對；其目錄樹下的 `go.mod` 只比對 `toolchain` 行） |
 | `iac:*`   | trivy, img:hadolint, actionlint, shellcheck, zizmor                                                                                                                                             | IaC misconfig + Dockerfile lint + workflow/task definition lint；`shellcheck` 動態枚舉 Git index 中全部 tracked task/helper，僅接受 stage 0、mode 100644/100755、regular non-symlink，並以 Bash dialect + warning threshold 掃描；`zizmor` 以 offline、strict collection、regular persona、high threshold 掃本機 workflow/composite action，僅套用 `zizmor.yml` 精確行號 baseline                                                                                                                                                                                                                                                                                                                                                |
-| `go:*`    | api-fix, audit, build, bench-compare, clean, dead-code, deptree, dev, generate, install, lib-local, lib-remote, lint-check, lint-fix, report, run, sast, test, update, workspace                    | Go 建置/測試/Lint/安全/模組。`go:workspace` 產生跨 repo 開發用的 `go.work`（見下方「Go workspace」）；`go:api-fix` 跑兩輪 `go fix`：先 production build（含 `//go:build !test` 檔），再 `-tags=$GO_TEST_TAGS`（涵蓋帶該 tag 的測試檔與 seam）；`go:test` 預設只跑 unit；flags：`--race`、`--coverage`、`--bench [--pattern X]`、`--full`；`go:report` 從 coverage.out 產 HTML+MD（自動讀 `go.mod` module path 解析 component）；`go:bench-compare` 跑 benchstat；`go:dead-code` 用 `cmd/deadcode`，預設只分析 production（root 為所有 main package，常見於 `cmd/*`），`--whole-program` 才把測試一併納入並 root（`-tags "$GO_TEST_TAGS" -test`，預設 `test`）；`go:deptree` 用 `go mod graph`；路徑/tags/coverpkg 由 `lib/go-env` auto-detect            |
+| `go:*`    | api-fix, audit, build, bench-compare, clean, dead-code, deptree, dev, generate, install, lint-check, lint-fix, report, run, sast, test, update, workspace                    | Go 建置/測試/Lint/安全/模組。`go:workspace` 產生跨 repo 開發用的 `go.work`（見下方「Go workspace」）；`go:api-fix` 跑兩輪 `go fix`：先 production build（含 `//go:build !test` 檔），再 `-tags=$GO_TEST_TAGS`（涵蓋帶該 tag 的測試檔與 seam）；`go:test` 預設只跑 unit；flags：`--race`、`--coverage`、`--bench [--pattern X]`、`--full`；`go:report` 從 coverage.out 產 HTML+MD（自動讀 `go.mod` module path 解析 component）；`go:bench-compare` 跑 benchstat；`go:dead-code` 用 `cmd/deadcode`，預設只分析 production（root 為所有 main package，常見於 `cmd/*`），`--whole-program` 才把測試一併納入並 root（`-tags "$GO_TEST_TAGS" -test`，預設 `test`）；`go:deptree` 用 `go mod graph`；路徑/tags/coverpkg 由 `lib/go-env` auto-detect            |
 | `node:*`  | install, build, bench-compare, bundle-size, clean, deptree, run, test, e2e, e2e-install, lint-check, lint-fix, oxlint, format-check, format-fix, oxfmt-check, oxfmt-fix, typecheck, typecheck-tsgo, sast, audit, update, knip, lighthouse      | JS/TS via bun。`lint`/`format`/`lighthouse` 拉 `configs/` shared；`test`/`knip` 用 repo-local config（各 repo 自家 root 檔，工具自動發現，缺檔即報錯）；e2e 用 Playwright；`node:clean [--deep]` 清 transient；`node:bench-compare` 跑 vitest bench × `--count` 後 merge JSON，無 flag 列對比 (mean ± rme + Welch t-test 完整 p-value)；`node:bundle-size` 偵 `.size-limit` config 用 size-limit，否則 fallback du+gzip。原生 binary 平行替代（opt-in，與既有 atom 並存）：`oxfmt-check`/`oxfmt-fix` ↔ prettier、`oxlint` ↔ eslint（script-only，不解析 .vue template）、`typecheck-tsgo` ↔ vue-tsc（.ts only，需 repo 自備 `*.vue` shim）；三者皆 bunx 無版本、版本由 consumer package.json devDep 控制 |
 | `py:*`    | install, build, audit, bench-compare, clean, complexity, dead-code, deptree, format-check, format-fix, license-custom, lint-check, lint-fix, profile, report, run, safety-db, sast, sbom-custom, test, typecheck, update | Python via uv + ruff + pytest + bandit + pip-audit + ty。`py:sast` (bandit)；`py:typecheck` (ty Beta / `--pyrefly`)；`py:dead-code` (vulture)；`py:complexity` (radon/xenon)；`py:deptree` (uv tree)；`py:safety-db` (safety<3)；`py:license-custom` (pip-licenses)；`py:sbom-custom` (cyclonedx-py)；`py:profile` 預設 cProfile，flags：`--instrument`/`--spy`/`--mem`/`--scalene`；env override 由 `lib/py-env` |
 | `sbom:*`  | source, enrich, trivy, grype                                                                                                                                                                   | Source SBOM 產生與漏洞掃描                                                                                                                                                                                                                                                                                                                                                                          |
@@ -102,17 +102,47 @@ Consumer 在自家 `mise.toml` 定義同名 task 即覆寫（mise 偏好近檔�
 
 ### Go workspace（`go.work`）跨 repo 開發
 
-library 與其 consumer 一起開發時，用 Go workspace 讓 consumer 直接編譯本機的 library，不修改任何 `go.mod`：
+同時修改 library（libdcf / ZenQuery）與其下游服務時，用 Go workspace 讓下游直接編譯本機的 library，不改任何 `go.mod`（不寫 `replace`），也不 commit `go.work`。CI 不使用 `go.work`。
+
+**1. 建立並啟用（每個 shell 一次）**
 
 ```bash
-export GO_WORKSPACE_ROOT="$HOME/Work/dcf"   # 放各 repo clone 的目錄
-mise run go:workspace                        # 寫出 $GO_WORKSPACE_ROOT/.go-workspace/go.work
-export GOWORK="$GO_WORKSPACE_ROOT/.go-workspace/go.work"
+export GO_WORKSPACE_ROOT="$HOME/Work/dcf"                  # 放各 repo clone 的根目錄（子目錄結構不限）
+cd "$GO_WORKSPACE_ROOT/<任一 DCF repo>"
+mise run go:workspace                                       # 寫出 $GO_WORKSPACE_ROOT/.go-workspace/go.work
+export GOWORK="$GO_WORKSPACE_ROOT/.go-workspace/go.work"   # 必須是絕對路徑
 ```
 
-- `go:workspace` 掃描 root 底下的 `go.mod`（略過 `vendor`、`.git`、`.worktree` 等），只納入「requires 另一個本機 module」的 module 及被它 require 的 module；與其他本機 module 無相依的 module 不納入。同一 module path 出現多次時取排序第一個，`--use <dir>`（可重複）可指定改用某目錄（例如 worktree）。
-- `go.work` 一律放在各 module 的上層目錄之外，只透過 `GOWORK` 生效；go 指令會從工作目錄往上找 `go.work`，放在 root 會讓底下所有 module 進入 workspace 模式，未列入的 module 因此編不過，`--out` 指到這種位置會被拒絕。
-- workspace 模式下 Go atoms 用 `-mod=readonly`，`go:install` 略過 tidy／vendor（見 `lib/go-workspace`）。改依賴、vendor 與 commit 前以 `GOWORK=off` 執行；CI 不使用 `go.work`。
+- `go:workspace` 掃描 root 底下的 `go.mod`（略過 `vendor`、`.git`、`.worktree` 等），只納入「require 另一個本機 module」的 module 及被它 require 的 module；與其他本機 module 無相依的 module 不納入。同一 module path 出現多次時取排序第一個，`--use <dir>`（可重複）改用指定目錄（例如 library 的 worktree）；`--out <file>` 換輸出位置。
+- 找不到 `go:workspace` 時先 `mise run meta:bump`。clone 新 repo 或換 worktree 後重跑一次。
+
+**2. 開發（`GOWORK` 已設定）**
+
+- 直接改 library checkout，下游的 build／test 立即用到，不需 `go get` 或 vendor。
+- 下游照常 `mise run build`／`mise run test`／`mise run dev`／`go generate ./...`：Go atoms 用 `-mod=readonly`（見 `lib/go-workspace`），`go:install` 略過 tidy／vendor。依賴改從 module cache 讀（不讀 `vendor/`），首次需能連到 proxy.golang.org。
+
+**3. 收尾：開 PR 前關掉 workspace**
+
+1. library 先開 PR 並合進 `dev`，記下合併後的 commit SHA。
+2. 每個下游 repo：
+
+   ```bash
+   export GOWORK=off                                      # 或 unset GOWORK
+   go get github.com/nics-dp/libdcf@<libdcf commit SHA>  # ZenQuery 同理
+   mise run init                                          # tidy + vendor
+   mise run all                                           # 與 CI 相同的完整檢查
+   git add go.mod go.sum                                  # vendor/ 已 gitignore
+   ```
+
+3. 合併順序：library → 下游。
+
+**規則與常見錯誤**
+
+- 不 commit `replace` 或 `go.work`。`go.work` 一律放在各 module 的上層目錄之外，只透過 `GOWORK` 生效：go 指令會從工作目錄往上找 `go.work`，放在 root 會讓底下所有 module 進入 workspace 模式，未列入的 module 因此編不過；`--out` 指到這種位置會被拒絕。
+- workspace 讓所有成員共用一份依賴版本清單，結果可能與各 repo 單獨建置不同；以 `GOWORK=off` 的結果為準。
+- `-mod may only be set to readonly or vendor when in workspace mode`：某處寫死了 `-mod=mod`／`-mod=vendor`，改為不指定 `-mod`，或該指令前加 `GOWORK=off`。
+- `'go mod vendor' cannot be run in workspace mode`：該步驟改以 `GOWORK=off` 執行。
+- `no scan root`：設定 `GO_WORKSPACE_ROOT` 或傳 `--root <dir>`。
 
 ### Python / Node atoms env 覆寫
 
@@ -168,14 +198,6 @@ sbom-source.cdx.json
 Atoms 之 trap cleanup 結束時清 curl 下來的 shared config (`eslint.config.js`、`.prettierrc.json`、`playwright.config.ts`、`lighthouserc.json`)，但 atom 中斷時可能殘留 — 若 repo 不另放可一併 ignore。（`vitest.config.ts` / `knip.json` 已改 repo-local，不再 curl，故不在此清單。）
 
 > **`.golangci.yml` 例外**：由 consumer repo **自家 commit**（非 curl），須含 `gofumpt.module-path: <repo-module>` 設定（golangci-lint 自動推導對無 `.` 模組名會誤判 stdlib，致 gci↔gofumpt import 互相 false positive）。範本直接 ref 既有 Go repo 之 `.golangci.yml`。
-
-> **`go:lib-local` / `go:lib-remote` 注意事項：**
-> 兩 atom 由 env 驅動：
-> ```toml
-> GO_LIB_LOCAL  = "github.com/nics-dp/libdcf=../libdcf github.com/nics-dp/ZenQuery=../ZenQuery"
-> GO_LIB_REMOTE = "github.com/nics-dp/libdcf@dev github.com/nics-dp/ZenQuery@dev"
-> ```
-> `go:lib-local` 自動停用 repo 自家 `.golangci.yml` 中 `gomoddirectives` 規則並建立 `.semgrepignore` block 排除 vendored libs。`go:lib-remote` 還原。`.semgrepignore` 不應 commit（加入 `.gitignore`）。
 
 ---
 
