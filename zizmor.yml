@@ -15,14 +15,14 @@ rules:
       - image-release.yml:220
       - image-release.yml:224
       - license-inventory.yml:45
-      - mise-task.yml:118
-      - mise-task.yml:122
+      - mise-task.yml:124
+      - mise-task.yml:128
       - pr-issue-check.yml:247
       - sbom-source.yml:56
       - sbom-source.yml:60
       - scorecard.yml:61
-      - security-sarif.yml:140
-      - security-sarif.yml:144
+      - security-sarif.yml:147
+      - security-sarif.yml:151
   unpinned-uses:
     ignore:
       # Same-repo self-consumption follows protected main as the promotion boundary.

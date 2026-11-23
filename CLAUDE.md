@@ -210,8 +210,9 @@ before changing any of these; the mechanism is in the code, the history in
 
 - `security-sarif.yml` is informational by default; fail-closed enforcement
   exists only under `run_go && run_gosec && gosec_blocking`
-  (`EFFECTIVE_BLOCKING`), and caller-configuration checks such as `scan_path`
-  validation fail independently of it. The Go scanners run on the toolchain of
+  (`EFFECTIVE_BLOCKING`); `gosec_on_pull_request: false` drops gosec and that
+  mode on `pull_request` events. Caller-configuration checks such as
+  `scan_path` validation fail independently of either. The Go scanners run on the toolchain of
   the repository root `go.mod` unless `go_version` is set. → the input
   descriptions and the "Set up Go" step.
 - `GO-2026-5932` (`golang.org/x/crypto/openpgp`, unmaintained, no fix) is
