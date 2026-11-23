@@ -20,7 +20,7 @@ Edits since the move:
 
 ---
 
-**`mise-task.yml`** — Inputs: `task`, `name`, `runs_on` (JSON via `fromJSON()`), `fetch-depth`, `private-modules`. Secret: `ci_read_app_private_key` (client-id via the `CI_READ_APP_CLIENT_ID` org var; the legacy `ci_read_app_id` input is gone). Encapsulates SHA-pinned checkout + `jdx/mise-action` + optional private-module git config + atom run + step summary + enforce [and, since the move: job-local Go build / module cache roots under `RUNNER_TEMP` with restore, sanitize, save and cleanup steps, plus a credential-revoke step that runs under `always()`].
+**`mise-task.yml`** — Inputs: `task`, `name`, `runs_on` (JSON via `fromJSON()`), `fetch-depth`, `private-modules`, `pull_request_only` (job-level `if`: skip on every non-`pull_request` event). Secret: `ci_read_app_private_key` (client-id via the `CI_READ_APP_CLIENT_ID` org var; the legacy `ci_read_app_id` input is gone). Encapsulates SHA-pinned checkout + `jdx/mise-action` + optional private-module git config + atom run + step summary + enforce [and, since the move: job-local Go build / module cache roots under `RUNNER_TEMP` with restore, sanitize, save and cleanup steps, plus a credential-revoke step that runs under `always()`].
 
 Implementation invariants (do **not** "simplify" these away):
 

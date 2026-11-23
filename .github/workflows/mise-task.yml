@@ -52,6 +52,11 @@ on:
         required: false
         type: boolean
         default: false
+      pull_request_only:
+        description: "Run only on pull_request events and skip the job on every other event (a pull-request gate whose push-time result comes from another workflow)"
+        required: false
+        type: boolean
+        default: false
     secrets:
       ci_read_app_private_key:
         required: false
@@ -63,6 +68,7 @@ permissions:
 jobs:
   run:
     name: ${{ inputs.name != '' && inputs.name || inputs.task }}
+    if: ${{ !inputs.pull_request_only || github.event_name == 'pull_request' }}
     runs-on: ${{ fromJSON(inputs.runs_on) }}
     defaults:
       run:
@@ -202,7 +208,7 @@ jobs:
             echo "GOMODCACHE=$cache_root/mod"
           } >> "$GITHUB_ENV"
 
-      - uses: jdx/mise-action@6612f0ef07ed2a736cd1e00a94a065522dd41195 # v5.2.5
+      - uses: jdx/mise-action@b44d12e7d0d8ee7461bb893e1b1993500433185b # v5.2.7
         with:
           version: "2026.10.25"
           cache: true
