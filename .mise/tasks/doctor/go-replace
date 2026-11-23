@@ -3,8 +3,8 @@
 #MISE hide=true
 #MISE raw=true
 
-# Read-only. A replace without a new version is a directory replacement (what
-# go:lib-local writes); the go command needs a go.mod there. Relative targets
+# Read-only. A replace without a new version is a directory replacement; the go
+# command needs a go.mod there. Relative targets
 # resolve from the directory holding go.mod, the task's cwd.
 set -euo pipefail
 # shellcheck disable=SC1091
