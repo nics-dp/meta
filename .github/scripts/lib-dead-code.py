@@ -355,12 +355,67 @@ def is_lib_test(pkg, libs):
 IGNORE_BUILD = re.compile(r"^//go:build\s+ignore\s*$", re.MULTILINE)
 
 
-def lib_packages(libs, env, cwd):
+PACKAGE_CLAUSE = re.compile(r"^package\s+(\w+)", re.MULTILINE)
+
+
+def source_files(pkg_dir, names):
+    """Non-test files of names in pkg_dir, without `//go:build ignore` files."""
+    files = set()
+    for name in names:
+        if not name or not name.endswith(".go") or name.endswith("_test.go"):
+            continue
+        path = os.path.realpath(os.path.join(pkg_dir, name))
+        if IGNORE_BUILD.search(pathlib.Path(path).read_text(encoding="utf-8")):
+            continue
+        files.add(path)
+    return files
+
+
+def walk_packages(lib_dirs):
+    """Every non-main package directory under the library modules.
+
+    `go list <lib>/...` silently drops a package whose files a build
+    constraint excludes from the default build (a test-tag-only package, say),
+    so the directories are walked as well. Nested modules are not part of the
+    library module and are skipped.
+    """
+    packages = {}
+    for lib, root in lib_dirs.items():
+        for dirpath, dirnames, filenames in os.walk(root):
+            here = pathlib.Path(dirpath)
+            dirnames[:] = sorted(
+                d
+                for d in dirnames
+                if d not in SKIP_DIRS
+                and not d.startswith((".", "_"))
+                and not (here / d / "go.mod").exists()
+            )
+            files = source_files(dirpath, filenames)
+            if not files:
+                continue
+            names = {
+                m.group(1)
+                for f in files
+                if (
+                    m := PACKAGE_CLAUSE.search(
+                        pathlib.Path(f).read_text(encoding="utf-8")
+                    )
+                )
+            }
+            if names == {"main"}:
+                continue
+            rel = here.relative_to(root).as_posix()
+            packages[lib if rel == "." else f"{lib}/{rel}"] = files
+    return packages
+
+
+def lib_packages(libs, env, cwd, lib_dirs=None):
     """The libraries' non-main packages, without their own test support.
 
     Returns ({package: non-test source files}, error). The files include those
     a build constraint excludes from the default build (`IgnoredGoFiles`), but
-    not `//go:build ignore` files, which no build ever compiles.
+    not `//go:build ignore` files, which no build ever compiles. Packages `go
+    list` drops because no file builds by default come from walk_packages.
     """
     template = (
         '{{if ne .Name "main"}}{{.ImportPath}}\t{{.Dir}}\t{{join .GoFiles ","}}'
@@ -376,15 +431,10 @@ def lib_packages(libs, env, cwd):
         pkg, pkg_dir, *groups = (line.split("\t") + ["", "", "", ""])[:5]
         if is_lib_test(pkg, libs):
             continue
-        files = set()
-        for name in ",".join(groups).split(","):
-            if not name or name.endswith("_test.go"):
-                continue
-            path = os.path.realpath(os.path.join(pkg_dir, name))
-            if IGNORE_BUILD.search(pathlib.Path(path).read_text(encoding="utf-8")):
-                continue
-            files.add(path)
-        packages[pkg] = files
+        packages[pkg] = source_files(pkg_dir, ",".join(groups).split(","))
+    for pkg, files in walk_packages(lib_dirs or {}).items():
+        if pkg not in packages and not is_lib_test(pkg, libs):
+            packages[pkg] = files
     return packages, None
 
 
@@ -559,7 +609,7 @@ def main():
             )
             for label, e in errors
         ]
-    packages, err = lib_packages(libs, env, cwd)
+    packages, err = lib_packages(libs, env, cwd, lib_dirs)
     if err:
         # Without the package list neither unimported packages nor uncompiled
         # files can be found; the per-build function results still stand.

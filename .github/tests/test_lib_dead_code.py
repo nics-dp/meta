@@ -1,6 +1,7 @@
 import contextlib
 import importlib.util
 import io
+import os
 import pathlib
 import sys
 import tempfile
@@ -243,6 +244,34 @@ class LibPackagesTests(unittest.TestCase):
             packages, err = dead.lib_packages([LIB], {}, ".")
         self.assertEqual(packages, {})
         self.assertIn("cannot find module", err)
+
+    def test_walk_finds_packages_go_list_drops(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            files = {
+                "go.mod": f"module {LIB}\n",
+                "a/a.go": "package a\n",
+                "a/a_test.go": "package a\n",
+                "onlytest/h.go": "//go:build test\n\npackage onlytest\n",
+                "gen/main.go": "package main\n",
+                "tool/gen.go": "//go:build ignore\n\npackage main\n",
+                "test/integration/go.mod": "module x\n",
+                "test/integration/i.go": "package integration\n",
+                "_scratch/s.go": "package s\n",
+                "testdata/t.go": "package t\n",
+            }
+            for name, body in files.items():
+                (root / name).parent.mkdir(parents=True, exist_ok=True)
+                (root / name).write_text(body, encoding="utf-8")
+            found = dead.walk_packages({LIB: root})
+            real = pathlib.Path(os.path.realpath(root))
+        self.assertEqual(
+            found,
+            {
+                f"{LIB}/a": {str(real / "a/a.go")},
+                f"{LIB}/onlytest": {str(real / "onlytest/h.go")},
+            },
+        )
 
 
 if __name__ == "__main__":
