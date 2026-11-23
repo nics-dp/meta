@@ -371,6 +371,7 @@ def is_generated(text):
 def source_files(pkg_dir, names):
     """Hand-written, non-test files of names in pkg_dir.
 
+    Files the go command ignores by name (a leading `_` or `.`) and
     `//go:build ignore` files are left out because no build compiles them, and
     generated files because deadcode never judges them (it runs without
     -generated), so listing one as not analysed would only hold the report
@@ -378,7 +379,12 @@ def source_files(pkg_dir, names):
     """
     files = set()
     for name in names:
-        if not name or not name.endswith(".go") or name.endswith("_test.go"):
+        if (
+            not name
+            or not name.endswith(".go")
+            or name.endswith("_test.go")
+            or name.startswith(("_", "."))
+        ):
             continue
         path = os.path.realpath(os.path.join(pkg_dir, name))
         text = pathlib.Path(path).read_text(encoding="utf-8")
