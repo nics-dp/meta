@@ -151,6 +151,13 @@ jobs:
             echo "::error::Invalid source_branch: '$SOURCE_BRANCH'."
             exit 1
           fi
+          # auto-release/* and ci/auto-release/* hold the snapshots this run resets
+          # and deletes; a source branch there would be overwritten and then removed.
+          case "$SOURCE_BRANCH" in
+            auto-release/* | ci/auto-release/*)
+              echo "::error::source_branch '$SOURCE_BRANCH' is in the release snapshot namespace (auto-release/*, ci/auto-release/*)."
+              exit 1 ;;
+          esac
 
       - name: Duplicate-tag guard
         env:

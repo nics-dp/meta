@@ -2,10 +2,10 @@ rules:
   github-app:
     ignore:
       # Existing App trust and permissions rely on job-local credential cleanup.
-      - auto-release.yml:193
-      - auto-release.yml:197
-      - auto-release.yml:226
-      - auto-release.yml:230
+      - auto-release.yml:200
+      - auto-release.yml:204
+      - auto-release.yml:233
+      - auto-release.yml:237
       - codeql-reusable.yml:62
       - codeql-reusable.yml:66
       - go-dependency-submission.yml:51
