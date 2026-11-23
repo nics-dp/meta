@@ -119,7 +119,7 @@ export GOWORK="$GO_WORKSPACE_ROOT/.go-workspace/go.work"   # 必須是絕對路�
 **2. 開發（`GOWORK` 已設定）**
 
 - 直接改 library checkout，下游的 build／test 立即用到，不需 `go get` 或 vendor。
-- 下游照常 `mise run build`／`mise run test`／`mise run dev`／`go generate ./...`：Go atoms 用 `-mod=readonly`（見 `lib/go-workspace`），`go:install` 略過 tidy／vendor。依賴改從 module cache 讀（不讀 `vendor/`），首次需能連到 proxy.golang.org。
+- 下游照常 `mise run build`／`mise run test`／`mise run dev`／`go generate ./...`。採用 `lib/go-workspace` 預設值的 Go atoms 會用 `-mod=readonly`，`go:install` 略過 tidy／vendor。repo 自己的覆寫不會被改寫：`EXTRA_BUILD_FLAGS`、`.air.toml`、明確設定的 `GO_TEST_MOD` 或 task 內的 `go` 指令若寫死 `-mod=mod`／`-mod=vendor`，在 workspace 模式會失敗，請改為不指定 `-mod`（或依 `GOWORK` 選值）。依賴改從 module cache 讀（不讀 `vendor/`），首次需能連到 proxy.golang.org。
 
 **3. 收尾：開 PR 前關掉 workspace**
 
