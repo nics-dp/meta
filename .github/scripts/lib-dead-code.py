@@ -358,14 +358,31 @@ IGNORE_BUILD = re.compile(r"^//go:build\s+ignore\s*$", re.MULTILINE)
 PACKAGE_CLAUSE = re.compile(r"^package\s+(\w+)", re.MULTILINE)
 
 
+# The Go convention for generated files (https://go.dev/s/generatedcode): the
+# line must appear before the package clause.
+GENERATED = re.compile(r"^// Code generated .* DO NOT EDIT\.$", re.MULTILINE)
+
+
+def is_generated(text):
+    clause = PACKAGE_CLAUSE.search(text)
+    return bool(GENERATED.search(text[: clause.start()] if clause else text))
+
+
 def source_files(pkg_dir, names):
-    """Non-test files of names in pkg_dir, without `//go:build ignore` files."""
+    """Hand-written, non-test files of names in pkg_dir.
+
+    `//go:build ignore` files are left out because no build compiles them, and
+    generated files because deadcode never judges them (it runs without
+    -generated), so listing one as not analysed would only hold the report
+    issue open.
+    """
     files = set()
     for name in names:
         if not name or not name.endswith(".go") or name.endswith("_test.go"):
             continue
         path = os.path.realpath(os.path.join(pkg_dir, name))
-        if IGNORE_BUILD.search(pathlib.Path(path).read_text(encoding="utf-8")):
+        text = pathlib.Path(path).read_text(encoding="utf-8")
+        if IGNORE_BUILD.search(text) or is_generated(text):
             continue
         files.add(path)
     return files
