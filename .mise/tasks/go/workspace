@@ -1,0 +1,140 @@
+#!/usr/bin/env bash
+#MISE description="Write a go.work joining the local Go modules that require one another (opt in with GOWORK)"
+#MISE hide=true
+#MISE raw=true
+#USAGE flag "--root <dir>" help="Directory scanned for go.mod files (default: GO_WORKSPACE_ROOT)"
+#USAGE flag "--out <file>" help="go.work to write (default: <root>/.go-workspace/go.work)"
+#USAGE flag "--use <dir>" var=#true help="Module directory that replaces a discovered module with the same module path (e.g. a worktree); always joins the workspace"
+
+# Joins every module under the root that requires another module under the
+# root, plus the modules it requires, so a library and its consumers build
+# together without editing any go.mod. A module that neither requires nor is
+# required by another local module stays out: its build list is not shared.
+#
+# The go.work is written outside every module's parent chain and only takes
+# effect through GOWORK=<file>. A go.work the go command finds by walking up
+# from a module directory would put every module below it in workspace mode,
+# and a module missing from its `use` list then fails to build, so such an
+# --out is refused.
+#
+# Plain indexed arrays and files only: the atom runs under the bash 3.2 that
+# macOS ships.
+# shellcheck disable=SC2154
+set -euo pipefail
+export GOWORK=off GOTOOLCHAIN=local
+# shellcheck source=../lib/go-mod
+source "$(dirname "$0")/../lib/go-mod"
+
+root="${usage_root:-${GO_WORKSPACE_ROOT:-}}"
+if [ -z "$root" ] || [ ! -d "$root" ]; then
+  echo "Error: no scan root. Pass --root <dir> or set GO_WORKSPACE_ROOT to the directory that holds the repositories." >&2
+  exit 1
+fi
+root=$(cd "$root" && pwd -P)
+out="${usage_out:-$root/.go-workspace/go.work}"
+# mv into an existing directory would write <dir>/go.work, a path the checks
+# below never saw.
+if [ -d "$out" ]; then
+  echo "Error: --out $out is a directory; pass the path of the go.work file to write." >&2
+  exit 1
+fi
+mkdir -p "$(dirname "$out")"
+out_dir=$(cd "$(dirname "$out")" && pwd -P)
+out="$out_dir/$(basename "$out")"
+
+tmp=$(mktemp -d)
+trap 'rm -rf "$tmp"' EXIT
+modules="$tmp/modules" # <module path>\t<dir>, one per module path
+all_dirs="$tmp/all_dirs" # every module directory seen, joined or not
+: >"$modules"
+: >"$all_dirs"
+: >"$tmp/selected"
+
+module_path() {
+  awk '$1 == "module" { gsub(/"/, "", $2); print $2; exit }' "$1/go.mod"
+}
+
+# add_module <dir> [force]: the first directory seen for a module path keeps it
+# unless force (--use) replaces it.
+add_module() {
+  local dir=$1 force=${2:-} path taken
+  printf '%s\n' "$dir" >>"$all_dirs"
+  path=$(module_path "$dir")
+  if [ -z "$path" ]; then
+    echo "skip $dir: go.mod has no module line" >&2
+    return 0
+  fi
+  taken=$(awk -F'\t' -v p="$path" '$1 == p { print $2; exit }' "$modules")
+  if [ -n "$taken" ]; then
+    if [ -z "$force" ]; then
+      echo "skip $dir: $path is already taken by $taken" >&2
+      return 0
+    fi
+    awk -F'\t' -v p="$path" '$1 != p' "$modules" >"$tmp/modules.next"
+    mv "$tmp/modules.next" "$modules"
+  fi
+  printf '%s\t%s\n' "$path" "$dir" >>"$modules"
+  if [ -n "$force" ]; then
+    printf '%s\n' "$path" >>"$tmp/selected"
+  fi
+}
+
+while IFS= read -r gomod; do
+  add_module "$(dirname "$gomod")"
+done < <(find "$root" \( -name vendor -o -name node_modules -o -name testdata -o -name .git \
+  -o -name .worktree -o -name .worktrees -o -name .go-workspace \) -prune \
+  -o -name go.mod -type f -print | LC_ALL=C sort)
+
+eval "uses=(${usage_use:-})"
+for dir in ${uses[@]+"${uses[@]}"}; do
+  if [ ! -f "$dir/go.mod" ]; then
+    echo "Error: --use $dir has no go.mod" >&2
+    exit 1
+  fi
+  add_module "$(cd "$dir" && pwd -P)" force
+done
+
+cut -f1 "$modules" >"$tmp/paths"
+while IFS=$'\t' read -r path dir; do
+  (cd "$dir" && go_mod_rows) | awk -F'\037' '$1 == "require" { print $2 }' |
+    { grep -Fxf "$tmp/paths" || true; } >"$tmp/requires"
+  if [ -s "$tmp/requires" ]; then
+    { printf '%s\n' "$path"; cat "$tmp/requires"; } >>"$tmp/selected"
+  fi
+done <"$modules"
+
+dirs=()
+while IFS= read -r dir; do
+  dirs+=("$dir")
+done < <(LC_ALL=C sort -u "$tmp/selected" |
+  awk -F'\t' 'NR == FNR { want[$0] = 1; next } ($1 in want) { print $2 }' - "$modules" | LC_ALL=C sort)
+
+if [ ${#dirs[@]} -eq 0 ]; then
+  echo "Error: no module under $root requires another module under it." >&2
+  exit 1
+fi
+
+# Every module directory counts, joined or not: one left out of the workspace
+# would still find this file and stop building.
+# The prefix ends in exactly one slash so out_dir=/ matches every directory.
+if [ "$(basename "$out")" = go.work ]; then
+  prefix="${out_dir%/}/"
+  while IFS= read -r dir; do
+    case "$dir/" in
+      "$prefix"*)
+        echo "Error: $out would be found by the go command from $dir and put every module below $out_dir in workspace mode. Write it outside the module tree (default: <root>/.go-workspace/go.work)." >&2
+        exit 1 ;;
+    esac
+  done <"$all_dirs"
+fi
+
+mkdir "$tmp/work"
+(cd "$tmp/work" && GOWORK='' go work init "${dirs[@]}")
+mv "$tmp/work/go.work" "$out"
+
+echo "Wrote $out with ${#dirs[@]} modules:" >&2
+for dir in "${dirs[@]}"; do
+  printf '  %s  %s\n' "$(module_path "$dir")" "$dir" >&2
+done
+printf 'Enable it for a shell with: export GOWORK=%q\n' "$out" >&2
+echo "Tidy, vendor and commit go.mod with GOWORK=off; CI never uses this file." >&2

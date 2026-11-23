@@ -140,6 +140,13 @@ before changing any of these; the mechanism is in the code, the history in
   dependents still run, and `doctor:go-vendor` checks with `GOWORK=off`.
   → `.mise/tasks/lib/go-workspace`; regression suite
   `python3 .github/tests/test_go_workspace.py`.
+- `go:workspace` writes a `go.work` outside every module's parent chain
+  (default `<root>/.go-workspace/go.work`) and refuses an `--out` the go
+  command would find by walking up from a joined module; it takes effect only
+  through `GOWORK`. It joins modules that require another module under the root
+  and runs under macOS's bash 3.2 (no associative arrays or `mapfile`).
+  → `.mise/tasks/go/workspace`; regression suite
+  `python3 .github/tests/test_go_workspace_atom.py`.
 - `meta:bump` is `mise cache clear` + `mise install` and nothing else; it is
   unconditional — pinning a tag instead of `?ref=main` bounds which revision
   the include resolves to, it does not make the task a no-op.
