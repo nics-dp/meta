@@ -1,7 +1,11 @@
+import contextlib
 import importlib.util
+import io
 import pathlib
+import sys
 import tempfile
 import unittest
+from unittest import mock
 
 SCRIPT = pathlib.Path(__file__).resolve().parents[1] / "scripts" / "lib-dead-code.py"
 spec = importlib.util.spec_from_file_location("lib_dead_code", SCRIPT)
@@ -140,6 +144,49 @@ class ReportTests(unittest.TestCase):
         self.assertLessEqual(len(body), dead.BODY_LIMIT + 200)
         self.assertIn("已截斷", body)
         self.assertGreater(len(full), len(body))
+
+    def test_empty_result_with_skips_does_not_claim_every_function_is_used(self):
+        skipped = [("`dcf-service` test build", "x.go:1: missing method")]
+        body, _ = dead.report(
+            "nics-dp", pathlib.Path("/src"), {}, [LIB], [], {}, [], skipped
+        )
+        self.assertNotIn("每個 library 函式都有 consumer 用到", body)
+        self.assertIn("成功分析的 build", body)
+
+    def test_empty_result_without_skips_says_every_function_is_used(self):
+        body, _ = dead.report(
+            "nics-dp", pathlib.Path("/src"), {}, [LIB], [], {}, [], []
+        )
+        self.assertIn("每個 library 函式都有 consumer 用到", body)
+
+
+class MissingLibraryTests(unittest.TestCase):
+    def test_unfetchable_library_writes_a_skipped_report(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            report = pathlib.Path(tmp) / "report.md"
+            argv = [
+                "lib-dead-code.py", "--owner", "nics-dp", "--libs", LIB,
+                "--work", str(pathlib.Path(tmp) / "w"), "--report", str(report),
+                "--repos", "libdcf",
+            ]  # fmt: skip
+            out = io.StringIO()
+            with (
+                mock.patch.object(sys, "argv", argv),
+                mock.patch.object(
+                    dead,
+                    "fetch",
+                    return_value=({}, [("libdcf", "gh: Bad Gateway (HTTP 502)")]),
+                ),
+                contextlib.redirect_stdout(out),
+            ):
+                dead.main()
+            body = report.read_text(encoding="utf-8")
+        self.assertEqual(
+            out.getvalue().split(), ["functions=0", "packages=0", "skipped=2"]
+        )
+        self.assertIn("HTTP 502", body)
+        self.assertIn(f"library `{LIB}`", body)
+        self.assertNotIn("每個 library 函式都有 consumer 用到", body)
 
 
 if __name__ == "__main__":

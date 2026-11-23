@@ -417,7 +417,17 @@ def report(owner, src, shas, libs, consumers, dead, unimported, skipped):
         ]
         lines.append("")
     if not dead and not unimported:
-        lines += ["每個 library 函式都有 consumer 用到。", ""]
+        if skipped:
+            # An empty list proves nothing about what was not analysed.
+            lines += [
+                (
+                    "成功分析的 build 沒有發現未使用的 library 函式或 package；"
+                    "上面「未分析」的部分不在這個結論內。"
+                ),
+                "",
+            ]
+        else:
+            lines += ["每個 library 函式都有 consumer 用到。", ""]
     body = "\n".join(lines)
     if len(body) > BODY_LIMIT:
         cut = body.rfind("\n", 0, BODY_LIMIT)
@@ -465,11 +475,16 @@ def main():
     lib_dirs, consumers, _ = plan(mods, src, libs)
     missing = [l for l in libs if l not in lib_dirs]
     if missing:
-        for who, why in skipped:
-            print(f"{who}: {why}", file=sys.stderr)
-        sys.exit(
-            f"library module not found in any fetched repository: {', '.join(missing)}"
-        )
+        # Usually a GitHub API error on the library repository: report it as
+        # not analysed so the workflow still updates the issue, instead of
+        # exiting and leaving last week's result standing.
+        skipped += [
+            (f"library `{l}`", "沒有在任何取得的 repo 中找到這個 module")
+            for l in missing
+        ]
+        body, full = report(args.owner, src, {}, libs, [], {}, [], skipped)
+        emit(args, body, full, 0, 0, len(skipped))
+        return
     members = [*lib_dirs.values(), *consumers.values()]
     go, toolchain = workspace_versions(mods, members)
     go_work = write_go_work(members, work / "workspace", go, toolchain)
@@ -507,13 +522,18 @@ def main():
     body, full = report(
         args.owner, src, shas, libs, list(consumers), dead, unimported, skipped
     )
+    emit(args, body, full, len(dead), len(unimported), len(skipped))
+    shutil.rmtree(src, ignore_errors=True)
+
+
+def emit(args, body, full, functions, packages, skipped):
+    """Write the report files and the $GITHUB_OUTPUT counts."""
     pathlib.Path(args.report).write_text(body, encoding="utf-8")
     if args.summary:
         pathlib.Path(args.summary).write_text(full, encoding="utf-8")
-    print(f"functions={len(dead)}")
-    print(f"packages={len(unimported)}")
-    print(f"skipped={len(skipped)}")
-    shutil.rmtree(src, ignore_errors=True)
+    print(f"functions={functions}")
+    print(f"packages={packages}")
+    print(f"skipped={skipped}")
 
 
 if __name__ == "__main__":
