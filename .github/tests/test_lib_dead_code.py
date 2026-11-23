@@ -208,6 +208,42 @@ class MissingLibraryTests(unittest.TestCase):
         self.assertIn(f"library `{LIB}`", body)
         self.assertNotIn("每個 library 函式都有 consumer 用到", body)
 
+    def test_unlistable_installation_repositories_write_a_skipped_report(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            report = pathlib.Path(tmp) / "report.md"
+            argv = [
+                "lib-dead-code.py", "--owner", "nics-dp", "--libs", LIB,
+                "--work", str(pathlib.Path(tmp) / "w"), "--report", str(report),
+            ]  # fmt: skip
+            out = io.StringIO()
+            with (
+                mock.patch.object(sys, "argv", argv),
+                mock.patch.object(
+                    dead,
+                    "list_repositories",
+                    return_value=([], "gh: Bad Gateway (HTTP 502)"),
+                ),
+                contextlib.redirect_stdout(out),
+            ):
+                dead.main()
+            body = report.read_text(encoding="utf-8")
+        self.assertEqual(
+            out.getvalue().split(), ["functions=0", "packages=0", "skipped=2"]
+        )
+        self.assertIn("installation repositories", body)
+        self.assertIn("HTTP 502", body)
+
+
+class LibPackagesTests(unittest.TestCase):
+    def test_listing_failure_is_returned_not_fatal(self):
+        failed = mock.Mock(
+            returncode=1, stderr="go: cannot find module providing package\n"
+        )
+        with mock.patch.object(dead, "run", return_value=failed):
+            packages, err = dead.lib_packages([LIB], {}, ".")
+        self.assertEqual(packages, {})
+        self.assertIn("cannot find module", err)
+
 
 if __name__ == "__main__":
     unittest.main()

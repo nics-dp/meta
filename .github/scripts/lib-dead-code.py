@@ -66,15 +66,16 @@ def not_found(err):
 
 
 def list_repositories(owner):
+    """Return (repository names, error); the caller reports an error as not analysed."""
     out, err = gh(["--paginate", "--slurp", "/installation/repositories"])
     if err:
-        sys.exit(f"cannot list installation repositories: {err}")
+        return [], err
     names = []
     for page in json.loads(out):
         for repo in page.get("repositories", []):
             if repo["owner"]["login"] == owner and not repo.get("archived"):
                 names.append(repo["name"])
-    return sorted(names)
+    return sorted(names), None
 
 
 def git_auth():
@@ -357,9 +358,9 @@ IGNORE_BUILD = re.compile(r"^//go:build\s+ignore\s*$", re.MULTILINE)
 def lib_packages(libs, env, cwd):
     """The libraries' non-main packages, without their own test support.
 
-    Maps each package to its non-test source files, including those a build
-    constraint excludes from the default build (`IgnoredGoFiles`), but not
-    `//go:build ignore` files, which no build ever compiles.
+    Returns ({package: non-test source files}, error). The files include those
+    a build constraint excludes from the default build (`IgnoredGoFiles`), but
+    not `//go:build ignore` files, which no build ever compiles.
     """
     template = (
         '{{if ne .Name "main"}}{{.ImportPath}}\t{{.Dir}}\t{{join .GoFiles ","}}'
@@ -367,7 +368,7 @@ def lib_packages(libs, env, cwd):
     )
     listed = run(["go", "list", "-f", template, *[f"{p}/..." for p in libs]], env, cwd)
     if listed.returncode != 0:
-        sys.exit(f"cannot list library packages: {last_error(listed)}")
+        return {}, last_error(listed)
     packages = {}
     for line in listed.stdout.splitlines():
         if not line:
@@ -384,7 +385,7 @@ def lib_packages(libs, env, cwd):
                 continue
             files.add(path)
         packages[pkg] = files
-    return packages
+    return packages, None
 
 
 def uncompiled(packages, runs, unimported):
@@ -509,9 +510,13 @@ def main():
     work = pathlib.Path(args.work).resolve()
     src = work / "src"
     src.mkdir(parents=True, exist_ok=True)
-    repos = sorted(parse_list(args.repos)) or list_repositories(args.owner)
+    repos, err = sorted(parse_list(args.repos)), None
+    if not repos:
+        repos, err = list_repositories(args.owner)
     shas, skipped = fetch(args.owner, repos, src)
     skipped = [(f"repo {r}", e) for r, e in skipped]
+    if err:
+        skipped.insert(0, ("installation repositories", err))
 
     mods = find_modules(src)
     lib_dirs, consumers, _ = plan(mods, src, libs)
@@ -554,7 +559,11 @@ def main():
             )
             for label, e in errors
         ]
-    packages = lib_packages(libs, env, cwd)
+    packages, err = lib_packages(libs, env, cwd)
+    if err:
+        # Without the package list neither unimported packages nor uncompiled
+        # files can be found; the per-build function results still stand.
+        skipped.append(("library package listing", err))
     dead, unimported = aggregate(runs, list(packages))
     dead = {key: pos for key, pos in dead.items() if not is_lib_test(key[0], libs)}
     skipped += [
