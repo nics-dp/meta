@@ -25,8 +25,8 @@ description: Review pull requests in this repository for concrete defects and re
    as evidence: `mise exec -- actionlint <file>` for a single workflow,
    `mise run all` for the full read-only gate (`mise:validate`,
    `iac:actionlint`, `iac:shellcheck`, `iac:zizmor`, `iac:trivy`,
-   `ci:semgrep`; nothing in it mutates files, and `iac:trivy` does not fail
-   on findings), and `git diff --check` when the environment permits. There
+   `ci:semgrep`; nothing in it mutates files, and `iac:trivy` fails only on
+   HIGH or CRITICAL findings), and `git diff --check` when the environment permits. There
    is no build task and no general test task; regression suites live under
    `.github/tests/` (run with the command in
    `.github/tests/fixtures/semgrep/README.md`), and a change to the semgrep
