@@ -12,8 +12,9 @@ compiles against the library's current source rather than its pinned version.
 Each consumer runs twice: a production build rooted at its main packages, and a
 `-tags <test tags> -test` build rooted at its tests as well, since a library
 helper used only by consumer tests is still used. A library function is
-reported only when every successful run either left its package unloaded or
-found the function unreachable. A library package that no run loaded is
+reported only when every successful run either did not compile its file (its
+package unloaded, or the file excluded by a build tag) or found the function
+unreachable. A library package that no run loaded is
 reported as a whole. A run that fails to load (a consumer that does not compile
 against the library's current source, for instance) is listed as not analysed;
 what only that consumer uses then shows up as unused, so the report says so.
@@ -59,6 +60,11 @@ def gh(args):
     return result.stdout, None
 
 
+def not_found(err):
+    """True only for a definite absence; rate limits and 5xx are not one."""
+    return err is not None and err.endswith("(HTTP 404)")
+
+
 def list_repositories(owner):
     out, err = gh(["--paginate", "--slurp", "/installation/repositories"])
     if err:
@@ -91,6 +97,9 @@ def fetch(owner, repos, src):
     for repo in repos:
         ref = "dev"
         _, err = gh([f"/repos/{owner}/{repo}/branches/dev", "--silent"])
+        if err and not not_found(err):
+            skipped.append((repo, err))
+            continue
         if err:
             out, err = gh([f"/repos/{owner}/{repo}", "--jq", ".default_branch"])
             if err:
@@ -98,8 +107,11 @@ def fetch(owner, repos, src):
                 continue
             ref = out.strip()
         _, err = gh([f"/repos/{owner}/{repo}/contents/go.mod?ref={ref}", "--silent"])
-        if err:
+        if not_found(err):
             continue  # no root go.mod (or an empty repository): not a Go module repository
+        if err:
+            skipped.append((repo, err))
+            continue
         dest = src / repo
         clone = subprocess.run(
             [
@@ -258,12 +270,15 @@ def last_error(result):
 def analyse(consumer, deadcode, lib_re, env, cwd, test_tags):
     """Run one consumer's production and test builds.
 
-    Returns ([(unreachable, loaded)], [(label, error)]), where unreachable maps
-    (package, function) to (file, line) and loaded is the set of library
-    packages the build loaded.
+    Returns ([(unreachable, loaded, compiled)], [(label, error)]), where
+    unreachable maps (package, function) to (file, line), loaded is the set of
+    library packages the build loaded and compiled the set of their source
+    files it compiled (a file a build tag excludes is loaded with its package
+    but not compiled, so deadcode cannot have judged its functions).
     """
     runs, errors = [], []
     pattern = f"{consumer}/..."
+    files = '{{.ImportPath}}\t{{.Dir}}\t{{join .GoFiles ","}}\t{{join .CgoFiles ","}}'
     for label, extra in (("production", []), ("test", ["-tags", test_tags, "-test"])):
         dc = run(
             [deadcode, "-json", "-filter", lib_re.pattern, *extra, pattern], env, cwd
@@ -273,40 +288,56 @@ def analyse(consumer, deadcode, lib_re, env, cwd, test_tags):
                 continue  # no binary to root at: the test build still counts
             errors.append((label, last_error(dc)))
             continue
-        listed = run(
-            ["go", "list", "-deps", *extra, "-f", "{{.ImportPath}}", pattern], env, cwd
-        )
+        listed = run(["go", "list", "-deps", *extra, "-f", files, pattern], env, cwd)
         if listed.returncode != 0:
             errors.append((label, last_error(listed)))
             continue
-        loaded = set()
+        loaded, compiled = set(), set()
         for line in listed.stdout.splitlines():
-            pkg = line.split(" [", 1)[0]
-            if lib_re.match(pkg) and not pkg.endswith(".test"):
-                loaded.add(pkg)
-        unreachable = {}
-        for pkg in json.loads(dc.stdout or "[]"):
-            for fn in pkg.get("Funcs") or []:
-                pos = fn.get("Position") or {}
-                unreachable[(pkg["Path"], fn["Name"])] = (
-                    pos.get("File", ""),
-                    pos.get("Line", 0),
-                )
-        runs.append((unreachable, loaded))
+            path, pkg_dir, go_files, cgo_files = (line.split("\t") + ["", "", ""])[:4]
+            pkg = path.split(" [", 1)[0]
+            if not lib_re.match(pkg) or pkg.endswith(".test"):
+                continue
+            loaded.add(pkg)
+            for name in f"{go_files},{cgo_files}".split(","):
+                if name:
+                    compiled.add(os.path.realpath(os.path.join(pkg_dir, name)))
+        runs.append((parse_unreachable(dc.stdout), loaded, compiled))
     return runs, errors
 
 
+def parse_unreachable(stdout):
+    """Map deadcode -json output to {(package, function): (file, line)}.
+
+    deadcode prints JSON null, not [], when nothing matches the filter.
+    """
+    unreachable = {}
+    for pkg in json.loads(stdout or "null") or []:
+        for fn in pkg.get("Funcs") or []:
+            pos = fn.get("Position") or {}
+            unreachable[(pkg["Path"], fn["Name"])] = (
+                os.path.realpath(pos["File"]) if pos.get("File") else "",
+                pos.get("Line", 0),
+            )
+    return unreachable
+
+
 def aggregate(runs, lib_packages):
-    """Functions every run leaves unreached, and packages no run loads."""
-    loaded_any = set().union(*(loaded for _, loaded in runs)) if runs else set()
+    """Functions every run leaves unreached, and packages no run loads.
+
+    A run vouches for a function only when it compiled the function's file and
+    deadcode did not report it.
+    """
+    loaded_any = set().union(*(loaded for _, loaded, _ in runs)) if runs else set()
     candidates = {}
-    for unreachable, _ in runs:
+    for unreachable, _, _ in runs:
         candidates.update(unreachable)
     dead = {
         key: pos
         for key, pos in candidates.items()
         if all(
-            key in unreachable or key[0] not in loaded for unreachable, loaded in runs
+            key in unreachable or pos[0] not in compiled
+            for unreachable, _, compiled in runs
         )
     }
     unimported = sorted(set(lib_packages) - loaded_any)
