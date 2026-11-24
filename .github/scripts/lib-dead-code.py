@@ -78,13 +78,44 @@ def list_repositories(owner):
     return sorted(names), None
 
 
-def git_auth():
-    """git -c options that send GH_TOKEN without writing it to .git/config."""
+def auth_header():
+    """The git config (key, value) that sends GH_TOKEN; None on a local run."""
     token = os.environ.get("GH_TOKEN", "")
     if not token:
-        return []  # local run: the user's own git credentials
+        return None  # local run: the user's own git credentials
     basic = base64.b64encode(f"x-access-token:{token}".encode()).decode()
-    return ["-c", f"http.https://github.com/.extraheader=AUTHORIZATION: basic {basic}"]
+    return "http.https://github.com/.extraheader", f"AUTHORIZATION: basic {basic}"
+
+
+def git_auth():
+    """git -c options that send GH_TOKEN without writing it to .git/config."""
+    header = auth_header()
+    return ["-c", "=".join(header)] if header else []
+
+
+def go_env(environ, owner, go_private):
+    """Variables that let the go command fetch the owner's private modules.
+
+    A consumer can require a library version that the workspace replaces, and
+    the go command still reads that version's go.mod; for an internal module
+    the public proxy cannot serve it, so GOPRIVATE sends the go command to git
+    directly (and skips the checksum database), and GIT_CONFIG_* gives its git
+    calls the same token as the clones.
+    """
+    pattern = f"github.com/{owner}"
+    patterns = parse_list(go_private)
+    env = {
+        "GOPRIVATE": ",".join(patterns if pattern in patterns else [*patterns, pattern])
+    }
+    header = auth_header()
+    if header:
+        n = int(environ.get("GIT_CONFIG_COUNT") or 0)
+        env |= {
+            "GIT_CONFIG_COUNT": str(n + 1),
+            f"GIT_CONFIG_KEY_{n}": header[0],
+            f"GIT_CONFIG_VALUE_{n}": header[1],
+        }
+    return env
 
 
 def fetch(owner, repos, src):
@@ -611,8 +642,15 @@ def main():
     deadcode = args.deadcode
     if args.deadcode_version:
         deadcode = install_deadcode(args.deadcode_version, toolchain, work / "bin")
+    go_private = subprocess.run(
+        ["go", "env", "GOPRIVATE"], capture_output=True, text=True, check=True
+    ).stdout.strip()
     env = dict(
-        os.environ, GOWORK=str(go_work), GOFLAGS="-mod=readonly", GOTOOLCHAIN="auto"
+        os.environ,
+        GOWORK=str(go_work),
+        GOFLAGS="-mod=readonly",
+        GOTOOLCHAIN="auto",
+        **go_env(os.environ, args.owner, go_private),
     )
     cwd = work / "workspace"
     lib_re = re.compile("^(" + "|".join(re.escape(l) for l in libs) + ")(/|$)")
