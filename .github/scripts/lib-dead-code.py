@@ -20,7 +20,10 @@ against the library's current source, for instance) is listed as not analysed;
 what only that consumer uses then shows up as unused, so the report says so.
 
 The library's own modules (its tests, examples and nested modules) are not
-consumers. Generated files are left out, as deadcode does by default.
+consumers. Generated files are left out, as deadcode does by default, and so
+are `...ForTest` hooks, which exist for the library's own tests. A library file
+only another GOOS compiles is listed in its own section and does not count as
+not analysed, since no run on this host can ever reach it.
 
 Writes a Markdown report and prints `functions=<n>`, `packages=<n>` and
 `skipped=<n>` lines for $GITHUB_OUTPUT.
@@ -383,6 +386,16 @@ def is_lib_test(pkg, libs):
     return any(pkg == f"{l}/test" or pkg.startswith(f"{l}/test/") for l in libs)
 
 
+def is_test_hook(name):
+    """A `...ForTest` function or method: a seam for the library's own tests.
+
+    The libraries keep their tests in separate packages, which an
+    export_test.go file cannot reach, so these hooks are exported from
+    production files; no consumer is meant to call them.
+    """
+    return name.rsplit(".", 1)[-1].endswith("ForTest")
+
+
 IGNORE_BUILD = re.compile(r"^//go:build\s+ignore\s*$", re.MULTILINE)
 
 
@@ -511,6 +524,56 @@ def uncompiled(packages, runs, unimported):
     )
 
 
+PLATFORM_GOOS = ("linux", "darwin", "windows")
+
+
+def platform_files(libs, env, cwd, test_tags):
+    """Library source files that only another GOOS compiles.
+
+    A file this host never compiles because it belongs to another platform (a
+    `_darwin.go` file, or a `!linux` fallback) can never be analysed here; it
+    is reported apart so it does not hold the issue open. A file the host
+    itself compiles is never one, even when no successful build compiled it (a
+    package only a failed build imports), so that case stays not analysed.
+    When the host listing fails nothing is returned, and a failed listing for
+    another GOOS adds nothing, so every doubt stays not analysed.
+    """
+    template = '{{.Dir}}\t{{join .GoFiles ","}}\t{{join .CgoFiles ","}}'
+
+    def listing(goos_env):
+        files = set()
+        for extra in ([], ["-tags", test_tags]):
+            listed = run(
+                [
+                    "go",
+                    "list",
+                    "-e",
+                    *extra,
+                    "-f",
+                    template,
+                    *[f"{l}/..." for l in libs],
+                ],
+                dict(env, **goos_env),
+                cwd,
+            )
+            if listed.returncode != 0:
+                return None
+            for line in listed.stdout.splitlines():
+                pkg_dir, *groups = (line.split("\t") + ["", ""])[:3]
+                for name in ",".join(groups).split(","):
+                    if name:
+                        files.add(os.path.realpath(os.path.join(pkg_dir, name)))
+        return files
+
+    host = listing({})
+    if host is None:
+        return set()
+    others = set()
+    for goos in PLATFORM_GOOS:
+        others |= listing({"GOOS": goos, "CGO_ENABLED": "1"}) or set()
+    return others - host
+
+
 def link(owner, src, shas, name, file, line):
     try:
         rel = pathlib.Path(file).resolve().relative_to(src.resolve())
@@ -523,12 +586,12 @@ def link(owner, src, shas, name, file, line):
     return f"[`{name}`](https://github.com/{owner}/{repo}/blob/{sha}/{path}#L{line})"
 
 
-def report(owner, src, shas, libs, consumers, dead, unimported, skipped):
+def report(owner, src, shas, libs, consumers, dead, unimported, skipped, platform=()):
     lines = [
         "每週 library dead code 盤點：把 library 和所有 require 它的 module 組成 go.work，",
         "逐個 consumer 跑 deadcode（production build 一次、`-test` build 一次），",
-        "列出沒有任何 consumer 走得到的 library 函式與 package。產生的程式碼與 library",
-        "自己 `test/` 底下的測試輔助不列入。",
+        "列出沒有任何 consumer 走得到的 library 函式與 package。產生的程式碼、library",
+        "自己 `test/` 底下的測試輔助，以及名稱以 `ForTest` 結尾的測試 hook 不列入。",
         "",
         f"- Library：{', '.join(f'`{l}`' for l in libs)}",
         "- 分析的 commit（`dev`，沒有 `dev` 時用預設分支）："
@@ -549,6 +612,18 @@ def report(owner, src, shas, libs, consumers, dead, unimported, skipped):
             "|---|---|",
         ]
         lines += [f"| {who} | {why.replace('|', '¦')} |" for who, why in skipped]
+        lines.append("")
+    if platform:
+        lines += [
+            "## 只在其他平台編譯的檔案",
+            "",
+            (
+                "這次分析的 build 都不編譯下列檔案（其他作業系統專用），所以其中的函式沒有判斷；"
+                "它們不影響這個 issue 的開關。"
+            ),
+            "",
+        ]
+        lines += [f"- {f}" for f in platform]
         lines.append("")
     if unimported:
         lines += ["## 沒有 consumer import 的 package", ""]
@@ -571,6 +646,11 @@ def report(owner, src, shas, libs, consumers, dead, unimported, skipped):
                     "成功分析的 build 沒有發現未使用的 library 函式或 package；"
                     "上面「未分析」的部分不在這個結論內。"
                 ),
+                "",
+            ]
+        elif platform:
+            lines += [
+                "每個分析到的 library 函式都有 consumer 用到（只在其他平台編譯的檔案除外）。",
                 "",
             ]
         else:
@@ -676,13 +756,22 @@ def main():
         # files can be found; the per-build function results still stand.
         skipped.append(("library package listing", err))
     dead, unimported = aggregate(runs, list(packages))
-    dead = {key: pos for key, pos in dead.items() if not is_lib_test(key[0], libs)}
+    dead = {
+        key: pos
+        for key, pos in dead.items()
+        if not is_lib_test(key[0], libs) and not is_test_hook(key[1])
+    }
+    missed = uncompiled(packages, runs, unimported)
+    elsewhere = platform_files(libs, env, cwd, args.test_tags) if missed else set()
+
+    def rel(f):
+        return f"`{f.replace(os.path.realpath(src) + '/', '')}`"
+
+    platform = [rel(f) for f in missed if f in elsewhere]
     skipped += [
-        (
-            f"`{f.replace(os.path.realpath(src) + '/', '')}`",
-            "沒有任何成功的 build 編入這個檔案（build tag 或平台限制）",
-        )
-        for f in uncompiled(packages, runs, unimported)
+        (rel(f), "沒有任何成功的 build 編入這個檔案（build tag 限制）")
+        for f in missed
+        if f not in elsewhere
     ]
 
     used_repos = {
@@ -690,7 +779,15 @@ def main():
     }
     shas = {repo: sha for repo, sha in shas.items() if repo in used_repos}
     body, full = report(
-        args.owner, src, shas, libs, list(consumers), dead, unimported, skipped
+        args.owner,
+        src,
+        shas,
+        libs,
+        list(consumers),
+        dead,
+        unimported,
+        skipped,
+        platform,
     )
     emit(args, body, full, len(dead), len(unimported), len(skipped))
     shutil.rmtree(src, ignore_errors=True)
