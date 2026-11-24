@@ -201,6 +201,78 @@ class ReportTests(unittest.TestCase):
         )
         self.assertIn("每個 library 函式都有 consumer 用到", body)
 
+    def test_other_platform_files_are_listed_with_a_qualified_conclusion(self):
+        body, _ = dead.report(
+            "nics-dp", pathlib.Path("/src"), {}, [LIB], [], {}, [], [],
+            ["`libdcf/utils/cgroup_cpu_other.go`"],
+        )  # fmt: skip
+        self.assertIn("只在其他平台編譯的檔案", body)
+        self.assertIn("cgroup_cpu_other.go", body)
+        self.assertNotIn("## 未分析", body)
+        self.assertIn("其他平台編譯的檔案除外", body)
+
+
+class TestHookTests(unittest.TestCase):
+    def test_for_test_functions_and_methods_are_test_hooks(self):
+        self.assertTrue(dead.is_test_hook("SetNatsDisabledForTest"))
+        self.assertTrue(dead.is_test_hook("UploadRegistry.ReleaseFileForTest"))
+        self.assertFalse(dead.is_test_hook("ForTestOnly"))
+        self.assertFalse(dead.is_test_hook("Compiler.SetAutoID"))
+
+
+class PlatformFilesTests(unittest.TestCase):
+    @staticmethod
+    def ok(stdout):
+        return mock.Mock(returncode=0, stdout=stdout)
+
+    def test_only_files_the_host_never_compiles_are_platform_files(self):
+        host = self.ok("/l/utils\tcgroup_cpu_linux.go,hash.go\t\n")
+        other = self.ok("/l/utils\tcgroup_cpu_other.go,hash.go\t\n")
+        failed = mock.Mock(returncode=1, stdout="", stderr="boom")
+        # host and host with cgo (plain, -tags each), then linux, darwin
+        # (fails), windows.
+        effects = [
+            host, self.ok(""), host, self.ok(""),
+            host, self.ok(""), failed, other, self.ok(""),
+        ]  # fmt: skip
+        with mock.patch.object(dead, "run", side_effect=effects) as run:
+            files = dead.platform_files([LIB], {}, ".", "test")
+        self.assertEqual(files, {os.path.realpath("/l/utils/cgroup_cpu_other.go")})
+        envs = [call.args[1] for call in run.call_args_list]
+        self.assertEqual(
+            [e.get("GOOS") for e in envs],
+            [None, None, None, None, "linux", "linux", "darwin", "windows", "windows"],
+        )
+        self.assertEqual(
+            [e.get("CGO_ENABLED") for e in envs[:4]], [None, None, "1", "1"]
+        )
+        self.assertIn("-tags", run.call_args_list[1].args[0])
+
+    def test_host_cgo_files_are_not_platform_files_under_cgo_disabled(self):
+        # CGO_ENABLED=0 on the host drops cgo_linux.go from its own listing;
+        # the host-with-cgo listing and the linux listing both carry it.
+        host = self.ok("/l/db\tdb.go\t\n")
+        host_cgo = self.ok("/l/db\tdb.go\tcgo_linux.go\n")
+        effects = [
+            host, self.ok(""), host_cgo, self.ok(""),
+            host_cgo, self.ok(""), self.ok(""), self.ok(""), self.ok(""), self.ok(""),
+        ]  # fmt: skip
+        env = {"CGO_ENABLED": "0"}
+        with mock.patch.object(dead, "run", side_effect=effects):
+            self.assertEqual(dead.platform_files([LIB], env, ".", "test"), set())
+
+    def test_failed_host_listing_classifies_nothing(self):
+        failed = mock.Mock(returncode=1, stdout="", stderr="boom")
+        with mock.patch.object(dead, "run", return_value=failed):
+            self.assertEqual(dead.platform_files([LIB], {}, ".", "test"), set())
+
+    def test_failed_host_cgo_listing_classifies_nothing(self):
+        other = self.ok("/l/utils\tcgroup_cpu_other.go\t\n")
+        failed = mock.Mock(returncode=1, stdout="", stderr="boom")
+        effects = [self.ok(""), self.ok(""), failed] + [other] * 6
+        with mock.patch.object(dead, "run", side_effect=effects):
+            self.assertEqual(dead.platform_files([LIB], {}, ".", "test"), set())
+
 
 class MissingLibraryTests(unittest.TestCase):
     def test_unfetchable_library_writes_a_skipped_report(self):
