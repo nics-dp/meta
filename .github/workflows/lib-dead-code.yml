@@ -1,0 +1,97 @@
+# yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
+name: lib-dead-code
+
+# Weekly cross-repository dead code report for the Go libraries. go:dead-code
+# cannot judge a library on its own (it has no main package to root at), so
+# .github/scripts/lib-dead-code.py clones every readable repository with a root
+# go.mod, joins the libraries and their consumers in a go.work and lists the
+# library functions and packages no consumer build reaches. Report only, never a
+# gate: a consumer change would otherwise turn a library pull request red. A
+# finding or a build that could not be analysed opens or updates one issue in
+# this repository; a run with neither closes it.
+on:
+  schedule:
+    - cron: "30 1 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: lib-dead-code
+  cancel-in-progress: false
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      # Bootstrap only: the script builds deadcode with, and analyses under,
+      # the newest toolchain any workspace member pins (GOTOOLCHAIN).
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: stable
+          cache: false
+
+      # Org-wide read: cloning each repository needs contents read, and
+      # /installation/repositories lists what the App can see.
+      - name: Mint ci-read token
+        id: token
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          client-id: ${{ vars.CI_READ_APP_CLIENT_ID }}
+          private-key: ${{ secrets.CI_READ_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          permission-contents: read
+
+      - name: Analyse library dead code
+        id: scan
+        shell: bash
+        env:
+          GH_TOKEN: ${{ steps.token.outputs.token }}
+          OWNER: ${{ github.repository_owner }}
+          LIBS: "github.com/nics-dp/libdcf,github.com/nics-dp/ZenQuery"
+        run: |
+          # The go:dead-code atom's tool pin is the one deadcode version.
+          version="$(sed -n 's/^#MISE tools=.*"go:golang.org\/x\/tools\/cmd\/deadcode"="\([^"]*\)".*/\1/p' .mise/tasks/go/dead-code)"
+          if [ -z "$version" ]; then
+            echo "::error::cannot read the deadcode pin from .mise/tasks/go/dead-code"
+            exit 1
+          fi
+          python3 -I -B .github/scripts/lib-dead-code.py \
+            --owner "$OWNER" --libs "$LIBS" --work "$RUNNER_TEMP/lib-dead-code" \
+            --deadcode-version "$version" \
+            --report "$RUNNER_TEMP/lib-dead-code.md" --summary "$RUNNER_TEMP/lib-dead-code-full.md" \
+            | tee -a "$GITHUB_OUTPUT"
+          cat "$RUNNER_TEMP/lib-dead-code-full.md" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Open, update or close the report issue
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          FUNCTIONS: ${{ steps.scan.outputs.functions }}
+          PACKAGES: ${{ steps.scan.outputs.packages }}
+          SKIPPED: ${{ steps.scan.outputs.skipped }}
+          TITLE: "Library dead code: functions and packages no consumer reaches"
+        run: |
+          existing="$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --limit 100 \
+            --search "\"$TITLE\" in:title" --json number,title --jq '.[] | select(.title == env.TITLE) | .number' | head -n 1)"
+          if [ "$FUNCTIONS" != "0" ] || [ "$PACKAGES" != "0" ] || [ "$SKIPPED" != "0" ]; then
+            if [ -n "$existing" ]; then
+              gh issue edit "$existing" --repo "$GITHUB_REPOSITORY" --body-file "$RUNNER_TEMP/lib-dead-code.md"
+            else
+              gh issue create --repo "$GITHUB_REPOSITORY" --title "$TITLE" --body-file "$RUNNER_TEMP/lib-dead-code.md"
+            fi
+          elif [ -n "$existing" ]; then
+            gh issue close "$existing" --repo "$GITHUB_REPOSITORY" --comment "最新一次盤點每個 library 函式都有 consumer 用到，所有 build 也都分析成功。"
+          fi
