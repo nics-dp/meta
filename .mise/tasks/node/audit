@@ -22,4 +22,4 @@ for id in $unfixable; do
   echo "::warning::no published fix for $id, not gating"
   args+=(--ignore="$id")
 done
-bun audit "${args[@]}"
+bun audit ${args[@]+"${args[@]}"}

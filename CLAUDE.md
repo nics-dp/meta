@@ -364,7 +364,11 @@ before changing any of these; the mechanism is in the code, the history in
 - New atom: `.mise/tasks/<category>/<name>`, first lines `#!/usr/bin/env bash`,
   `#MISE description=…`, `#MISE hide=true`, tools in `#MISE tools={…}` when
   the atom needs any, mode `100755`. Bash only; ShellCheck runs at
-  `--shell=bash --severity=warning`.
+  `--shell=bash --severity=warning`. Atoms run under whatever `bash` the
+  `#!/usr/bin/env bash` shebang resolves to, which on macOS is the system
+  bash 3.2, and ShellCheck does not flag what breaks there: under `set -u`
+  expand a possibly-empty array as `${a[@]+"${a[@]}"}`, and use no bash 4+
+  builtins or expansions (`declare -A`, `mapfile`, `${v,,}`).
 - Workflows: every `uses:` of an external action is SHA-pinned with a version
   comment. Reusable workflows are the deliberate exception: `ci.yml` calls
   `mise-task.yml` by local path and the `self-*.yml` callers use `@main`, the
