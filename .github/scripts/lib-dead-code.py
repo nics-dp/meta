@@ -535,8 +535,12 @@ def platform_files(libs, env, cwd, test_tags):
     is reported apart so it does not hold the issue open. A file the host
     itself compiles is never one, even when no successful build compiled it (a
     package only a failed build imports), so that case stays not analysed.
-    When the host listing fails nothing is returned, and a failed listing for
-    another GOOS adds nothing, so every doubt stays not analysed.
+    The host listing is the union of the host's own settings and the host
+    with cgo enabled, as every other GOOS is listed with cgo enabled: under
+    CGO_ENABLED=0 a host cgo file would otherwise look like another
+    platform's. When either host listing fails nothing is returned, and a
+    failed listing for another GOOS adds nothing, so every doubt stays not
+    analysed.
     """
     template = '{{.Dir}}\t{{join .GoFiles ","}}\t{{join .CgoFiles ","}}'
 
@@ -566,8 +570,10 @@ def platform_files(libs, env, cwd, test_tags):
         return files
 
     host = listing({})
-    if host is None:
+    host_cgo = listing({"CGO_ENABLED": "1"})
+    if host is None or host_cgo is None:
         return set()
+    host |= host_cgo
     others = set()
     for goos in PLATFORM_GOOS:
         others |= listing({"GOOS": goos, "CGO_ENABLED": "1"}) or set()
