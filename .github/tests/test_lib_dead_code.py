@@ -81,6 +81,27 @@ class ParseTests(unittest.TestCase):
         self.assertFalse(dead.not_found(None))
 
 
+class GoEnvTests(unittest.TestCase):
+    def test_owner_modules_are_private_and_existing_patterns_kept(self):
+        with mock.patch.dict(os.environ, {}, clear=True):
+            env = dead.go_env({}, "nics-dp", "example.com/x")
+        self.assertEqual(env, {"GOPRIVATE": "example.com/x,github.com/nics-dp"})
+
+    def test_owner_pattern_is_not_added_twice(self):
+        with mock.patch.dict(os.environ, {}, clear=True):
+            env = dead.go_env({}, "nics-dp", "github.com/nics-dp")
+        self.assertEqual(env["GOPRIVATE"], "github.com/nics-dp")
+
+    def test_go_git_calls_get_the_token_after_existing_config(self):
+        with mock.patch.dict(os.environ, {"GH_TOKEN": "t"}, clear=True):
+            env = dead.go_env({"GIT_CONFIG_COUNT": "1"}, "nics-dp", "")
+            key, value = dead.auth_header()
+        self.assertEqual(env["GIT_CONFIG_COUNT"], "2")
+        self.assertEqual(env["GIT_CONFIG_KEY_1"], key)
+        self.assertEqual(env["GIT_CONFIG_VALUE_1"], value)
+        self.assertNotIn("GIT_CONFIG_KEY_0", env)
+
+
 class PlanTests(unittest.TestCase):
     def test_library_repo_modules_are_not_consumers(self):
         src = pathlib.Path("/src")
