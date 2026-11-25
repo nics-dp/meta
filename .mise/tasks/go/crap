@@ -47,19 +47,9 @@ if [ "${#files[@]}" -eq 0 ]; then
   exit 0
 fi
 
-report=$(mktemp)
-trap 'rm -f "$report"; quality_go_profiles_restore; quality_unlock' EXIT
+trap 'quality_restore; quality_unlock' EXIT
 quality_lock
 quality_go_profiles_aside
 quality_go_coverage
 
-status=0
-quality_crapper --use-existing-coverage --threshold "$threshold" "${files[@]}" > "$report" || status=$?
-cat "$report"
-quality_summary "CRAP (threshold $threshold${base:+, changed since $base})" "$report"
-
-if [ "$status" -eq 2 ] && [ "${usage_report_only:-false}" = "true" ]; then
-  echo "go:crap: worst score above $threshold (report only)"
-  exit 0
-fi
-exit "$status"
+quality_crap_score go:crap "$threshold" "${base:+, changed since $base}" "${files[@]}"

@@ -1,0 +1,53 @@
+#!/usr/bin/env bash
+#MISE description="CRAP scores (crapper) for Python sources; on a pull request only the files it adds or modifies"
+#MISE hide=true
+#MISE raw=true
+#MISE tools={"aqua:astral-sh/uv"="0.13.1"}
+#USAGE flag "--threshold <n>" help="Fail when the worst CRAP score is above n" default="30"
+#USAGE flag "--all" help="Score every Python source file, not only a pull request's changes"
+#USAGE flag "--report-only" help="Report the scores and exit 0 whatever they are"
+
+# CRAP = CC^2 * (1 - coverage)^3 + CC per function (crapper). Coverage comes
+# from py:test's suite under coverage.py (lib/quality-tools
+# quality_py_coverage), which needs coverage in the PY_RUNNER environment.
+#
+# On a pull_request event the atom scores the Python files the pull request
+# adds or modifies (base ref from lib/quality-tools; the caller checks out with
+# fetch-depth: 0) and exits 0 without running tests when there are none.
+# --all scores the whole project; --report-only turns the threshold into a
+# report, for a project whose existing functions still exceed it.
+
+set -euo pipefail
+# shellcheck disable=SC1091
+source "$(dirname "$0")/../lib/py-env"
+# shellcheck disable=SC1091
+source "$(dirname "$0")/../lib/quality-tools"
+
+# shellcheck disable=SC2154
+threshold="${usage_threshold:-30}"
+case "$threshold" in
+  ''|*[!0-9]*) echo "py:crap: --threshold must be a non-negative integer, got '$threshold'" >&2; exit 2 ;;
+esac
+
+base=""
+if [ "${usage_all:-false}" != "true" ]; then
+  base=$(quality_base_ref) || exit 2
+fi
+
+list=$(quality_py_sources "$base") || { echo "py:crap: could not list Python sources${base:+ changed since $base}" >&2; exit 2; }
+files=()
+while IFS= read -r f; do
+  [ -n "$f" ] && files+=("$f")
+done <<< "$list"
+
+if [ "${#files[@]}" -eq 0 ]; then
+  echo "py:crap: no Python source files to score${base:+ (none changed since $base)}"
+  exit 0
+fi
+
+trap 'quality_restore; quality_unlock' EXIT
+quality_lock
+quality_lcov_aside
+quality_py_coverage
+
+quality_crap_score py:crap "$threshold" "${base:+, changed since $base}" "${files[@]}"
