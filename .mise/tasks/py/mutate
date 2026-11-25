@@ -1,0 +1,56 @@
+#!/usr/bin/env bash
+#MISE description="Mutation testing (mutator) for the Python files a pull request adds or modifies; fails on any surviving mutant"
+#MISE hide=true
+#MISE raw=true
+#MISE tools={"aqua:astral-sh/uv"="0.13.1"}
+#USAGE arg "[files]" var=#true var_min=0 help="Python source files to mutate (default: the pull request's added or modified files)"
+
+# Each mutant is judged by the test files that import its module, else the
+# whole suite (lib/quality-tools quality_py_test_command), run by the
+# project's own interpreter, with coverage from py:test's suite so uncovered
+# lines are reported, not mutated. A surviving mutant (mutator exit 3) or a
+# failing baseline (exit 2) fails the atom. Outside a pull request, with no
+# files named, there is nothing to mutate: a whole-project run is too slow for
+# CI and is run by hand.
+
+set -euo pipefail
+# shellcheck disable=SC1091
+source "$(dirname "$0")/../lib/py-env"
+# shellcheck disable=SC1091
+source "$(dirname "$0")/../lib/quality-tools"
+
+files=()
+# shellcheck disable=SC2154
+if [ -n "${usage_files:-}" ]; then
+  # shellcheck disable=SC2206
+  files=($usage_files)
+else
+  base=$(quality_base_ref) || exit 2
+  if [ -z "$base" ]; then
+    echo "py:mutate: not a pull request and no files given; nothing to mutate"
+    exit 0
+  fi
+  list=$(quality_py_sources "$base") || { echo "py:mutate: could not list Python sources changed since $base" >&2; exit 2; }
+  while IFS= read -r f; do
+    [ -n "$f" ] && files+=("$f")
+  done <<< "$list"
+fi
+
+if [ "${#files[@]}" -eq 0 ]; then
+  echo "py:mutate: no Python source files to mutate"
+  exit 0
+fi
+
+report=$(mktemp)
+trap 'rm -f "$report"; quality_restore; quality_unlock' EXIT
+quality_lock
+quality_lcov_aside
+quality_py_coverage
+py=$(quality_py_interpreter)
+
+for f in "${files[@]}"; do
+  quality_mutate_file "$f" "$(quality_py_test_command "$f" "$py")" "$report"
+done
+
+quality_summary "Mutation testing" "$report"
+quality_mutate_exit py:mutate

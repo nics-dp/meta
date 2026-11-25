@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# Sourced helper for the CRAP and mutation atoms. Runs crapper and mutator at
-# pinned commits through uvx, so no checkout, venv or pip is left in the
-# consumer repository. Neither project publishes releases, so the pins are
-# commit SHAs; the "unclebob quality tools" custom manager in renovate.json
-# moves them. mutator imports crapper for function names, so its environment
-# carries crapper at the same pin.
+# Sourced helper for the CRAP and mutation atoms (go:, py:, node: crap and
+# mutate). Runs crapper and mutator at pinned commits through uvx, so no
+# checkout, venv or pip is left in the consumer repository. Neither project
+# publishes releases, so the pins are commit SHAs; the "unclebob quality tools"
+# custom manager in renovate.json moves them. mutator imports crapper for
+# function names, so its environment carries crapper at the same pin.
 #
 # Callers declare uv in their own `#MISE tools=` header.
 
@@ -43,51 +43,86 @@ quality_base_ref() {
   printf 'origin/%s\n' "$GITHUB_BASE_REF"
 }
 
-# quality_go_sources [<base-ref>]: Go source files crapper and mutator score,
-# one per line, relative to the current directory (the module root, which may
-# be a subdirectory of the repository). With a base ref, only files added or
-# modified since the merge base; without, every tracked file. Tests, vendored
-# code and the test/ tree are not scored: they are what exercises the code, not
-# the code at risk. A failing git command fails the function, so a caller that
-# captures the list with $(...) can tell "nothing changed" from "could not tell".
-quality_go_sources() {
-  local files
-  if [ -n "${1:-}" ]; then
+# quality_files <base-ref|""> <pathspec>...: files matching the pathspecs, one
+# per line, relative to the current directory (the module root, which may be a
+# subdirectory of the repository). With a base ref, only files added or
+# modified since the merge base; without, every tracked file. A failing git
+# command fails the function, so a caller that captures the list with $(...)
+# can tell "nothing changed" from "could not tell".
+quality_files() {
+  local base=$1
+  shift
+  if [ -n "$base" ]; then
     # --no-renames: a renamed and edited file would otherwise be status R and
     # fall outside --diff-filter=AM; split, its new path is an addition.
     # core.quotePath=false: git otherwise prints a non-ASCII path quoted with
     # octal escapes, which is not a file name either tool can open.
-    files=$(git -c core.quotePath=false diff --relative --no-renames --name-only --diff-filter=AM "$1...HEAD" -- '*.go') || return 1
+    git -c core.quotePath=false diff --relative --no-renames --name-only --diff-filter=AM "$base...HEAD" -- "$@"
   else
-    files=$(git -c core.quotePath=false ls-files -- '*.go') || return 1
+    git -c core.quotePath=false ls-files -- "$@"
   fi
-  printf '%s\n' "$files" | awk 'NF && !/_test\.go$/ && !/(^|\/)vendor\// && !/^test\// && !/(^|\/)testdata\//'
 }
 
-# quality_go_profiles_aside / quality_go_profiles_restore: crapper reads every
-# Go profile it finds at the module root and under target/coverage, and
-# concatenates their blocks, so a go:test --coverage coverage.out left at the
-# root would be read next to the folded profile and skew the scores. The
-# atoms move those files aside for the run and put them back afterwards.
-QUALITY_GO_ASIDE_DIR=""
-quality_go_profiles_aside() {
+# quality_go_sources / quality_py_sources / quality_node_sources [<base-ref>]:
+# the source files crapper and mutator score for one language (quality_files
+# filtered). Tests, test trees, vendored or installed dependencies and build
+# configuration are not scored: they are what exercises the code, not the code
+# at risk. crapper does not parse Vue single-file components, so node takes
+# .ts/.tsx/.js family files only.
+quality_go_sources() {
+  local files
+  files=$(quality_files "${1:-}" '*.go') || return 1
+  printf '%s\n' "$files" | awk 'NF && !/_test\.go$/ && !/(^|\/)vendor\// && !/^test\// && !/(^|\/)testdata\//'
+}
+quality_py_sources() {
+  local files
+  files=$(quality_files "${1:-}" '*.py') || return 1
+  printf '%s\n' "$files" | awk 'NF && !/(^|\/)(tests?|\.?venv)\// && !/(^|\/)(test_[^\/]*|[^\/]*_test|conftest)\.py$/'
+}
+quality_node_sources() {
+  local files
+  files=$(quality_files "${1:-}" '*.ts' '*.tsx' '*.js' '*.jsx' '*.mjs' '*.cjs' '*.mts' '*.cts') || return 1
+  printf '%s\n' "$files" | awk 'NF && !/(^|\/)(node_modules|dist|__tests__|tests?)\// && !/\.(test|spec)\.[cm]?[jt]sx?$/ && !/\.d\.[cm]?ts$/ && !/(^|\/)[^\/]*\.config\.[cm]?[jt]s$/'
+}
+
+# quality_aside <file>... / quality_restore: crapper merges every report it
+# finds at fixed paths (Go profiles at the module root and under
+# target/coverage; LCOV under target/coverage/ and coverage/, a later file
+# winning for the same source), so a report left by an earlier go:test or
+# vitest run would be read next to the fresh one and skew the scores. The atoms
+# move those files aside for the run and put them back afterwards.
+QUALITY_ASIDE_DIR=""
+quality_aside() {
   local f
-  QUALITY_GO_ASIDE_DIR=$(mktemp -d)
-  for f in coverage.out target/coverage/coverage.out; do
-    if [ -e "$f" ]; then
-      mkdir -p "$QUALITY_GO_ASIDE_DIR/$(dirname "$f")"
-      mv "$f" "$QUALITY_GO_ASIDE_DIR/$f"
-    fi
+  QUALITY_ASIDE_DIR=$(mktemp -d)
+  for f in "$@"; do
+    [ -e "$f" ] || continue
+    mkdir -p "$QUALITY_ASIDE_DIR/$(dirname "$f")"
+    mv "$f" "$QUALITY_ASIDE_DIR/$f"
   done
 }
-quality_go_profiles_restore() {
+quality_restore() {
   local f
-  [ -n "$QUALITY_GO_ASIDE_DIR" ] || return 0
-  for f in coverage.out target/coverage/coverage.out; do
-    [ -e "$QUALITY_GO_ASIDE_DIR/$f" ] && mv "$QUALITY_GO_ASIDE_DIR/$f" "$f"
-  done
-  rm -rf "$QUALITY_GO_ASIDE_DIR"
-  QUALITY_GO_ASIDE_DIR=""
+  [ -n "$QUALITY_ASIDE_DIR" ] || return 0
+  while IFS= read -r f; do
+    f=${f#./}
+    mkdir -p "$(dirname "$f")"
+    mv "$QUALITY_ASIDE_DIR/$f" "$f"
+  done < <(cd "$QUALITY_ASIDE_DIR" && find . -type f)
+  rm -rf "$QUALITY_ASIDE_DIR"
+  QUALITY_ASIDE_DIR=""
+}
+quality_go_profiles_aside() {
+  quality_aside coverage.out target/coverage/coverage.out
+}
+# quality_lcov_aside: every LCOV report crapper would read besides the one
+# the atom writes (target/coverage/<language>/lcov.info is rewritten).
+quality_lcov_aside() {
+  local f files=()
+  while IFS= read -r f; do
+    [ -n "$f" ] && files+=("$f")
+  done < <(find target/coverage coverage -name lcov.info -type f 2>/dev/null)
+  quality_aside ${files[@]+"${files[@]}"}
 }
 
 # quality_go_coverage: write the module's coverage profile where crapper and
@@ -114,6 +149,49 @@ quality_go_coverage() {
   rm -f "$raw"
 }
 
+# quality_py_coverage: run py:test's suite (PY_RUNNER, PY_TEST_PATHS from
+# lib/py-env) under coverage.py and write target/coverage/python/lcov.info.
+# coverage must be installed in the environment PY_RUNNER selects (the test
+# dependency group by default); a missing one fails here instead of scoring
+# every function as uncovered. A failing test fails the run, as in go:crap.
+quality_py_coverage() {
+  local dir=target/coverage/python
+  if ! "${PY_RUNNER_ARR[@]}" python -c 'import coverage' >/dev/null 2>&1; then
+    echo "quality: coverage is not importable through PY_RUNNER ($PY_RUNNER); add it to the test dependency group" >&2
+    return 1
+  fi
+  mkdir -p "$dir"
+  rm -f "$dir/.coverage" "$dir/lcov.info"
+  "${PY_RUNNER_ARR[@]}" coverage run "--data-file=$dir/.coverage" -m pytest "$PY_TEST_PATHS"
+  "${PY_RUNNER_ARR[@]}" coverage lcov "--data-file=$dir/.coverage" -o "$dir/lcov.info"
+}
+
+# quality_node_coverage: run node:test's vitest under coverage and write
+# target/coverage/typescript/lcov.info, with the repository's own coverage
+# include/exclude from its vitest config. The provider must be a devDependency;
+# vitest would otherwise prompt to install it. reportOnFailure keeps the report
+# when a test fails: coverage instrumentation slows async tests enough to trip
+# their timeouts, the scores still hold, and Node Test is the gate for test
+# results, so a failing run is a warning here.
+quality_node_coverage() {
+  local dir=target/coverage/typescript provider="" p status=0
+  for p in coverage-v8 coverage-istanbul; do
+    [ -d "node_modules/@vitest/$p" ] && provider=$p
+  done
+  if [ -z "$provider" ]; then
+    echo "quality: no @vitest/coverage-v8 (or coverage-istanbul) in node_modules; add it as a devDependency at the vitest version" >&2
+    return 1
+  fi
+  rm -rf "$dir"
+  bunx vitest run --coverage --coverage.reporter=lcov "--coverage.reportsDirectory=$dir" --coverage.reportOnFailure=true || status=$?
+  if [ ! -s "$dir/lcov.info" ]; then
+    echo "quality: vitest wrote no $dir/lcov.info (exit $status)" >&2
+    return 1
+  fi
+  [ "$status" -eq 0 ] || echo "quality: vitest exited $status; scoring the coverage it wrote (Node Test gates the test results)" >&2
+  return 0
+}
+
 # quality_go_test_command <file>: the test command mutator runs for one Go
 # source file -- its own package plus the mirrored package under test/ when
 # that exists, else the whole GO_TEST_PATHS suite, so a mutant is never judged
@@ -135,8 +213,109 @@ quality_go_test_command() {
   printf '%s\n' "$test_cmd"
 }
 
-# quality_lock / quality_unlock: go:crap and go:mutate share the fixed paths
-# crapper and mutator read (target/coverage/go/coverage.out, the profiles set
+# quality_py_interpreter: the absolute interpreter PY_RUNNER runs tests with.
+# A mutator worker does not link .venv, so the mutant command names this path
+# instead of going through PY_RUNNER, which would build a fresh environment in
+# every worker; mutator puts the worker's sources first on PYTHONPATH.
+quality_py_interpreter() {
+  "${PY_RUNNER_ARR[@]}" python -c 'import sys; print(sys.executable)'
+}
+
+# quality_py_test_command <file> <interpreter>: the test command mutator runs
+# for one Python source file -- the pytest test files (test_*.py, *_test.py)
+# under PY_TEST_PATHS that import its module (a leading src/ is the package
+# root), else the whole suite; a helper or benchmark module named on the
+# command line would run even though pytest never collects it. A
+# test that reaches the module only through a multi-line import falls to the
+# whole suite, which is slower but never misses it.
+quality_py_test_command() {
+  local mod leaf parent pattern t targets=()
+  mod=${1%.py}
+  mod=${mod#src/}
+  mod=${mod%/__init__}
+  mod=${mod//\//.}
+  leaf=${mod##*.}
+  parent=${mod%.*}
+  pattern="^[[:space:]]*(from[[:space:]]+${mod//./\\.}([[:space:].]|$)|import[[:space:]]+${mod//./\\.}([[:space:],.]|$))"
+  if [ "$parent" != "$mod" ]; then
+    pattern="$pattern|^[[:space:]]*from[[:space:]]+${parent//./\\.}[[:space:]]+import[[:space:]](.*[^[:alnum:]_])?${leaf}([^[:alnum:]_]|$)"
+  fi
+  while IFS= read -r t; do
+    [ -n "$t" ] && targets+=("$t")
+  done < <(grep -rlE --include='test_*.py' --include='*_test.py' "$pattern" "$PY_TEST_PATHS" 2>/dev/null | sort)
+  [ "${#targets[@]}" -eq 0 ] && targets=("$PY_TEST_PATHS")
+  local test_cmd
+  test_cmd="$(printf '%q' "$2") -m pytest -q -p no:cacheprovider"
+  for t in "${targets[@]}"; do
+    test_cmd="$test_cmd $(printf '%q' "$t")"
+  done
+  printf '%s\n' "$test_cmd"
+}
+
+# quality_node_test_command <file>: the test command mutator runs for one
+# TypeScript/JavaScript source file -- the vitest tests whose import graph
+# reaches it. A file no test reaches has no covered site, so mutator runs no
+# mutant for it; --passWithNoTests keeps its baseline from failing.
+quality_node_test_command() {
+  printf 'bunx vitest related --run --passWithNoTests %q\n' "$1"
+}
+
+# quality_crap_score <atom> <threshold> <scope> <file>...: score the files
+# against the coverage already written, print the report and add it to the job
+# summary. Returns crapper's status, or 0 for a threshold breach (status 2)
+# under --report-only.
+quality_crap_score() {
+  local atom=$1 threshold=$2 scope=$3 report status=0
+  shift 3
+  report=$(mktemp)
+  quality_crapper --use-existing-coverage --threshold "$threshold" "$@" > "$report" || status=$?
+  cat "$report"
+  quality_summary "CRAP (threshold $threshold$scope)" "$report"
+  rm -f "$report"
+  if [ "$status" -eq 2 ] && [ "${usage_report_only:-false}" = "true" ]; then
+    echo "$atom: worst score above $threshold (report only)"
+    return 0
+  fi
+  return "$status"
+}
+
+# quality_mutate_file <file> <test-command> <report>: run mutator on one file
+# against the coverage already written, print its output and append the
+# SURVIVED and Total lines to <report>. QUALITY_MUTATE_WORST keeps the highest
+# exit status for quality_mutate_exit.
+#
+# --mutate-all: mutator otherwise keeps a killed result for a function whose
+# text has not changed, which stays killed even after its tests are weakened.
+QUALITY_MUTATE_WORST=0
+quality_mutate_file() {
+  local file=$1 test_cmd=$2 report=$3 one code=0
+  one=$(mktemp)
+  echo "==> $file ($test_cmd)"
+  quality_mutator --mutate-all --use-existing-coverage --test-command "$test_cmd" "$file" > "$one" 2>&1 || code=$?
+  cat "$one"
+  {
+    echo "== $file (exit $code)"
+    grep -E '^(SURVIVED|Total)' "$one" || true
+  } >> "$report"
+  rm -f "$one"
+  [ "$code" -gt "$QUALITY_MUTATE_WORST" ] && QUALITY_MUTATE_WORST=$code
+  return 0
+}
+
+# quality_mutate_exit <atom>: the atom's exit status from QUALITY_MUTATE_WORST.
+# A surviving mutant (mutator exit 3) or a failing baseline (exit 2) fails.
+quality_mutate_exit() {
+  case "$QUALITY_MUTATE_WORST" in
+    0) return 0 ;;
+    3) echo "$1: surviving mutants (see SURVIVED lines)" >&2 ;;
+    2) echo "$1: baseline tests failed before any mutant ran" >&2 ;;
+    *) echo "$1: mutator exited $QUALITY_MUTATE_WORST" >&2 ;;
+  esac
+  return 1
+}
+
+# quality_lock / quality_unlock: the crap and mutate atoms share the fixed
+# paths crapper and mutator read (target/coverage/<language>/, the reports set
 # aside), so two runs in one working tree serialize the whole
 # aside-coverage-score-restore sequence. mkdir is the lock because macOS has no
 # flock; a lock older than the timeout is reported, not broken.

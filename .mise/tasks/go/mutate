@@ -52,12 +52,11 @@ if [ "${#files[@]}" -eq 0 ]; then
 fi
 
 report=$(mktemp)
-trap 'rm -f "$report"; quality_go_profiles_restore; quality_unlock' EXIT
+trap 'rm -f "$report"; quality_restore; quality_unlock' EXIT
 quality_lock
 quality_go_profiles_aside
 quality_go_coverage
 
-worst=0
 skipped=0
 for f in "${files[@]}"; do
   # mutator links a package's non-Go files into each worker as symlinks, and
@@ -70,26 +69,9 @@ for f in "${files[@]}"; do
     skipped=$((skipped + 1))
     continue
   fi
-  cmd=$(quality_go_test_command "$f")
-  echo "==> $f ($cmd)"
-  code=0
-  # --mutate-all: mutator otherwise keeps a killed result for a function whose
-  # text has not changed, which stays killed even after its tests are weakened.
-  quality_mutator --mutate-all --use-existing-coverage --test-command "$cmd" "$f" > "$report.one" 2>&1 || code=$?
-  cat "$report.one"
-  {
-    echo "== $f (exit $code)"
-    grep -E '^(SURVIVED|Total)' "$report.one" || true
-  } >> "$report"
-  rm -f "$report.one"
-  [ "$code" -gt "$worst" ] && worst=$code
+  quality_mutate_file "$f" "$(quality_go_test_command "$f")" "$report"
 done
 
 quality_summary "Mutation testing" "$report"
 [ "$skipped" -gt 0 ] && echo "go:mutate: $skipped file(s) not mutated (go:embed packages); see the summary" >&2
-case "$worst" in
-  0) exit 0 ;;
-  3) echo "go:mutate: surviving mutants (see SURVIVED lines)" >&2; exit 1 ;;
-  2) echo "go:mutate: baseline tests failed before any mutant ran" >&2; exit 1 ;;
-  *) echo "go:mutate: mutator exited $worst" >&2; exit 1 ;;
-esac
+quality_mutate_exit go:mutate
