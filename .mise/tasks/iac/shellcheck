@@ -16,8 +16,10 @@ shellcheck_fail() {
 }
 
 index_file="${GIT_CONFIG_GLOBAL%/*}/task-index"
+# Python helpers under lib/ (imp-check.py) are not Bash.
 git ls-files --stage -z -- \
   '.mise/tasks/**' \
+  ':(exclude,glob).mise/tasks/**/*.py' \
   '.github/scripts/github-actions-scanner.sh' >"$index_file"
 
 entries=()
