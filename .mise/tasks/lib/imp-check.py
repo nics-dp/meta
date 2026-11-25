@@ -14,7 +14,7 @@ import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
 
-VERSION = "0.2.0"
+VERSION = "0.2.1"
 
 DEFAULT_PHASE_IGNORE = ["docs/**", "*.md", ".github/**"]
 
