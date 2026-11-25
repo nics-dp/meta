@@ -23,13 +23,14 @@ and the polyrepo map before judging blast radius).
 ## Where things are
 
 - `.mise/tasks/<category>/<name>` — one executable bash file per atom under
-  `ci/`, `iac/`, `go/`, `node/`, `py/`, `sbom/`, `gs/`, `dc/`, `doctor/`, `meta/`,
-  `mise/`.
+  `ci/`, `iac/`, `go/`, `node/`, `py/`, `sbom/`, `gs/`, `dc/`, `doctor/`, `imp/`,
+  `meta/`, `mise/`.
   Each is hidden (`#MISE hide=true`); an atom that needs a tool beyond bash
   and the consumer's own toolchain declares it inline in `#MISE tools=`.
   `lib/` holds sourced helpers, not tasks (`ci-isolate`,
   `fetch-config`, `go-env`, `go-mod`, `go-version`, `go-workspace`, `logs`,
-  `py-env`, `quality-tools`).
+  `py-env`, `quality-tools`), plus `imp-check.py`, the Contract checker
+  `imp:check` runs.
 - `.github/workflows/` — the reusable workflows: `mise-task.yml` (the runner
   every consumer CI matrix calls), `auto-release.yml`, `go-release.yml`,
   `image-release.yml`, `sbom-source.yml`, `sbom-image.yml`,
@@ -113,7 +114,8 @@ before changing any of these; the mechanism is in the code, the history in
   `templates/facades/`.
 - Atoms and helpers are tracked as stage-0 regular files with mode `100644` or
   `100755`; `iac:shellcheck` enumerates them from the git index and fails
-  closed on anything else (symlink, empty file, unexpected path).
+  closed on anything else (symlink, empty file, unexpected path). Python helpers
+  get the same index checks and are only left out of the ShellCheck input.
   → `.mise/tasks/iac/shellcheck`.
 - The definition checks `mise:validate`, `iac:shellcheck` and `iac:zizmor`
   source `lib/ci-isolate` first: it points `GIT_CONFIG_GLOBAL` at an empty
@@ -170,6 +172,12 @@ before changing any of these; the mechanism is in the code, the history in
   they take only the files added or modified since the base ref, which needs a
   `fetch-depth: 0` checkout. → `.mise/tasks/lib/quality-tools`, the atom
   headers.
+- `imp:check` runs `lib/imp-check.py`, the one copy of the Contract checker:
+  consumer repositories keep `.imp.toml` and `docs/contract/` but no checker of
+  their own, so a pull request cannot edit the code that judges it. The file
+  matches the imp skill's `scripts/imp_check.py` in `dcf-claude-plugins`;
+  change both together. On a pull request it takes the base ref from
+  `quality_base_ref`. → `.mise/tasks/imp/check`.
 - `meta:bump` is `mise cache clear` + `mise install` and nothing else; it is
   unconditional — pinning a tag instead of `?ref=main` bounds which revision
   the include resolves to, it does not make the task a no-op.
