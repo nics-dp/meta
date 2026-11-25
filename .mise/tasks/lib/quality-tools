@@ -55,9 +55,11 @@ quality_go_sources() {
   if [ -n "${1:-}" ]; then
     # --no-renames: a renamed and edited file would otherwise be status R and
     # fall outside --diff-filter=AM; split, its new path is an addition.
-    files=$(git diff --relative --no-renames --name-only --diff-filter=AM "$1...HEAD" -- '*.go') || return 1
+    # core.quotePath=false: git otherwise prints a non-ASCII path quoted with
+    # octal escapes, which is not a file name either tool can open.
+    files=$(git -c core.quotePath=false diff --relative --no-renames --name-only --diff-filter=AM "$1...HEAD" -- '*.go') || return 1
   else
-    files=$(git ls-files -- '*.go') || return 1
+    files=$(git -c core.quotePath=false ls-files -- '*.go') || return 1
   fi
   printf '%s\n' "$files" | awk 'NF && !/_test\.go$/ && !/(^|\/)vendor\// && !/^test\// && !/(^|\/)testdata\//'
 }
