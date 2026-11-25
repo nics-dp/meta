@@ -97,6 +97,7 @@ Consumer 在自家 `mise.toml` 定義同名 task 即覆寫（mise 偏好近檔�
 | `GO_TEST_MOD`    | `readonly`（Go workspace 模式）/ `vendor`（如 `vendor/` 存在）/ `mod` | `-mod=` 模式，由 `lib/go-workspace` 決定 |
 | `GO_COVERPKG`    | `<go.mod module>/internal/...`（如 `internal/` 存在）/ empty | `-coverpkg=` 範圍                  |
 | `CGO_ENABLED`    | `1`                                                         | race detector 須 cgo               |
+| `GO_TEST_CGO_ENABLED` | empty                                                  | 有設定時覆寫 `CGO_ENABLED`，只作用於 source `lib/go-env` 的 atom（`go:test`、`go:crap`、`go:mutate` 等）；給建置關 cgo、但測試 package 連結 cgo-only 依賴的 repo |
 
 `go:report` 額外自動讀 `go.mod` module path 解析 component（支援短 module 名與 hostname-style `github.com/<org>/<repo>` path）。
 
