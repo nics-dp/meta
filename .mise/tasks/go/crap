@@ -33,23 +33,25 @@ esac
 
 base=""
 if [ "${usage_all:-false}" != "true" ]; then
-  base=$(quality_base_ref)
+  base=$(quality_base_ref) || exit 2
 fi
 
+list=$(quality_go_sources "$base") || { echo "go:crap: could not list Go sources${base:+ changed since $base}" >&2; exit 2; }
 files=()
 while IFS= read -r f; do
   [ -n "$f" ] && files+=("$f")
-done < <(quality_go_sources "$base")
+done <<< "$list"
 
 if [ "${#files[@]}" -eq 0 ]; then
   echo "go:crap: no Go source files to score${base:+ (none changed since $base)}"
   exit 0
 fi
 
+report=$(mktemp)
+trap 'rm -f "$report"; quality_go_profiles_restore' EXIT
+quality_go_profiles_aside
 quality_go_coverage
 
-report=$(mktemp)
-trap 'rm -f "$report"' EXIT
 status=0
 quality_crapper --use-existing-coverage --threshold "$threshold" "${files[@]}" > "$report" || status=$?
 cat "$report"

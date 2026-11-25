@@ -19,20 +19,31 @@ source "$(dirname "$0")/../lib/go-env"
 # shellcheck disable=SC1091
 source "$(dirname "$0")/../lib/quality-tools"
 
+# mutator runs each mutant in a worker directory under target/mutation-workers.
+# An active go.work lists the module's real directory, not the worker's, so
+# every worker build fails, and mutator counts any failing test run as a
+# killed mutant: under a workspace the atom would pass without testing one.
+gowork=$(go env GOWORK)
+if [ -n "$gowork" ] && [ "$gowork" != "off" ]; then
+  echo "go:mutate: a Go workspace is active ($gowork); run with GOWORK=off" >&2
+  exit 2
+fi
+
 files=()
 # shellcheck disable=SC2154
 if [ -n "${usage_files:-}" ]; then
   # shellcheck disable=SC2206
   files=($usage_files)
 else
-  base=$(quality_base_ref)
+  base=$(quality_base_ref) || exit 2
   if [ -z "$base" ]; then
     echo "go:mutate: not a pull request and no files given; nothing to mutate"
     exit 0
   fi
+  list=$(quality_go_sources "$base") || { echo "go:mutate: could not list Go sources changed since $base" >&2; exit 2; }
   while IFS= read -r f; do
     [ -n "$f" ] && files+=("$f")
-  done < <(quality_go_sources "$base")
+  done <<< "$list"
 fi
 
 if [ "${#files[@]}" -eq 0 ]; then
@@ -40,10 +51,11 @@ if [ "${#files[@]}" -eq 0 ]; then
   exit 0
 fi
 
+report=$(mktemp)
+trap 'rm -f "$report"; quality_go_profiles_restore' EXIT
+quality_go_profiles_aside
 quality_go_coverage
 
-report=$(mktemp)
-trap 'rm -f "$report"' EXIT
 worst=0
 for f in "${files[@]}"; do
   cmd=$(quality_go_test_command "$f")

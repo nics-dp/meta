@@ -26,29 +26,64 @@ quality_mutator() {
 }
 
 # quality_base_ref: the ref a pull request is compared against. Prints
-# origin/<base> on a pull_request event when that ref is in the checkout, and
-# nothing otherwise. The caller's checkout must use fetch-depth: 0 (as
-# ci:betterleaks does): mise-task.yml checks out with persist-credentials:
-# false, so a fetch from inside the atom fails on a private repository.
+# origin/<base> on a pull_request event and nothing outside one. A pull
+# request whose checkout lacks that ref is an error, not "not a pull request":
+# treating it as the latter would turn the changed-file gates into a
+# whole-module scan or a silent skip. The caller's checkout must use
+# fetch-depth: 0 (as ci:betterleaks does): mise-task.yml checks out with
+# persist-credentials: false, so a fetch from inside the atom fails on a
+# private repository.
 quality_base_ref() {
-  if [ "${GITHUB_EVENT_NAME:-}" = "pull_request" ] && [ -n "${GITHUB_BASE_REF:-}" ] \
-     && git rev-parse --verify --quiet "origin/${GITHUB_BASE_REF}^{commit}" >/dev/null; then
-    printf 'origin/%s\n' "$GITHUB_BASE_REF"
+  [ "${GITHUB_EVENT_NAME:-}" = "pull_request" ] || return 0
+  if [ -z "${GITHUB_BASE_REF:-}" ] \
+     || ! git rev-parse --verify --quiet "origin/${GITHUB_BASE_REF}^{commit}" >/dev/null; then
+    echo "quality: pull request without origin/${GITHUB_BASE_REF:-<base>} in the checkout; check out with fetch-depth: 0" >&2
+    return 1
   fi
+  printf 'origin/%s\n' "$GITHUB_BASE_REF"
 }
 
 # quality_go_sources [<base-ref>]: Go source files crapper and mutator score,
-# one per line. With a base ref, only files added or modified since the merge
-# base; without, every tracked file. Tests, vendored code and the test/ tree
-# are not scored: they are what exercises the code, not the code at risk.
+# one per line, relative to the current directory (the module root, which may
+# be a subdirectory of the repository). With a base ref, only files added or
+# modified since the merge base; without, every tracked file. Tests, vendored
+# code and the test/ tree are not scored: they are what exercises the code, not
+# the code at risk. A failing git command fails the function, so a caller that
+# captures the list with $(...) can tell "nothing changed" from "could not tell".
 quality_go_sources() {
   local files
   if [ -n "${1:-}" ]; then
-    files=$(git diff --name-only --diff-filter=AM "$1...HEAD" -- '*.go')
+    files=$(git diff --relative --name-only --diff-filter=AM "$1...HEAD" -- '*.go') || return 1
   else
-    files=$(git ls-files -- '*.go')
+    files=$(git ls-files -- '*.go') || return 1
   fi
   printf '%s\n' "$files" | awk 'NF && !/_test\.go$/ && !/(^|\/)vendor\// && !/^test\// && !/(^|\/)testdata\//'
+}
+
+# quality_go_profiles_aside / quality_go_profiles_restore: crapper reads every
+# Go profile it finds at the module root and under target/coverage, and
+# concatenates their blocks, so a go:test --coverage coverage.out left at the
+# root would be read next to the folded profile and skew the scores. The
+# atoms move those files aside for the run and put them back afterwards.
+QUALITY_GO_ASIDE_DIR=""
+quality_go_profiles_aside() {
+  local f
+  QUALITY_GO_ASIDE_DIR=$(mktemp -d)
+  for f in coverage.out target/coverage/coverage.out; do
+    if [ -e "$f" ]; then
+      mkdir -p "$QUALITY_GO_ASIDE_DIR/$(dirname "$f")"
+      mv "$f" "$QUALITY_GO_ASIDE_DIR/$f"
+    fi
+  done
+}
+quality_go_profiles_restore() {
+  local f
+  [ -n "$QUALITY_GO_ASIDE_DIR" ] || return 0
+  for f in coverage.out target/coverage/coverage.out; do
+    [ -e "$QUALITY_GO_ASIDE_DIR/$f" ] && mv "$QUALITY_GO_ASIDE_DIR/$f" "$f"
+  done
+  rm -rf "$QUALITY_GO_ASIDE_DIR"
+  QUALITY_GO_ASIDE_DIR=""
 }
 
 # quality_go_coverage: write the module's coverage profile where crapper and
