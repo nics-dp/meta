@@ -1,4 +1,4 @@
-# Image-only facade (Dockerfile-only repos like patroni). No build/run/test.
+# Image-only facade (Dockerfile-only repos). No build/run/test.
 
 [settings]
 jobs = 16

@@ -37,7 +37,7 @@ on:
           Docker build target stage (e.g. 'runtime'). Empty (default) builds
           the last stage in the Dockerfile, preserving existing behaviour for
           callers whose final stage is already the intended image (e.g.
-          otel-bundle, patroni, synth, which have no 'runtime' stage). Service
+          otel-bundle and synth, which have no 'runtime' stage). Service
           repos with a trailing 'debug' stage should opt in with target: runtime
           to avoid shipping the debug image.
       build_args:
@@ -138,7 +138,7 @@ on:
         required: false
         type: string
         default: ""
-        description: "Optional external repo to checkout as the build context (e.g., 'patroni/patroni'). When set, `context` must equal `external_path` or be a subpath of it."
+        description: "Optional external repo to checkout as the build context (an upstream '<owner>/<repo>'). When set, `context` must equal `external_path` or be a subpath of it."
       external_ref:
         required: false
         type: string
