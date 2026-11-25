@@ -29,7 +29,7 @@ and the polyrepo map before judging blast radius).
   and the consumer's own toolchain declares it inline in `#MISE tools=`.
   `lib/` holds sourced helpers, not tasks (`ci-isolate`,
   `fetch-config`, `go-env`, `go-mod`, `go-version`, `go-workspace`, `logs`,
-  `py-env`).
+  `py-env`, `quality-tools`).
 - `.github/workflows/` — the reusable workflows: `mise-task.yml` (the runner
   every consumer CI matrix calls), `auto-release.yml`, `go-release.yml`,
   `image-release.yml`, `sbom-source.yml`, `sbom-image.yml`,
@@ -158,6 +158,14 @@ before changing any of these; the mechanism is in the code, the history in
   `go:dead-code` atom header. → the module docstring of
   `.github/scripts/lib-dead-code.py`; regression suite
   `python3 .github/tests/test_lib_dead_code.py`.
+- `go:crap` and `go:mutate` run crapper and mutator through `uvx` at the
+  commit pins in `lib/quality-tools` (neither project publishes releases). Both
+  read the coverage profile `quality_go_coverage` writes from go:test's own test
+  run with the -coverpkg rows folded per block; crapper's default `go test ./...`
+  builds without the test tags and scores everything uncovered, and an unfolded
+  -coverpkg profile undercounts. On a pull request they take only the files
+  added or modified since the base ref, which needs a `fetch-depth: 0` checkout.
+  → `.mise/tasks/lib/quality-tools`, the atom headers.
 - `meta:bump` is `mise cache clear` + `mise install` and nothing else; it is
   unconditional — pinning a tag instead of `?ref=main` bounds which revision
   the include resolves to, it does not make the task a no-op.

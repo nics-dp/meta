@@ -1,0 +1,65 @@
+#!/usr/bin/env bash
+#MISE description="CRAP scores (crapper) for Go sources; on a pull request only the files it adds or modifies"
+#MISE hide=true
+#MISE raw=true
+#MISE depends=["go:install"]
+#MISE tools={"aqua:astral-sh/uv"="0.13.1"}
+#USAGE flag "--threshold <n>" help="Fail when the worst CRAP score is above n" default="30"
+#USAGE flag "--all" help="Score every Go source file, not only a pull request's changes"
+#USAGE flag "--report-only" help="Report the scores and exit 0 whatever they are"
+
+# CRAP = CC^2 * (1 - coverage)^3 + CC per function (crapper). Coverage comes
+# from go:test's own run (lib/quality-tools quality_go_coverage), not from
+# crapper's default `go test ./...`, which builds without the test tags and
+# without -coverpkg and would score every function as uncovered.
+#
+# On a pull_request event the atom scores the Go files the pull request adds
+# or modifies (base ref from lib/quality-tools; the caller checks out with
+# fetch-depth: 0) and exits 0 without running tests when there are none.
+# --all scores the whole module; --report-only turns the threshold into a
+# report, for a module whose existing functions still exceed it.
+
+set -euo pipefail
+# shellcheck disable=SC1091
+source "$(dirname "$0")/../lib/go-env"
+# shellcheck disable=SC1091
+source "$(dirname "$0")/../lib/quality-tools"
+
+# shellcheck disable=SC2154
+threshold="${usage_threshold:-30}"
+case "$threshold" in
+  ''|*[!0-9]*) echo "go:crap: --threshold must be a non-negative integer, got '$threshold'" >&2; exit 2 ;;
+esac
+
+base=""
+if [ "${usage_all:-false}" != "true" ]; then
+  base=$(quality_base_ref) || exit 2
+fi
+
+list=$(quality_go_sources "$base") || { echo "go:crap: could not list Go sources${base:+ changed since $base}" >&2; exit 2; }
+files=()
+while IFS= read -r f; do
+  [ -n "$f" ] && files+=("$f")
+done <<< "$list"
+
+if [ "${#files[@]}" -eq 0 ]; then
+  echo "go:crap: no Go source files to score${base:+ (none changed since $base)}"
+  exit 0
+fi
+
+report=$(mktemp)
+trap 'rm -f "$report"; quality_go_profiles_restore; quality_unlock' EXIT
+quality_lock
+quality_go_profiles_aside
+quality_go_coverage
+
+status=0
+quality_crapper --use-existing-coverage --threshold "$threshold" "${files[@]}" > "$report" || status=$?
+cat "$report"
+quality_summary "CRAP (threshold $threshold${base:+, changed since $base})" "$report"
+
+if [ "$status" -eq 2 ] && [ "${usage_report_only:-false}" = "true" ]; then
+  echo "go:crap: worst score above $threshold (report only)"
+  exit 0
+fi
+exit "$status"

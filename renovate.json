@@ -10,6 +10,19 @@
   },
   "packageRules": [
     {
+      "description": "crapper and mutator are git-refs commit pins: the git-refs datasource carries no release timestamp, and under the default timestamp-required behaviour the preset's minimumReleaseAge would hold every digest update forever. timestamp-optional lets an untimestamped update through while the age policy stays in place. Reviewed, never automerged.",
+      "matchDatasources": [
+        "git-refs"
+      ],
+      "matchPackageNames": [
+        "https://github.com/unclebob/crapper",
+        "https://github.com/unclebob/mutator"
+      ],
+      "groupName": "unclebob quality tools",
+      "minimumReleaseAgeBehaviour": "timestamp-optional",
+      "automerge": false
+    },
+    {
       "description": "Review Zizmor action, CLI, and image support together",
       "groupName": "zizmor security gate",
       "matchPackageNames": [
@@ -253,6 +266,17 @@
       ],
       "depNameTemplate": "golang.org/x/tools",
       "datasourceTemplate": "go"
+    },
+    {
+      "customType": "regex",
+      "description": "Update the crapper and mutator commit pins in lib/quality-tools; neither project publishes releases, so each pin follows the head of the branch named on its line",
+      "managerFilePatterns": [
+        "/^\\.mise/tasks/lib/quality-tools$/"
+      ],
+      "matchStrings": [
+        "QUALITY_[A-Z]+_REF=\"(?<currentDigest>[0-9a-f]{40})\" # renovate: (?<depName>\\S+) branch=(?<currentValue>\\S+)"
+      ],
+      "datasourceTemplate": "git-refs"
     },
     {
       "customType": "regex",
