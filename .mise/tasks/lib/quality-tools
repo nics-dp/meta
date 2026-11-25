@@ -90,13 +90,14 @@ quality_node_sources() {
 # target/coverage; LCOV under target/coverage/ and coverage/, a later file
 # winning for the same source), so a report left by an earlier go:test or
 # vitest run would be read next to the fresh one and skew the scores. The atoms
-# move those files aside for the run and put them back afterwards.
+# move those files aside for the run and put them back afterwards. A symbolic
+# link is moved and restored as the link itself, dangling or not.
 QUALITY_ASIDE_DIR=""
 quality_aside() {
   local f
   QUALITY_ASIDE_DIR=$(mktemp -d)
   for f in "$@"; do
-    [ -e "$f" ] || continue
+    [ -e "$f" ] || [ -L "$f" ] || continue
     mkdir -p "$QUALITY_ASIDE_DIR/$(dirname "$f")"
     mv "$f" "$QUALITY_ASIDE_DIR/$f"
   done
@@ -108,7 +109,7 @@ quality_restore() {
     f=${f#./}
     mkdir -p "$(dirname "$f")"
     mv "$QUALITY_ASIDE_DIR/$f" "$f"
-  done < <(cd "$QUALITY_ASIDE_DIR" && find . -type f)
+  done < <(cd "$QUALITY_ASIDE_DIR" && find . ! -type d)
   rm -rf "$QUALITY_ASIDE_DIR"
   QUALITY_ASIDE_DIR=""
 }
@@ -223,26 +224,120 @@ quality_py_interpreter() {
 
 # quality_py_test_command <file> <interpreter>: the test command mutator runs
 # for one Python source file -- the pytest test files (test_*.py, *_test.py)
-# under PY_TEST_PATHS that import its module (a leading src/ is the package
-# root), else the whole suite; a helper or benchmark module named on the
-# command line would run even though pytest never collects it. A
-# test that reaches the module only through a multi-line import falls to the
-# whole suite, which is slower but never misses it.
+# under PY_TEST_PATHS whose imports reach it, else the whole suite. Reach is
+# the transitive closure of project imports read with the ast module (every
+# import form, relative imports, a test directory's conftest.py), so a test
+# that exercises the file through another module still judges its mutants; a
+# test file that does not parse is kept. Only collected test files are named:
+# a helper or benchmark module named on the command line would run even though
+# pytest never collects it.
+read -r -d '' QUALITY_PY_RELATED <<'PY' || true
+import ast, os, sys
+
+target = os.path.normpath(sys.argv[1])
+test_paths = sys.argv[2]
+
+
+def module_of(path):
+    parts = os.path.normpath(path)[:-3].split(os.sep)
+    if parts[0] == "src":
+        parts = parts[1:]
+    if parts and parts[-1] == "__init__":
+        parts = parts[:-1]
+    return parts
+
+
+def file_of(name, here):
+    rel = name.replace(".", os.sep)
+    for base in ("", "src", here):
+        for cand in (os.path.join(base, rel + ".py"), os.path.join(base, rel, "__init__.py")):
+            if os.path.isfile(cand):
+                return os.path.normpath(cand)
+    return None
+
+
+def reached(path, cache):
+    if path in cache:
+        return cache[path]
+    try:
+        with open(path, encoding="utf-8") as handle:
+            tree = ast.parse(handle.read(), path)
+    except (OSError, SyntaxError, ValueError):
+        cache[path] = None
+        return None
+    here = os.path.dirname(path)
+    package = module_of(path)
+    if not path.endswith("__init__.py"):
+        package = package[:-1]
+    names = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            names += [alias.name for alias in node.names]
+        elif isinstance(node, ast.ImportFrom):
+            base = node.module or ""
+            if node.level:
+                parent = package[: len(package) - (node.level - 1)]
+                base = ".".join(parent + ([node.module] if node.module else []))
+            names.append(base)
+            names += [(base + "." if base else "") + alias.name for alias in node.names]
+    found = set()
+    for name in names:
+        parts = name.split(".")
+        for i in range(1, len(parts) + 1):
+            hit = file_of(".".join(parts[:i]), here)
+            if hit:
+                found.add(hit)
+    cache[path] = found
+    return found
+
+
+def conftests(path):
+    found, directory = [], os.path.dirname(path)
+    while True:
+        candidate = os.path.join(directory, "conftest.py")
+        if os.path.isfile(candidate):
+            found.append(os.path.normpath(candidate))
+        if directory in ("", "."):
+            return found
+        directory = os.path.dirname(directory)
+
+
+def tests():
+    if os.path.isfile(test_paths):
+        yield os.path.normpath(test_paths)
+        return
+    for directory, dirs, files in os.walk(test_paths):
+        dirs[:] = sorted(d for d in dirs if d not in (".venv", "venv", "__pycache__", "node_modules"))
+        for name in sorted(files):
+            if name.endswith(".py") and (name.startswith("test_") or name.endswith("_test.py")):
+                yield os.path.normpath(os.path.join(directory, name))
+
+
+cache = {}
+for test in tests():
+    seen, todo = set(), [test] + conftests(test)
+    hit = False
+    while todo:
+        path = todo.pop()
+        if path in seen:
+            continue
+        seen.add(path)
+        imports = reached(path, cache)
+        if imports is None and path == test:
+            hit = True
+            break
+        if path == target or (imports and target in imports):
+            hit = True
+            break
+        todo.extend(imports or ())
+    if hit:
+        print(test)
+PY
 quality_py_test_command() {
-  local mod leaf parent pattern t targets=()
-  mod=${1%.py}
-  mod=${mod#src/}
-  mod=${mod%/__init__}
-  mod=${mod//\//.}
-  leaf=${mod##*.}
-  parent=${mod%.*}
-  pattern="^[[:space:]]*(from[[:space:]]+${mod//./\\.}([[:space:].]|$)|import[[:space:]]+${mod//./\\.}([[:space:],.]|$))"
-  if [ "$parent" != "$mod" ]; then
-    pattern="$pattern|^[[:space:]]*from[[:space:]]+${parent//./\\.}[[:space:]]+import[[:space:]](.*[^[:alnum:]_])?${leaf}([^[:alnum:]_]|$)"
-  fi
+  local t targets=()
   while IFS= read -r t; do
     [ -n "$t" ] && targets+=("$t")
-  done < <(grep -rlE --include='test_*.py' --include='*_test.py' "$pattern" "$PY_TEST_PATHS" 2>/dev/null | sort)
+  done < <("$2" -I -c "$QUALITY_PY_RELATED" "$1" "$PY_TEST_PATHS")
   [ "${#targets[@]}" -eq 0 ] && targets=("$PY_TEST_PATHS")
   local test_cmd
   test_cmd="$(printf '%q' "$2") -m pytest -q -p no:cacheprovider"
