@@ -31,4 +31,4 @@ args=()
 [ "${usage_json:-false}" = "true" ] && args+=(--json)
 
 uv run --quiet --no-project --python "$QUALITY_PYTHON" \
-  "$(dirname "$0")/../lib/imp-check.py" "${args[@]}"
+  "$(dirname "$0")/../lib/imp-check.py" ${args[@]+"${args[@]}"}
