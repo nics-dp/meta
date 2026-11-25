@@ -9,9 +9,13 @@
 #   GO_COVERPKG      coverage instrumentation     default: <module>/internal/... if internal/ exists, else empty
 #   CGO_ENABLED      cgo on/off                   default: 1 (only when unset/empty;
 #                                                 `go:test --race|--full` force-sets it to 1)
+#   GO_TEST_CGO_ENABLED  cgo on/off for the atoms that source this file, overriding
+#                    CGO_ENABLED when set; for a repo that builds with cgo off but has
+#                    test packages linking a cgo-only dependency
 
 : "${GO_TEST_TAGS:=test}"
 : "${CGO_ENABLED:=1}"
+[ -n "${GO_TEST_CGO_ENABLED:-}" ] && CGO_ENABLED=$GO_TEST_CGO_ENABLED
 export CGO_ENABLED
 
 if [ -z "${GO_TEST_PATHS:-}" ]; then
