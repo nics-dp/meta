@@ -25,10 +25,10 @@ on:
         type: string
         default: "false"
       runs_on:
-        description: 'Runner as JSON (e.g., ''"ubuntu-latest"'' or ''{"group":"releasers"}''). Defaults to the releasers 8-core group; CodeQL Go analysis is CPU/RAM-bound and benefits from it.'
+        description: 'Runner as JSON (e.g., ''"ubuntu-latest"'' or ''{"group":"releasers"}''). Defaults to the standard GitHub-hosted runner: the analysis finishes in minutes there, and the larger releasers group bills each job at a higher per-minute rate. Pass ''{"group":"releasers"}'' for a repository whose analysis outgrows it.'
         required: false
         type: string
-        default: '{"group":"releasers"}'
+        default: '"ubuntu-latest"'
     secrets:
       ci_read_app_private_key:
         required: false

@@ -64,10 +64,10 @@ on:
         default: true
         description: "Run the semgrep SAST scan"
       runs_on:
-        description: 'Runner as JSON (e.g., ''"ubuntu-latest"'' or ''{"group":"releasers"}''). Defaults to the releasers 8-core group; the scanners (trivy/semgrep/gosec) are CPU-bound and benefit from it. Must stay Linux (Docker-based actions).'
+        description: 'Runner as JSON (e.g., ''"ubuntu-latest"'' or ''{"group":"releasers"}''). Defaults to the standard GitHub-hosted runner: the scans finish in minutes there, and the larger releasers group bills each job at a higher per-minute rate. Must stay Linux (Docker-based actions).'
         required: false
         type: string
-        default: '{"group":"releasers"}'
+        default: '"ubuntu-latest"'
     secrets:
       ci_read_app_private_key:
         required: false
@@ -80,8 +80,8 @@ jobs:
   security-sarif:
     # runs_on must stay a Linux runner: this workflow depends on Linux/Docker-based
     # actions (hadolint-action, trivy-action) and bash scan steps, so it is not
-    # portable to Windows/macOS. Defaults to the releasers 8-core group (the
-    # scanners are CPU-bound); callers may override with '"ubuntu-latest"'.
+    # portable to Windows/macOS. Defaults to '"ubuntu-latest"'; callers may pass
+    # '{"group":"releasers"}' for a larger Linux runner.
     runs-on: ${{ fromJSON(inputs.runs_on) }}
     permissions:
       contents: read
