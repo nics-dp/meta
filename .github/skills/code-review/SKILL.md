@@ -49,7 +49,7 @@ description: Review pull requests in this repository for concrete defects and re
    `dcf-platform-web`, `dcf-platform-cli`, `dcf-proxy`, `dcf-access`,
    `dcf-access-web`, `dcf-access-cli`, `dcf-catalog`, `dcf-service`,
    `dcf-synth`, `dcf-mcp`, `otel-bundle`, `dcf-local-env`, `dcf-smoke`,
-   `patroni`, `dcf-autoCICD`, `dcf-cloud-env`, `dcf-db-cfg`,
+   `dcf-autoCICD`, `dcf-cloud-env`, `dcf-db-cfg`,
    `dcf-cfg-templates` and `dcf-claude-plugins`. Read a consumer at its `dev`
    branch (`ref: dev`), the revision the polyrepo map was verified against;
    where a consumer pins a commit SHA instead of `@main`, read that commit
