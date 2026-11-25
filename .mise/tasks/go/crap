@@ -48,7 +48,8 @@ if [ "${#files[@]}" -eq 0 ]; then
 fi
 
 report=$(mktemp)
-trap 'rm -f "$report"; quality_go_profiles_restore' EXIT
+trap 'rm -f "$report"; quality_go_profiles_restore; quality_unlock' EXIT
+quality_lock
 quality_go_profiles_aside
 quality_go_coverage
 

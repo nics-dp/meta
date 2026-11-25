@@ -53,7 +53,9 @@ quality_base_ref() {
 quality_go_sources() {
   local files
   if [ -n "${1:-}" ]; then
-    files=$(git diff --relative --name-only --diff-filter=AM "$1...HEAD" -- '*.go') || return 1
+    # --no-renames: a renamed and edited file would otherwise be status R and
+    # fall outside --diff-filter=AM; split, its new path is an addition.
+    files=$(git diff --relative --no-renames --name-only --diff-filter=AM "$1...HEAD" -- '*.go') || return 1
   else
     files=$(git ls-files -- '*.go') || return 1
   fi
@@ -120,9 +122,40 @@ quality_go_test_command() {
   ls "$dir"/*_test.go >/dev/null 2>&1 && targets+=("./$dir")
   [ -d "test/$dir" ] && targets+=("./test/$dir/...")
   [ "${#targets[@]}" -eq 0 ] && targets=("$GO_TEST_PATHS")
-  local test_cmd="go test -mod=$GO_TEST_MOD -count=1"
-  [ -n "${GO_TEST_TAGS:-}" ] && test_cmd="$test_cmd -tags=$GO_TEST_TAGS"
-  printf '%s %s\n' "$test_cmd" "${targets[*]}"
+  # mutator hands this string to a shell, so every word is shell-quoted: a
+  # space-separated GO_TEST_TAGS must stay one -tags argument.
+  local test_cmd t
+  test_cmd="go test $(printf '%q' "-mod=$GO_TEST_MOD") -count=1"
+  [ -n "${GO_TEST_TAGS:-}" ] && test_cmd="$test_cmd $(printf '%q' "-tags=$GO_TEST_TAGS")"
+  for t in "${targets[@]}"; do
+    test_cmd="$test_cmd $(printf '%q' "$t")"
+  done
+  printf '%s\n' "$test_cmd"
+}
+
+# quality_lock / quality_unlock: go:crap and go:mutate share the fixed paths
+# crapper and mutator read (target/coverage/go/coverage.out, the profiles set
+# aside), so two runs in one working tree serialize the whole
+# aside-coverage-score-restore sequence. mkdir is the lock because macOS has no
+# flock; a lock older than the timeout is reported, not broken.
+QUALITY_LOCK_DIR=""
+quality_lock() {
+  local dir=target/coverage/.quality-lock waited=0
+  mkdir -p target/coverage
+  until mkdir "$dir" 2>/dev/null; do
+    if [ "$waited" -ge 1800 ]; then
+      echo "quality: $dir held for 30 minutes; remove it if no other run is active" >&2
+      return 1
+    fi
+    sleep 2
+    waited=$((waited + 2))
+  done
+  QUALITY_LOCK_DIR=$dir
+}
+quality_unlock() {
+  [ -n "$QUALITY_LOCK_DIR" ] || return 0
+  rmdir "$QUALITY_LOCK_DIR" 2>/dev/null || true
+  QUALITY_LOCK_DIR=""
 }
 
 # quality_summary <title> <file>: append a fenced report to the job summary
