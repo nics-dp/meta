@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+#MISE description="Check the Contracts under docs/contract/ against .imp.toml and print behavior coverage"
+#MISE hide=true
+#MISE raw=true
+#MISE tools={"aqua:astral-sh/uv"="0.13.1"}
+#USAGE flag "--base <ref>" help="Judge with the ref's .imp.toml and check the contract phase against <ref>...HEAD"
+#USAGE flag "--json" help="Print coverage as JSON"
+
+# Runs lib/imp-check.py, the checker the imp skill describes. Repositories run
+# this copy instead of keeping their own, so a pull request cannot change the
+# checker that judges it.
+#
+# On a pull_request event without --base, the base is the pull request's base
+# ref (lib/quality-tools quality_base_ref; the caller checks out with
+# fetch-depth: 0). With a base, the base branch's .imp.toml judges the tree and
+# a pull request that changes code fails while a Contract it changes lists no
+# tests. Exit 1 prints one error per line on stderr.
+
+set -euo pipefail
+# shellcheck disable=SC1091
+source "$(dirname "$0")/../lib/quality-tools"
+
+# shellcheck disable=SC2154
+base="${usage_base:-}"
+if [ -z "$base" ]; then
+  base=$(quality_base_ref) || exit 2
+fi
+
+args=()
+[ -n "$base" ] && args+=(--base "$base")
+[ "${usage_json:-false}" = "true" ] && args+=(--json)
+
+uv run --quiet --no-project --python "$QUALITY_PYTHON" \
+  "$(dirname "$0")/../lib/imp-check.py" "${args[@]}"
