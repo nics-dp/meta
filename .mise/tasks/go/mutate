@@ -1,0 +1,68 @@
+#!/usr/bin/env bash
+#MISE description="Mutation testing (mutator) for the Go files a pull request adds or modifies; fails on any surviving mutant"
+#MISE hide=true
+#MISE raw=true
+#MISE depends=["go:install"]
+#MISE tools={"aqua:astral-sh/uv"="0.13.1"}
+#USAGE arg "[files]" var=#true var_min=0 help="Go source files to mutate (default: the pull request's added or modified files)"
+
+# Each mutant is judged by the tests of its own package plus the mirrored
+# package under test/ (lib/quality-tools quality_go_test_command), with
+# coverage from go:test's run so uncovered lines are reported, not mutated.
+# A surviving mutant (mutator exit 3) or a failing baseline (exit 2) fails the
+# atom. Outside a pull request, with no files named, there is nothing to
+# mutate: a whole-module run is too slow for CI and is run by hand.
+
+set -euo pipefail
+# shellcheck disable=SC1091
+source "$(dirname "$0")/../lib/go-env"
+# shellcheck disable=SC1091
+source "$(dirname "$0")/../lib/quality-tools"
+
+files=()
+# shellcheck disable=SC2154
+if [ -n "${usage_files:-}" ]; then
+  # shellcheck disable=SC2206
+  files=($usage_files)
+else
+  base=$(quality_base_ref)
+  if [ -z "$base" ]; then
+    echo "go:mutate: not a pull request and no files given; nothing to mutate"
+    exit 0
+  fi
+  while IFS= read -r f; do
+    [ -n "$f" ] && files+=("$f")
+  done < <(quality_go_sources "$base")
+fi
+
+if [ "${#files[@]}" -eq 0 ]; then
+  echo "go:mutate: no Go source files to mutate"
+  exit 0
+fi
+
+quality_go_coverage
+
+report=$(mktemp)
+trap 'rm -f "$report"' EXIT
+worst=0
+for f in "${files[@]}"; do
+  cmd=$(quality_go_test_command "$f")
+  echo "==> $f ($cmd)"
+  code=0
+  quality_mutator --use-existing-coverage --test-command "$cmd" "$f" > "$report.one" 2>&1 || code=$?
+  cat "$report.one"
+  {
+    echo "== $f (exit $code)"
+    grep -E '^(SURVIVED|Total)' "$report.one" || true
+  } >> "$report"
+  rm -f "$report.one"
+  [ "$code" -gt "$worst" ] && worst=$code
+done
+
+quality_summary "Mutation testing" "$report"
+case "$worst" in
+  0) exit 0 ;;
+  3) echo "go:mutate: surviving mutants (see SURVIVED lines)" >&2; exit 1 ;;
+  2) echo "go:mutate: baseline tests failed before any mutant ran" >&2; exit 1 ;;
+  *) echo "go:mutate: mutator exited $worst" >&2; exit 1 ;;
+esac

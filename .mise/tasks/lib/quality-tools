@@ -1,0 +1,102 @@
+#!/usr/bin/env bash
+# Sourced helper for the CRAP and mutation atoms. Runs crapper and mutator at
+# pinned commits through uvx, so no checkout, venv or pip is left in the
+# consumer repository. Neither project publishes releases, so the pins are
+# commit SHAs; the "unclebob quality tools" custom manager in renovate.json
+# moves them. mutator imports crapper for function names, so its environment
+# carries crapper at the same pin.
+#
+# Callers declare uv in their own `#MISE tools=` header.
+
+QUALITY_CRAPPER_REF="c757ec79a6c15dc815238bbd9c2f4601eb54d3cc" # renovate: https://github.com/unclebob/crapper branch=master
+QUALITY_MUTATOR_REF="0136cf555797f1c9552388c40207eb2f13af9535" # renovate: https://github.com/unclebob/mutator branch=main
+QUALITY_PYTHON="3.13"
+
+quality_crapper() {
+  uvx --quiet --python "$QUALITY_PYTHON" \
+    --from "git+https://github.com/unclebob/crapper@${QUALITY_CRAPPER_REF}" \
+    crapper "$@"
+}
+
+quality_mutator() {
+  uvx --quiet --python "$QUALITY_PYTHON" \
+    --with "git+https://github.com/unclebob/crapper@${QUALITY_CRAPPER_REF}" \
+    --from "git+https://github.com/unclebob/mutator@${QUALITY_MUTATOR_REF}" \
+    mutator "$@"
+}
+
+# quality_base_ref: the ref a pull request is compared against. Prints
+# origin/<base> on a pull_request event when that ref is in the checkout, and
+# nothing otherwise. The caller's checkout must use fetch-depth: 0 (as
+# ci:betterleaks does): mise-task.yml checks out with persist-credentials:
+# false, so a fetch from inside the atom fails on a private repository.
+quality_base_ref() {
+  if [ "${GITHUB_EVENT_NAME:-}" = "pull_request" ] && [ -n "${GITHUB_BASE_REF:-}" ] \
+     && git rev-parse --verify --quiet "origin/${GITHUB_BASE_REF}^{commit}" >/dev/null; then
+    printf 'origin/%s\n' "$GITHUB_BASE_REF"
+  fi
+}
+
+# quality_go_sources [<base-ref>]: Go source files crapper and mutator score,
+# one per line. With a base ref, only files added or modified since the merge
+# base; without, every tracked file. Tests, vendored code and the test/ tree
+# are not scored: they are what exercises the code, not the code at risk.
+quality_go_sources() {
+  local files
+  if [ -n "${1:-}" ]; then
+    files=$(git diff --name-only --diff-filter=AM "$1...HEAD" -- '*.go')
+  else
+    files=$(git ls-files -- '*.go')
+  fi
+  printf '%s\n' "$files" | awk 'NF && !/_test\.go$/ && !/(^|\/)vendor\// && !/^test\// && !/(^|\/)testdata\//'
+}
+
+# quality_go_coverage: write the module's coverage profile where crapper and
+# mutator read it (target/coverage/go/coverage.out). The test run is go:test's
+# (GO_TEST_TAGS, GO_TEST_MOD, GO_COVERPKG, GO_TEST_PATHS from lib/go-env), so
+# tests under test/ that cover internal packages through -coverpkg count. With
+# -coverpkg every test package writes a row for every instrumented block, and
+# crapper reads each row as a separate block, so the rows are folded into one
+# per block with the counts summed before either tool reads the profile.
+quality_go_coverage() {
+  local out=target/coverage/go/coverage.out raw
+  mkdir -p "$(dirname "$out")"
+  raw="$out.raw"
+  local cmd=(go test "-mod=$GO_TEST_MOD" -count=1 -covermode=atomic "-coverprofile=$raw")
+  [ -n "${GO_TEST_TAGS:-}" ] && cmd+=("-tags=$GO_TEST_TAGS")
+  [ -n "${GO_COVERPKG:-}" ] && cmd+=("-coverpkg=$GO_COVERPKG")
+  cmd+=("$GO_TEST_PATHS")
+  "${cmd[@]}"
+  awk 'NR == 1 { print; next }
+       { key = $1 " " $2
+         if (!(key in count)) order[++n] = key
+         count[key] += $3 }
+       END { for (i = 1; i <= n; i++) print order[i], count[order[i]] }' "$raw" > "$out"
+  rm -f "$raw"
+}
+
+# quality_go_test_command <file>: the test command mutator runs for one Go
+# source file -- its own package plus the mirrored package under test/ when
+# that exists, else the whole GO_TEST_PATHS suite, so a mutant is never judged
+# by a package that holds no test for it.
+quality_go_test_command() {
+  local dir targets=()
+  dir=$(dirname "$1")
+  ls "$dir"/*_test.go >/dev/null 2>&1 && targets+=("./$dir")
+  [ -d "test/$dir" ] && targets+=("./test/$dir/...")
+  [ "${#targets[@]}" -eq 0 ] && targets=("$GO_TEST_PATHS")
+  local test_cmd="go test -mod=$GO_TEST_MOD -count=1"
+  [ -n "${GO_TEST_TAGS:-}" ] && test_cmd="$test_cmd -tags=$GO_TEST_TAGS"
+  printf '%s %s\n' "$test_cmd" "${targets[*]}"
+}
+
+# quality_summary <title> <file>: append a fenced report to the job summary
+# when running under GitHub Actions.
+quality_summary() {
+  [ -n "${GITHUB_STEP_SUMMARY:-}" ] || return 0
+  {
+    printf '### %s\n\n```text\n' "$1"
+    cat "$2"
+    printf '```\n\n'
+  } >> "$GITHUB_STEP_SUMMARY"
+}

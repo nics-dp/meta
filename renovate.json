@@ -256,6 +256,17 @@
     },
     {
       "customType": "regex",
+      "description": "Update the crapper and mutator commit pins in lib/quality-tools; neither project publishes releases, so each pin follows the head of the branch named on its line",
+      "managerFilePatterns": [
+        "/^\\.mise/tasks/lib/quality-tools$/"
+      ],
+      "matchStrings": [
+        "QUALITY_[A-Z]+_REF=\"(?<currentDigest>[0-9a-f]{40})\" # renovate: (?<depName>\\S+) branch=(?<currentValue>\\S+)"
+      ],
+      "datasourceTemplate": "git-refs"
+    },
+    {
+      "customType": "regex",
       "description": "Track the benchstat pin (golang.org/x/perf) in the go:bench-compare task; x/perf publishes pseudo-versions only, so this mostly documents the dependency",
       "managerFilePatterns": [
         "/^\\.mise/tasks/go/bench-compare$/"
