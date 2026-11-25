@@ -16,10 +16,10 @@ shellcheck_fail() {
 }
 
 index_file="${GIT_CONFIG_GLOBAL%/*}/task-index"
-# Python helpers under lib/ (imp-check.py) are not Bash.
+# Every tracked task file and helper gets the index checks below; Python helpers
+# are then left out of the ShellCheck input because they are not Bash.
 git ls-files --stage -z -- \
   '.mise/tasks/**' \
-  ':(exclude,glob).mise/tasks/**/*.py' \
   '.github/scripts/github-actions-scanner.sh' >"$index_file"
 
 entries=()
@@ -47,7 +47,11 @@ for entry in "${entries[@]}"; do
     shellcheck_fail "task path is not a regular non-symlink file: $path"
   [[ -s $path ]] || shellcheck_fail "empty task file: $path"
 
+  if [[ $path == *.py ]]; then
+    continue
+  fi
   paths+=("$path")
 done
+((${#paths[@]} > 0)) || shellcheck_fail 'no shell files to lint'
 
 shellcheck --shell=bash --severity=warning -- "${paths[@]}"

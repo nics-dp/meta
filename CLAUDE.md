@@ -114,7 +114,8 @@ before changing any of these; the mechanism is in the code, the history in
   `templates/facades/`.
 - Atoms and helpers are tracked as stage-0 regular files with mode `100644` or
   `100755`; `iac:shellcheck` enumerates them from the git index and fails
-  closed on anything else (symlink, empty file, unexpected path).
+  closed on anything else (symlink, empty file, unexpected path). Python helpers
+  get the same index checks and are only left out of the ShellCheck input.
   → `.mise/tasks/iac/shellcheck`.
 - The definition checks `mise:validate`, `iac:shellcheck` and `iac:zizmor`
   source `lib/ci-isolate` first: it points `GIT_CONFIG_GLOBAL` at an empty
