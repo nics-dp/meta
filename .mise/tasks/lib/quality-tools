@@ -297,9 +297,10 @@ def conftests(path):
         candidate = os.path.join(directory, "conftest.py")
         if os.path.isfile(candidate):
             found.append(os.path.normpath(candidate))
-        if directory in ("", "."):
+        parent = os.path.dirname(directory)
+        if directory in ("", ".") or parent == directory:
             return found
-        directory = os.path.dirname(directory)
+        directory = parent
 
 
 def tests():
